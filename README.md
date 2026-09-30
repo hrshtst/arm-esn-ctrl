@@ -268,13 +268,17 @@ ignores them.
 
 ```text
 <storage root>/
-├── data/                            # demonstrations (*.sklog.npz)
+├── data/                            # demonstrations taught by hand (*.sklog.npz)
 └── results/
     └── 20260930-171642-example/     # one directory per run: <date>-<time>-<config name>
         ├── config.toml
         ├── run.toml
         └── ...                      # outputs written by the experiment
 ```
+
+`data/` holds what cannot be regenerated, such as demonstrations taught
+with the mouse. Everything a script produces, including scripted
+demonstrations, goes into a run directory under `results/`.
 
 Git tracks only the data and results behind a specific report. They are
 copied into that report's directory (see [Reports](#reports)).
@@ -316,6 +320,49 @@ uv installs rclib and skelarm from the submodules but does not notice
 when their source changes. After advancing a submodule pin, reinstall
 them with `uv sync --reinstall-package rclib --reinstall-package skelarm`.
 
+## Making demonstrations
+
+Demonstrations are skelarm state logs (`*.sklog.npz`) of reaches on a
+two-link planar arm. They are either scripted with one of skelarm's
+reaching controllers or taught with the mouse.
+
+**Scripted.** Each configuration in `configs/demonstrations/` runs one
+controller from 8 start postures, each 0.5 m from a common target:
+
+| Configuration | Controller | Reaches |
+| --- | --- | --- |
+| `reach_tvs.toml` | virtual spring-damper with time-varying stiffness | human-like: smooth bell-shaped speed peaking a little early, gently curved paths |
+| `reach_pds.toml` | online reference shaping with a position-dependent ratio | human-like: nearly straight paths, speed peaking at mid-movement with a small shoulder early on |
+| `reach_vsd.toml` | constant virtual spring-damper | not human-like, kept for comparison: the speed peaks almost at once |
+
+```bash
+uv run python experiments/make_demonstrations.py configs/demonstrations/reach_tvs.toml
+```
+
+The run directory receives one log per start posture
+(`demo_00.sklog.npz`, ...), their reach metrics (`metrics.csv`, defined
+in `src/arm_esn_ctrl/metrics.py`), and a figure of the hand paths,
+joint-space paths, and speed profiles (`demonstrations.png`). Replay a
+demonstration with skelarm's player:
+
+```bash
+uv run python third_party/skelarm/tools/player.py <run directory>/demo_00.sklog.npz
+```
+
+**Taught.** skelarm's trajectory recorder reads the same configuration
+files: it shows the arm and the target, and you drag the arm tip with the
+mouse. `--pose` sets the start posture in degrees (take one from
+`start_q`), and `--multi-take` numbers the saved takes
+(`reach_001.sklog.npz`, ...). The recorder does not create the output
+directory. With the default storage root:
+
+```bash
+mkdir -p storage/data/taught_reach
+uv run python third_party/skelarm/tools/trajectory_recorder.py \
+    configs/demonstrations/reach_tvs.toml --pose 29.4,88.2 \
+    --multi-take --output storage/data/taught_reach/reach.sklog.npz --show-past-trails
+```
+
 ## Development
 
 ```bash
@@ -328,14 +375,6 @@ Type annotations are encouraged but not required. The type checkers run
 in their standard (non-strict) modes. Their settings in `pyproject.toml`
 also apply when your editor runs its own pyright, basedpyright, or mypy,
 so imports resolve against the project's `.venv`.
-
-To teach a demonstration interactively, use skelarm's trajectory
-recorder. Drag the arm tip with the mouse, then export the motion as a
-`*.sklog.npz` log into the storage root's `data/` directory:
-
-```bash
-uv run python third_party/skelarm/tools/trajectory_recorder.py <robot.toml>
-```
 
 ## Reports
 

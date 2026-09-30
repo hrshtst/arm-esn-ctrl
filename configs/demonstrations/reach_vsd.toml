@@ -1,0 +1,57 @@
+# Scripted reaching demonstrations: constant virtual spring-damper
+# (Arimoto and Sekimoto, ICRA 2006).
+#
+#   uv run python experiments/make_demonstrations.py configs/demonstrations/reach_vsd.toml
+#
+# Kept for comparison: no constant gains make these reaches human-like. The
+# spring pulls hardest at the start, so the hand speed peaks almost at once.
+#
+# The [skeleton], [task], [simulator], and [controller] tables follow skelarm's
+# scenario format, so skelarm's tools also read this file.
+
+[demonstrations]
+# Start postures: joint angles in degrees (elbow bent to the positive side).
+# Each hand position is 0.5 m from the target, in the direction noted.
+start_q = [
+  [29.4, 88.2],   # hand ( 0.50, 1.20) m,   0 deg
+  [52.6, 55.8],   # hand ( 0.35, 1.55) m,  45 deg
+  [72.9, 38.6],   # hand ( 0.00, 1.70) m,  90 deg
+  [78.3, 55.8],   # hand (-0.35, 1.55) m, 135 deg
+  [74.7, 88.2],   # hand (-0.50, 1.20) m, 180 deg
+  [63.6, 119.9],  # hand (-0.35, 0.85) m, 225 deg
+  [37.4, 136.0],  # hand ( 0.00, 0.70) m, 270 deg
+  [18.2, 119.9],  # hand ( 0.35, 0.85) m, 315 deg
+]
+
+# Two-link planar arm (the robot of skelarm's examples/reach.toml).
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 1.0
+mass = 1.0
+inertia = 0.1
+com = [0.5, 0.0]
+limits = [-180.0, 180.0]
+
+[[skeleton.link]]
+length = 0.8
+mass = 0.8
+inertia = 0.05
+com = [0.4, 0.0]
+limits = [-180.0, 180.0]
+
+[task]
+type = "reaching"
+target = { pos = [0.0, 1.2], tolerance = 0.02 }  # hand goal (m), 2 cm tolerance
+duration = 2.0  # simulated time per demonstration (s): about 1 s to reach, then holding
+
+[simulator]
+dt = 0.002  # control and integration step (s)
+
+[controller]
+# The best-scoring constant gains found for this arm (heavily damped).
+type = "virtual_spring_damper"
+k_task = 150.0  # task-space stiffness (N/m)
+d_task = 50.0   # task-space damping (N s/m)
+c_joint = 0.0   # joint damping (N m s/rad)

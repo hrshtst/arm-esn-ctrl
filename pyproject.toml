@@ -52,7 +52,7 @@ select = ["E", "W", "F", "I", "B", "UP", "NPY", "SIM", "RUF"]
 # [tool.pyright] is read by both pyright and basedpyright, whereas
 # [tool.basedpyright] would be ignored by plain pyright.
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "experiments"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
@@ -60,7 +60,7 @@ typeCheckingMode = "standard"
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src", "tests"]
+files = ["src", "tests", "experiments"]
 # Resolve imports with the project's environment, also when the editor runs a
 # mypy installed elsewhere (for example, with pipx).
 python_executable = "$MYPY_CONFIG_FILE_DIR/.venv/bin/python"
