@@ -62,6 +62,16 @@ def test_endpoint_positions_follow_forward_kinematics():
     assert hand == pytest.approx(np.array([[1.8, 0.0], [0.0, 1.8], [1.0, 0.8]]), abs=1e-12)
 
 
+def test_endpoint_positions_use_angles_beyond_the_joint_limits(recwarn: pytest.WarningsRecorder):
+    skeleton = Skeleton.from_toml(CONFIG)  # joint limits are +-180 deg
+    q = np.radians([[0.0, 270.0]])
+
+    hand = endpoint_positions(skeleton, q)
+
+    assert hand == pytest.approx(np.array([[1.0, -0.8]]), abs=1e-12)
+    assert len(recwarn) == 0
+
+
 def test_joint_trajectory_log_replays_the_trajectory(tmp_path: Path):
     skeleton = Skeleton.from_toml(CONFIG)
     times = np.linspace(0.0, 1.0, 11)

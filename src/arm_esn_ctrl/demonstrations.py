@@ -63,10 +63,16 @@ def resample_joint_angles(log: StateLog, dt: float) -> tuple[NDArray[np.float64]
 
 
 def endpoint_positions(skeleton: Skeleton, q: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Return the endpoint (hand) position ``(x, y)`` for every row of joint angles ``q``."""
+    """Return the endpoint (hand) position ``(x, y)`` for every row of joint angles ``q``.
+
+    The angles are used as given, even beyond the joint limits. The ``Skeleton.q``
+    setter would clamp them, but an ESN's output is not bounded by the limits, and
+    clamping would misreport where it sends the hand.
+    """
     positions = np.empty((len(q), 2))
     for i, qi in enumerate(q):
-        skeleton.q = qi
+        for link, angle in zip(skeleton.links[1:], qi, strict=True):
+            link.q = angle
         compute_forward_kinematics(skeleton)
         tip = skeleton.links[-1]
         positions[i] = tip.xe, tip.ye
