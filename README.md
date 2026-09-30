@@ -240,7 +240,10 @@ uncommitted_changes = false
 
 The goal is modest: running the same configuration again on the same
 machine reproduces the same result. Small numerical differences on
-other machines or CPUs are acceptable and are not chased. Reproducing a
+other machines or CPUs are acceptable and are not chased. For this,
+`arm_esn_ctrl` limits rclib to one OpenMP thread (`OMP_NUM_THREADS=1`,
+unless you set the variable yourself): a parallel sum is rounded
+differently depending on how the work is split among threads. Reproducing a
 result does not require checking out its recorded commit. The commit
 hash is there to investigate why a reproduced result differs, by
 showing what the implementation looked like when the result was
