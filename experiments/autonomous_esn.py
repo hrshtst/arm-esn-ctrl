@@ -13,7 +13,9 @@ controller that made the demonstration. The run directory receives:
 
 - ``esn_00.sklog.npz``, ...: the ESN's trajectories, one per start posture;
 - ``demonstrator_00.sklog.npz``, ...: the demonstrator's reaches from the same postures;
-- ``metrics.csv``: how far each ESN trajectory is from the demonstrator's;
+- ``metrics.csv``: how far each ESN trajectory is from the demonstrator's, and how far
+  the hand moves in the ESN's first step (a jump shows that the ESN snaps back to
+  the trajectory it learned);
 - ``autonomous.png``: hand paths, joint angles, and hand speeds of both.
 
 Replay a trajectory with ``uv run python third_party/skelarm/tools/player.py <file>``.
@@ -99,6 +101,7 @@ def main() -> None:
                 "start": i,
                 "offset_q1_deg": offset[0],
                 "offset_q2_deg": offset[1],
+                "first_step_m": float(np.linalg.norm(hand_esn[1] - hand_esn[0])),
                 "joint_rms_error_deg": rms_degrees(q_esn - q_ref),
                 "path_distance_m": path_distance(hand_esn, hand_ref),
                 "final_error_m": float(np.linalg.norm(hand_esn[-1] - target)),
@@ -135,12 +138,12 @@ def rms_degrees(error: np.ndarray) -> float:
 
 def print_metrics(rows: list[dict[str, float]]) -> None:
     """Print the metrics as a table, one start posture per line."""
-    print("start  offset (deg)    joint error  path distance  final error  peak    profile")
-    print("                       (deg RMS)    (mm)           (mm)         timing  error")
+    print("start  offset (deg)    first step  joint error  path distance  final error  peak    profile")
+    print("                       (mm)        (deg RMS)    (mm)           (mm)         timing  error")
     for r in rows:
         print(
             f"{int(r['start']):5d}  {r['offset_q1_deg']:+5.1f}, {r['offset_q2_deg']:+5.1f}"
-            f"  {r['joint_rms_error_deg']:11.2f}"
+            f"  {1000 * r['first_step_m']:10.1f}  {r['joint_rms_error_deg']:11.2f}"
             f"  {1000 * r['path_distance_m']:13.1f}  {1000 * r['final_error_m']:11.1f}"
             f"  {r['peak_timing']:6.2f}  {r['speed_profile_error']:7.2f}"
         )
@@ -178,7 +181,20 @@ def plot_runs(times: np.ndarray, runs: list[Run], target: np.ndarray, title: str
     ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
     ax_hand.set(title="Hand paths", xlabel="x (m)", ylabel="y (m)", aspect="equal")
     ax_hand.legend(frameon=False, labelcolor=TEXT_COLOR, loc="upper right")
-    ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)")
+    # A jump in the ESN's first step would squash the reach speeds, so the axis stops above them.
+    reach_speed = max(hand_speed(times[: len(hand_ref)], hand_ref).max() for _, _, _, hand_ref in runs)
+    first_step_speed = max(np.linalg.norm(hand_esn[1] - hand_esn[0]) / times[1] for _, _, hand_esn, _ in runs)
+    ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)", ylim=(0.0, 1.6 * reach_speed))
+    if first_step_speed > 1.6 * reach_speed:
+        ax_speed.annotate(
+            f"ESN first steps reach {first_step_speed:.1f} m/s (off the scale)",
+            (0.98, 0.96),
+            xycoords="axes fraction",
+            ha="right",
+            va="top",
+            color=TEXT_COLOR,
+            fontsize=8,
+        )
     ax_q1.set(title="Joint 1", xlabel="time (s)", ylabel="angle (deg)")
     ax_q2.set(title="Joint 2", xlabel="time (s)", ylabel="angle (deg)")
     return fig
