@@ -1,0 +1,65 @@
+[project]
+name = "arm-esn-ctrl"
+version = "0.1.0"
+description = "Echo state network reference generators for robot-arm control, learned from demonstration."
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Hiroshi Atsuta", email = "atsuta@ieee.org" }]
+requires-python = ">=3.12"
+dependencies = [
+  "matplotlib>=3.10",
+  "numpy>=2.0",
+  # Built from the pinned submodules (see [tool.uv.sources]).
+  "rclib",
+  "skelarm",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.16,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+  "basedpyright>=1.39",
+  "mypy>=1.20",
+  "pytest>=8.4",
+  "ruff>=0.14",
+]
+
+# The submodules are installed as regular (non-editable) packages. uv does not
+# notice when their source changes, so after advancing a submodule pin run:
+#   uv sync --reinstall-package rclib --reinstall-package skelarm
+[tool.uv.sources]
+rclib = { path = "third_party/rclib" }
+skelarm = { path = "third_party/skelarm" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["third_party"]
+
+[tool.ruff.lint]
+# A moderate rule set: catch real mistakes and keep imports tidy, without
+# demanding docstrings or type annotations on every function.
+select = ["E", "W", "F", "I", "B", "UP", "NPY", "SIM", "RUF"]
+
+# Type checking is moderate: annotations are encouraged but not required. The
+# main purpose of the configuration is to let the editor's language server
+# resolve the project and the libraries installed in .venv.
+[tool.basedpyright]
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+# Also check the bodies of functions that have no annotations.
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra"]

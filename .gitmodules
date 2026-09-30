@@ -1,0 +1,6 @@
+[submodule "third_party/rclib"]
+	path = third_party/rclib
+	url = https://github.com/hrshtst/rclib.git
+[submodule "third_party/skelarm"]
+	path = third_party/skelarm
+	url = https://github.com/hrshtst/skelarm.git

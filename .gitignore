@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+
+# Machine-specific storage (see "Data and results storage" in README.md).
+# Data and results behind a report are tracked under reports/<study>/.
+/storage.toml
+/storage/
+
+# Editors
+.vscode/
+.idea/

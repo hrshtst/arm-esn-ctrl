@@ -288,6 +288,21 @@ echo 'storage_root = "/path/to/storage"' > storage.toml
 If you cloned without `--recursive`, run
 `git submodule update --init --recursive`.
 
+uv installs rclib and skelarm from the submodules but does not notice
+when their source changes. After advancing a submodule pin, reinstall
+them with `uv sync --reinstall-package rclib --reinstall-package skelarm`.
+
+## Development
+
+```bash
+uv run pytest                                # tests
+uv run ruff format . && uv run ruff check .  # formatting and linting
+uv run basedpyright && uv run mypy           # type checking
+```
+
+Type annotations are encouraged but not required. The type checkers run
+in their standard (non-strict) modes.
+
 To teach a demonstration interactively, use skelarm's trajectory
 recorder. Drag the arm tip with the mouse, then export the motion as a
 `*.sklog.npz` log into the storage root's `data/` directory:
