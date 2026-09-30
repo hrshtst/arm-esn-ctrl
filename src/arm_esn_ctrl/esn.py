@@ -4,22 +4,25 @@
 """An echo state network that generates the next joint angles from the current ones.
 
 The ESN is trained by teacher forcing: its input is a demonstrated joint-angle
-trajectory, and its target is the same trajectory one step ahead. Run
-autonomously, its output is fed back as its next input, so the trained ESN
-becomes a dynamical system that generates a trajectory by itself.
+trajectory, and its target is the same trajectory one step ahead. With several
+demonstrations, each one runs from a reset reservoir, and one readout is fitted
+on all of them together. Run autonomously, the ESN's output is fed back as its
+next input, so the trained ESN becomes a dynamical system that generates a
+trajectory by itself.
 
-Before training and before every run, the ESN is driven for a warm-up period by
-the start posture held still. This brings the reservoir from its reset state to
-a state that reflects the start posture. The warm-up samples are excluded from
-training, so the ESN learns only to move from the start posture, never to stay
-there.
+Before training on each demonstration and before every run, the ESN is driven
+for a warm-up period by the start posture held still. This brings the reservoir
+from its reset state to a state that reflects the start posture. The warm-up
+samples are excluded from training, so the ESN learns only to move from the
+start posture, never to stay there.
 
-Joint angles are normalized with the mean and standard deviation of the
-training data before they enter the ESN, and the outputs are converted back.
+Joint angles are normalized with the mean and standard deviation of all training
+data before they enter the ESN, and the outputs are converted back.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -75,13 +78,18 @@ class ReachingEsn:
         self.mean = np.zeros(0)
         self.std = np.ones(0)
 
-    def fit(self, q: NDArray[np.float64]) -> None:
-        """Train the readout on one joint-angle trajectory ``q`` (shape ``(n_samples, n_joints)``)."""
-        self.mean = q.mean(axis=0)
-        self.std = q.std(axis=0)
-        sequence = self._with_warmup(self._normalize(q))
-        # Each input predicts the next sample; the warm-up is washed out.
-        self.model.fit(sequence[:-1], sequence[1:], washout_len=self.config.warmup_steps)
+    def fit(self, trajectories: Sequence[NDArray[np.float64]]) -> None:
+        """Train the readout on joint-angle trajectories, each shaped ``(n_samples, n_joints)``."""
+        all_samples = np.vstack(trajectories)
+        self.mean = all_samples.mean(axis=0)
+        self.std = all_samples.std(axis=0)
+        sequences = [self._with_warmup(self._normalize(q)) for q in trajectories]
+        # Each input predicts the next sample; every sequence's warm-up is washed out.
+        self.model.fit_sequences(
+            [sequence[:-1] for sequence in sequences],
+            [sequence[1:] for sequence in sequences],
+            washout_len=self.config.warmup_steps,
+        )
 
     def one_step_predictions(self, q: NDArray[np.float64]) -> NDArray[np.float64]:
         """Predict each next sample of ``q`` from the samples up to it (teacher forcing).

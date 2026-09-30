@@ -383,24 +383,35 @@ uv run python third_party/skelarm/tools/trajectory_recorder.py \
 
 ## Running the ESN autonomously (Stage 1)
 
-`experiments/autonomous_esn.py` trains an ESN on one demonstration and runs
-it autonomously, feeding its output back as its next input. It runs from the
-demonstration's start posture and from slightly disturbed ones, and compares
-each run with the demonstrator's own reach from the same posture:
+`experiments/autonomous_esn.py` trains an ESN on one or more demonstrations
+and runs it autonomously, feeding its output back as its next input. Each
+demonstration is learned from a reset reservoir with its own warm-up, and one
+readout is fitted on all of them. The ESN runs from each demonstration's start
+posture (plus optional offsets) and from start postures no demonstration starts
+from, and each run is compared with the demonstrator's own reach from the same
+posture:
+
+| Configuration | Trained on | Runs from |
+| --- | --- | --- |
+| `configs/esn/autonomous_tvs_demo07.toml` | demo 7 only | its start, and offsets of 3 and 10 deg around it |
+| `configs/esn/autonomous_tvs_all.toml` | all 8 demonstrations | their 8 starts, and 8 new starts halfway between them |
 
 ```bash
-uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_demo07.toml
+uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
 ```
 
-The configuration names the demonstration run and file, the ESN
-hyperparameters (`[esn]`), and the start-posture offsets and run duration
-(`[evaluation]`). To explore a hyperparameter, copy the file, change the
-value, and run the copy. Each run is recorded in its own directory.
+The configuration names the demonstration run and the training files
+(`[demonstrations]`), the ESN hyperparameters (`[esn]`), and the start
+postures and run duration (`[evaluation]`). To explore a hyperparameter,
+copy the file, change the value, and run the copy. Each run is recorded in
+its own directory.
 
 The run directory receives the ESN's trajectories (`esn_00.sklog.npz`, ...)
 and the demonstrator's (`demonstrator_00.sklog.npz`, ...), which both replay
-in skelarm's player. It also receives their differences (`metrics.csv`) and a
-figure of the hand paths, joint angles, and hand speeds (`autonomous.png`).
+in skelarm's player. It also receives their differences (`metrics.csv`, with
+the origin of each start posture) and a figure of the hand paths, joint
+angles, and hand speeds (`autonomous.png`), in which filled markers show
+demonstrated start postures and hollow ones the others.
 
 ## Development
 

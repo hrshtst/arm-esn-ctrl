@@ -1,23 +1,30 @@
 # Copyright (C) 2026 Hiroshi Atsuta <atsuta@ieee.org>
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Train an ESN on one demonstration and run it autonomously (Stage 1).
+"""Train an ESN on demonstrations and run it autonomously (Stage 1).
 
-    uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_demo07.toml
+    uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
 
-The ESN is trained by teacher forcing on one demonstration. It then runs
-autonomously, its output fed back as its next input, from the demonstration's
-start posture and from slightly disturbed ones. Each run is compared with the
-demonstrator's own reach from the same start posture, simulated with the
-controller that made the demonstration. The run directory receives:
+The ESN is trained by teacher forcing on one or more demonstrations. It then
+runs autonomously, its output fed back as its next input, from start postures
+of two kinds:
+
+- each training demonstration's start posture, plus the configured offsets
+  (an offset of zero tests replication; others, slightly disturbed starts);
+- further start postures that no demonstration starts from (``extra_start_q_deg``),
+  which test whether the ESN generalizes outside the demonstrated trajectories.
+
+Each run is compared with the demonstrator's own reach from the same start
+posture, simulated with the controller that made the demonstrations. The run
+directory receives:
 
 - ``esn_00.sklog.npz``, ...: the ESN's trajectories, one per start posture;
 - ``demonstrator_00.sklog.npz``, ...: the demonstrator's reaches from the same postures;
 - ``metrics.csv``: how far each ESN trajectory is from the demonstrator's, and how far
   the hand moves in the ESN's first step (a jump shows that the ESN snaps back to
-  the trajectory it learned);
+  a trajectory it learned);
 - ``autonomous.png``: hand paths, joint angles, and hand speeds of both, over the
-  training demonstration.
+  training demonstrations.
 
 Replay a trajectory with ``uv run python third_party/skelarm/tools/player.py <file>``.
 """
@@ -28,6 +35,7 @@ import argparse
 import copy
 import csv
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -52,8 +60,25 @@ TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
 
-# One start posture: joint angles of the ESN and the demonstrator, then their hand positions.
-Run = tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+
+@dataclass(frozen=True)
+class Start:
+    """A start posture of an autonomous run."""
+
+    origin: str  # where it comes from: "demo_07", "demo_07 +3,-3 deg", or "new"
+    q: np.ndarray  # joint angles (rad)
+    demonstrated: bool  # whether a training demonstration starts exactly here
+
+
+@dataclass(frozen=True)
+class Run:
+    """The ESN's autonomous run and the demonstrator's reach from one start posture."""
+
+    start: Start
+    q_esn: np.ndarray
+    q_ref: np.ndarray
+    hand_esn: np.ndarray
+    hand_ref: np.ndarray
 
 
 def main() -> None:
@@ -67,69 +92,83 @@ def main() -> None:
     demo_dir = storage_root() / config["demonstrations"]["run"]
     with (demo_dir / "config.toml").open("rb") as f:
         demo_config = tomllib.load(f)
+    skeleton = StateLog.load(demo_dir / config["demonstrations"]["train"][0]).build_skeleton()
+    target = Task.from_dict(demo_config["task"]).require_target()
 
-    # Train on one demonstration.
-    demo_log = StateLog.load(demo_dir / config["demonstrations"]["train"])
-    _, q_demo = resample_joint_angles(demo_log, esn_config.dt)
+    # Train on the demonstrations.
+    demos = {
+        name.split(".")[0]: resample_joint_angles(StateLog.load(demo_dir / name), esn_config.dt)[1]
+        for name in config["demonstrations"]["train"]
+    }
     esn = ReachingEsn(esn_config)
-    esn.fit(q_demo)
-    one_step_error = rms_degrees(esn.one_step_predictions(q_demo) - q_demo[1:])
-    print(f"Trained on {len(q_demo)} samples; one-step prediction error {one_step_error:.4f} deg RMS")
+    esn.fit(list(demos.values()))
+    one_step_error = rms_degrees(np.vstack([esn.one_step_predictions(q) - q[1:] for q in demos.values()]))
+    n_samples = sum(len(q) for q in demos.values())
+    print(f"Trained on {len(demos)} demonstrations ({n_samples} samples)")
+    print(f"One-step prediction error {one_step_error:.4f} deg RMS")
 
     # Run autonomously from each start posture, and let the demonstrator reach from the same postures.
     n_steps = round(evaluation["duration"] / esn_config.dt)
     times = esn_config.dt * np.arange(n_steps + 1)
-    starts = [q_demo[0] + np.radians(offset) for offset in evaluation["start_offsets_deg"]]
+    starts = start_postures(evaluation, demos)
     demonstrator_logs = simulate_reaches(demonstrator_config(demo_config, starts, evaluation["duration"]))
-    skeleton = demo_log.build_skeleton()
-    target = Task.from_dict(demo_config["task"]).require_target()
 
-    runs: list[Run] = []
-    rows = []
-    for i, (start, offset, demonstrator_log) in enumerate(
-        zip(starts, evaluation["start_offsets_deg"], demonstrator_logs, strict=True)
-    ):
-        q_esn = esn.generate(start, n_steps)
+    runs, rows = [], []
+    for i, (start, demonstrator_log) in enumerate(zip(starts, demonstrator_logs, strict=True)):
+        q_esn = esn.generate(start.q, n_steps)
         _, q_ref = resample_joint_angles(demonstrator_log, esn_config.dt)
-        hand_esn = endpoint_positions(skeleton, q_esn)
-        hand_ref = endpoint_positions(skeleton, q_ref)
+        run = Run(start, q_esn, q_ref, endpoint_positions(skeleton, q_esn), endpoint_positions(skeleton, q_ref))
         joint_trajectory_log(skeleton, times, q_esn, demo_config["task"], producer="autonomous ESN").save(
             run_dir / f"esn_{i:02d}.sklog.npz"
         )
         demonstrator_log.save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
-        shape = reach_metrics(times, hand_esn, target)
+        shape = reach_metrics(times, run.hand_esn, target)
         rows.append(
             {
                 "start": i,
-                "offset_q1_deg": offset[0],
-                "offset_q2_deg": offset[1],
-                "first_step_m": float(np.linalg.norm(hand_esn[1] - hand_esn[0])),
+                "origin": start.origin,
+                "start_q1_deg": float(np.degrees(start.q[0])),
+                "start_q2_deg": float(np.degrees(start.q[1])),
+                "first_step_m": float(np.linalg.norm(run.hand_esn[1] - run.hand_esn[0])),
                 "joint_rms_error_deg": rms_degrees(q_esn - q_ref),
-                "path_distance_m": path_distance(hand_esn, hand_ref),
-                "final_error_m": float(np.linalg.norm(hand_esn[-1] - target)),
+                "path_distance_m": path_distance(run.hand_esn, run.hand_ref),
+                "final_error_m": float(np.linalg.norm(run.hand_esn[-1] - target)),
                 "peak_timing": shape["peak_timing"],
                 "speed_profile_error": shape["speed_profile_error"],
             }
         )
-        runs.append((q_esn, q_ref, hand_esn, hand_ref))
+        runs.append(run)
 
     with (run_dir / "metrics.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    print_metrics(rows)
+    print_metrics(rows, starts)
 
     title = f"Autonomous ESN: {args.config.stem}"
-    training = (q_demo, endpoint_positions(skeleton, q_demo))
+    training = [(q, endpoint_positions(skeleton, q)) for q in demos.values()]
     plot_runs(times, runs, training, target, title).savefig(run_dir / "autonomous.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
     print("Replay with:\n  uv run python third_party/skelarm/tools/player.py " + str(run_dir / "esn_00.sklog.npz"))
 
 
-def demonstrator_config(demo_config: dict[str, Any], starts: list[np.ndarray], duration: float) -> dict[str, Any]:
+def start_postures(evaluation: dict[str, Any], demos: dict[str, np.ndarray]) -> list[Start]:
+    """The start postures of the autonomous runs: offsets around each demonstration's start, then new ones."""
+    starts = []
+    for name, q in demos.items():
+        for offset in evaluation["start_offsets_deg"]:
+            demonstrated = not any(offset)
+            origin = name if demonstrated else f"{name} {offset[0]:+g},{offset[1]:+g} deg"
+            starts.append(Start(origin, q[0] + np.radians(offset), demonstrated))
+    for q_deg in evaluation.get("extra_start_q_deg", []):
+        starts.append(Start("new", np.radians(q_deg), demonstrated=False))
+    return starts
+
+
+def demonstrator_config(demo_config: dict[str, Any], starts: list[Start], duration: float) -> dict[str, Any]:
     """The demonstration configuration, changed to reach from ``starts`` for ``duration`` seconds."""
     reference = copy.deepcopy(demo_config)
-    reference["demonstrations"]["start_q"] = [np.degrees(start).tolist() for start in starts]
+    reference["demonstrations"]["start_q"] = [np.degrees(start.q).tolist() for start in starts]
     reference["task"]["duration"] = duration
     return reference
 
@@ -139,31 +178,40 @@ def rms_degrees(error: np.ndarray) -> float:
     return float(np.degrees(np.sqrt(np.mean(error**2))))
 
 
-def print_metrics(rows: list[dict[str, float]]) -> None:
-    """Print the metrics as a table, one start posture per line."""
-    print("start  offset (deg)    first step  joint error  path distance  final error  peak    profile")
-    print("                       (mm)        (deg RMS)    (mm)           (mm)         timing  error")
+def print_metrics(rows: list[dict[str, Any]], starts: list[Start]) -> None:
+    """Print the metrics as a table, one start posture per line, then averages by kind of start."""
+    print("start  origin                first step  joint error  path distance  final error  peak    profile")
+    print("                             (mm)        (deg RMS)    (mm)           (mm)         timing  error")
     for r in rows:
         print(
-            f"{int(r['start']):5d}  {r['offset_q1_deg']:+5.1f}, {r['offset_q2_deg']:+5.1f}"
-            f"  {1000 * r['first_step_m']:10.1f}  {r['joint_rms_error_deg']:11.2f}"
+            f"{r['start']:5d}  {r['origin']:<20}  {1000 * r['first_step_m']:10.1f}  {r['joint_rms_error_deg']:11.2f}"
             f"  {1000 * r['path_distance_m']:13.1f}  {1000 * r['final_error_m']:11.1f}"
             f"  {r['peak_timing']:6.2f}  {r['speed_profile_error']:7.2f}"
         )
+    for kind, demonstrated in (("demonstrated starts", True), ("other starts", False)):
+        group = [r for r, s in zip(rows, starts, strict=True) if s.demonstrated == demonstrated]
+        if group:
+            first_step = 1000 * np.mean([r["first_step_m"] for r in group])
+            joint_error = np.mean([r["joint_rms_error_deg"] for r in group])
+            distance = 1000 * np.mean([r["path_distance_m"] for r in group])
+            print(
+                f"Mean over {len(group)} {kind}: first step {first_step:.1f} mm,"
+                f" joint error {joint_error:.2f} deg, path distance {distance:.1f} mm"
+            )
 
 
 def plot_runs(
     times: np.ndarray,
     runs: list[Run],
-    training: tuple[np.ndarray, np.ndarray],
+    training: list[tuple[np.ndarray, np.ndarray]],
     target: np.ndarray,
     title: str,
 ) -> Figure:
     """Plot hand paths, joint angles, and hand speeds of the ESN against the demonstrator.
 
-    Each run holds the joint angles of the ESN and the demonstrator, then their hand positions.
-    ``training`` holds the joint angles and hand positions of the training demonstration,
-    which is highlighted underneath the runs.
+    ``training`` holds the joint angles and hand positions of each training
+    demonstration, which are highlighted underneath the runs. Filled markers show
+    where a training demonstration starts; hollow ones, start postures it does not.
     """
     fig = Figure(figsize=(10, 8.5), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
@@ -179,32 +227,34 @@ def plot_runs(
     ref_line = {"color": DEMONSTRATOR_COLOR, "linewidth": 1.2, "linestyle": "--"}
     training_line = {"color": TRAINING_COLOR, "linewidth": 4.5, "solid_capstyle": "round", "zorder": 1}
 
-    q_train, hand_train = training
-    t_train = times[1] * np.arange(len(q_train))
-    ax_hand.plot(hand_train[:, 0], hand_train[:, 1], label="training demonstration", **training_line)
-    ax_hand.plot(*hand_train[0], marker="o", markersize=9, color=TRAINING_COLOR, markeredgecolor=SURFACE_COLOR)
-    ax_speed.plot(t_train, hand_speed(t_train, hand_train), **training_line)
-    for ax, j in ((ax_q1, 0), (ax_q2, 1)):
-        ax.plot(t_train, np.degrees(q_train[:, j]), **training_line)
-    for i, (q_esn, q_ref, hand_esn, hand_ref) in enumerate(runs):
+    for i, (q_train, hand_train) in enumerate(training):
+        t_train = times[1] * np.arange(len(q_train))
+        label = "training demonstrations" if i == 0 else None
+        ax_hand.plot(hand_train[:, 0], hand_train[:, 1], label=label, **training_line)
+        ax_speed.plot(t_train, hand_speed(t_train, hand_train), **training_line)
+        for ax, j in ((ax_q1, 0), (ax_q2, 1)):
+            ax.plot(t_train, np.degrees(q_train[:, j]), **training_line)
+    for i, run in enumerate(runs):
         esn_label = "ESN, run autonomously from each start" if i == 0 else None
         ref_label = "demonstrator, reaching from each start" if i == 0 else None
-        ax_hand.plot(hand_ref[:, 0], hand_ref[:, 1], label=ref_label, **ref_line)
-        ax_hand.plot(hand_esn[:, 0], hand_esn[:, 1], label=esn_label, **esn_line)
-        ax_hand.plot(*hand_esn[0], marker="o", markersize=5, color=ESN_COLOR, markeredgecolor=SURFACE_COLOR)
-        ax_speed.plot(times[: len(hand_ref)], hand_speed(times[: len(hand_ref)], hand_ref), **ref_line)
-        ax_speed.plot(times, hand_speed(times, hand_esn), **esn_line)
+        ax_hand.plot(run.hand_ref[:, 0], run.hand_ref[:, 1], label=ref_label, **ref_line)
+        ax_hand.plot(run.hand_esn[:, 0], run.hand_esn[:, 1], label=esn_label, **esn_line)
+        face = ESN_COLOR if run.start.demonstrated else SURFACE_COLOR
+        ax_hand.plot(*run.hand_esn[0], marker="o", markersize=6, color=ESN_COLOR, markerfacecolor=face)
+        t_ref = times[: len(run.hand_ref)]
+        ax_speed.plot(t_ref, hand_speed(t_ref, run.hand_ref), **ref_line)
+        ax_speed.plot(times, hand_speed(times, run.hand_esn), **esn_line)
         for ax, j in ((ax_q1, 0), (ax_q2, 1)):
-            ax.plot(times[: len(q_ref)], np.degrees(q_ref[:, j]), **ref_line)
-            ax.plot(times, np.degrees(q_esn[:, j]), **esn_line)
+            ax.plot(times[: len(run.q_ref)], np.degrees(run.q_ref[:, j]), **ref_line)
+            ax.plot(times, np.degrees(run.q_esn[:, j]), **esn_line)
 
     ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
     ax_hand.set(title="Hand paths", xlabel="x (m)", ylabel="y (m)", aspect="equal")
     handles, labels = ax_hand.get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
     # A jump in the ESN's first step would squash the reach speeds, so the axis stops above them.
-    reach_speed = max(hand_speed(times[: len(hand_ref)], hand_ref).max() for _, _, _, hand_ref in runs)
-    first_step_speed = max(np.linalg.norm(hand_esn[1] - hand_esn[0]) / times[1] for _, _, hand_esn, _ in runs)
+    reach_speed = max(hand_speed(times[: len(run.hand_ref)], run.hand_ref).max() for run in runs)
+    first_step_speed = max(np.linalg.norm(run.hand_esn[1] - run.hand_esn[0]) / times[1] for run in runs)
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)", ylim=(0.0, 1.6 * reach_speed))
     if first_step_speed > 1.6 * reach_speed:
         ax_speed.annotate(

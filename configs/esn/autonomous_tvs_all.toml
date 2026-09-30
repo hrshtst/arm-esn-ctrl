@@ -1,0 +1,54 @@
+# Stage 1: an ESN trained on all eight demonstrations, run autonomously.
+#
+#   uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
+#
+# The ESN learns the eight time-varying-stiffness demonstrations, which reach
+# the target at (0, 1.2) m from 0.5 m away in eight directions, 45 deg apart.
+# It then runs from each demonstrated start posture, and from eight start
+# postures halfway between the demonstrated directions, which no demonstration
+# starts from. Each run is compared with the demonstrator's own reach from the
+# same posture. The ESN hyperparameters are those of the single-demonstration
+# experiment (autonomous_tvs_demo07.toml), so only the training data differ.
+
+[demonstrations]
+# A run directory of experiments/make_demonstrations.py, relative to the storage root.
+run = "results/20260930-175440-reach_tvs"
+train = [
+  "demo_00.sklog.npz",
+  "demo_01.sklog.npz",
+  "demo_02.sklog.npz",
+  "demo_03.sklog.npz",
+  "demo_04.sklog.npz",
+  "demo_05.sklog.npz",
+  "demo_06.sklog.npz",
+  "demo_07.sklog.npz",
+]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 300
+spectral_radius = 0.5
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.3
+input_scaling = 1.0
+bias = true
+ridge = 1.0            # strong regularization keeps the autonomous ESN stable
+seed = 0
+
+[evaluation]
+duration = 3.0         # autonomous run (s); the demonstrations last 2 s
+# Start postures: each demonstration's start plus these offsets (deg).
+start_offsets_deg = [[0.0, 0.0]]
+# Start postures no demonstration starts from (joint angles in degrees): 0.5 m
+# from the target, halfway between the demonstrated directions.
+extra_start_q_deg = [
+  [40.5, 71.4],   # hand ( 0.46, 1.39) m,  22.5 deg
+  [64.2, 43.6],   # hand ( 0.19, 1.66) m,  67.5 deg
+  [77.3, 43.6],   # hand (-0.19, 1.66) m, 112.5 deg
+  [77.2, 71.4],   # hand (-0.46, 1.39) m, 157.5 deg
+  [70.4, 104.8],  # hand (-0.46, 1.01) m, 202.5 deg
+  [52.7, 131.4],  # hand (-0.19, 0.74) m, 247.5 deg
+  [23.6, 131.4],  # hand ( 0.19, 0.74) m, 292.5 deg
+  [21.2, 104.8],  # hand ( 0.46, 1.01) m, 337.5 deg
+]

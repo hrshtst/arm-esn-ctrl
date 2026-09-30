@@ -10,7 +10,7 @@
 [demonstrations]
 # A run directory of experiments/make_demonstrations.py, relative to the storage root.
 run = "results/20260930-175440-reach_tvs"
-train = "demo_07.sklog.npz"
+train = ["demo_07.sklog.npz"]
 
 [esn]
 dt = 0.01              # sampling period (s)
