@@ -16,7 +16,8 @@ controller that made the demonstration. The run directory receives:
 - ``metrics.csv``: how far each ESN trajectory is from the demonstrator's, and how far
   the hand moves in the ESN's first step (a jump shows that the ESN snaps back to
   the trajectory it learned);
-- ``autonomous.png``: hand paths, joint angles, and hand speeds of both.
+- ``autonomous.png``: hand paths, joint angles, and hand speeds of both, over the
+  training demonstration.
 
 Replay a trajectory with ``uv run python third_party/skelarm/tools/player.py <file>``.
 """
@@ -45,6 +46,7 @@ from arm_esn_ctrl.metrics import hand_speed, path_distance, reach_metrics
 from arm_esn_ctrl.storage import start_run, storage_root
 
 ESN_COLOR = "#2a78d6"
+TRAINING_COLOR = "#eb6834"
 DEMONSTRATOR_COLOR = "#52514e"
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
@@ -118,7 +120,8 @@ def main() -> None:
     print_metrics(rows)
 
     title = f"Autonomous ESN: {args.config.stem}"
-    plot_runs(times, runs, target, title).savefig(run_dir / "autonomous.png", dpi=150)
+    training = (q_demo, endpoint_positions(skeleton, q_demo))
+    plot_runs(times, runs, training, target, title).savefig(run_dir / "autonomous.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
     print("Replay with:\n  uv run python third_party/skelarm/tools/player.py " + str(run_dir / "esn_00.sklog.npz"))
 
@@ -149,10 +152,18 @@ def print_metrics(rows: list[dict[str, float]]) -> None:
         )
 
 
-def plot_runs(times: np.ndarray, runs: list[Run], target: np.ndarray, title: str) -> Figure:
+def plot_runs(
+    times: np.ndarray,
+    runs: list[Run],
+    training: tuple[np.ndarray, np.ndarray],
+    target: np.ndarray,
+    title: str,
+) -> Figure:
     """Plot hand paths, joint angles, and hand speeds of the ESN against the demonstrator.
 
     Each run holds the joint angles of the ESN and the demonstrator, then their hand positions.
+    ``training`` holds the joint angles and hand positions of the training demonstration,
+    which is highlighted underneath the runs.
     """
     fig = Figure(figsize=(10, 8.5), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
@@ -166,9 +177,18 @@ def plot_runs(times: np.ndarray, runs: list[Run], target: np.ndarray, title: str
 
     esn_line = {"color": ESN_COLOR, "linewidth": 1.5, "solid_capstyle": "round"}
     ref_line = {"color": DEMONSTRATOR_COLOR, "linewidth": 1.2, "linestyle": "--"}
+    training_line = {"color": TRAINING_COLOR, "linewidth": 4.5, "solid_capstyle": "round", "zorder": 1}
+
+    q_train, hand_train = training
+    t_train = times[1] * np.arange(len(q_train))
+    ax_hand.plot(hand_train[:, 0], hand_train[:, 1], label="training demonstration", **training_line)
+    ax_hand.plot(*hand_train[0], marker="o", markersize=9, color=TRAINING_COLOR, markeredgecolor=SURFACE_COLOR)
+    ax_speed.plot(t_train, hand_speed(t_train, hand_train), **training_line)
+    for ax, j in ((ax_q1, 0), (ax_q2, 1)):
+        ax.plot(t_train, np.degrees(q_train[:, j]), **training_line)
     for i, (q_esn, q_ref, hand_esn, hand_ref) in enumerate(runs):
-        esn_label = "ESN (autonomous)" if i == 0 else None
-        ref_label = "demonstrator" if i == 0 else None
+        esn_label = "ESN, run autonomously from each start" if i == 0 else None
+        ref_label = "demonstrator, reaching from each start" if i == 0 else None
         ax_hand.plot(hand_ref[:, 0], hand_ref[:, 1], label=ref_label, **ref_line)
         ax_hand.plot(hand_esn[:, 0], hand_esn[:, 1], label=esn_label, **esn_line)
         ax_hand.plot(*hand_esn[0], marker="o", markersize=5, color=ESN_COLOR, markeredgecolor=SURFACE_COLOR)
@@ -180,7 +200,8 @@ def plot_runs(times: np.ndarray, runs: list[Run], target: np.ndarray, title: str
 
     ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
     ax_hand.set(title="Hand paths", xlabel="x (m)", ylabel="y (m)", aspect="equal")
-    ax_hand.legend(frameon=False, labelcolor=TEXT_COLOR, loc="upper right")
+    handles, labels = ax_hand.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
     # A jump in the ESN's first step would squash the reach speeds, so the axis stops above them.
     reach_speed = max(hand_speed(times[: len(hand_ref)], hand_ref).max() for _, _, _, hand_ref in runs)
     first_step_speed = max(np.linalg.norm(hand_esn[1] - hand_esn[0]) / times[1] for _, _, hand_esn, _ in runs)
