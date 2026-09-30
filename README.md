@@ -416,6 +416,21 @@ the origin of each start posture) and a figure of the hand paths, joint
 angles, and hand speeds (`autonomous.png`), in which filled markers show
 demonstrated start postures and hollow ones the others.
 
+### Sweeping hyperparameters
+
+`experiments/sweep_esn.py` trains and runs the ESN for every combination of
+values listed in a configuration's `[sweep]` table (two or three `[esn]`
+hyperparameters), all on the same demonstrations and start postures:
+
+```bash
+uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all.toml
+```
+
+The run directory receives `sweep.csv`, with one row per combination and its
+metrics averaged over the demonstrated and the other start postures, and
+`sweep.png`, with heatmaps of the main metrics. To look at a combination in
+detail, copy its values into a configuration for `autonomous_esn.py`.
+
 ## Development
 
 ```bash

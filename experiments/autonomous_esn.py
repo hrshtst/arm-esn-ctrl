@@ -32,26 +32,18 @@ Replay a trajectory with ``uv run python third_party/skelarm/tools/player.py <fi
 from __future__ import annotations
 
 import argparse
-import copy
 import csv
-import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from matplotlib.figure import Figure
-from skelarm import StateLog, Task
 
-from arm_esn_ctrl.demonstrations import (
-    endpoint_positions,
-    joint_trajectory_log,
-    resample_joint_angles,
-    simulate_reaches,
-)
+from arm_esn_ctrl.autonomous import Run, Start, load_setup, rms_degrees, run_autonomously, run_metrics
+from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
-from arm_esn_ctrl.metrics import hand_speed, path_distance, reach_metrics
-from arm_esn_ctrl.storage import start_run, storage_root
+from arm_esn_ctrl.metrics import hand_speed
+from arm_esn_ctrl.storage import start_run
 
 ESN_COLOR = "#2a78d6"
 TRAINING_COLOR = "#eb6834"
@@ -61,121 +53,51 @@ GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
 
 
-@dataclass(frozen=True)
-class Start:
-    """A start posture of an autonomous run."""
-
-    origin: str  # where it comes from: "demo_07", "demo_07 +3,-3 deg", or "new"
-    q: np.ndarray  # joint angles (rad)
-    demonstrated: bool  # whether a training demonstration starts exactly here
-
-
-@dataclass(frozen=True)
-class Run:
-    """The ESN's autonomous run and the demonstrator's reach from one start posture."""
-
-    start: Start
-    q_esn: np.ndarray
-    q_ref: np.ndarray
-    hand_esn: np.ndarray
-    hand_ref: np.ndarray
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("config", type=Path, help="experiment configuration file (TOML)")
     args = parser.parse_args()
 
     config, run_dir = start_run(args.config)
-    esn_config = EsnConfig(**config["esn"])
-    evaluation = config["evaluation"]
-    demo_dir = storage_root() / config["demonstrations"]["run"]
-    with (demo_dir / "config.toml").open("rb") as f:
-        demo_config = tomllib.load(f)
-    skeleton = StateLog.load(demo_dir / config["demonstrations"]["train"][0]).build_skeleton()
-    target = Task.from_dict(demo_config["task"]).require_target()
+    setup = load_setup(config)
 
     # Train on the demonstrations.
-    demos = {
-        name.split(".")[0]: resample_joint_angles(StateLog.load(demo_dir / name), esn_config.dt)[1]
-        for name in config["demonstrations"]["train"]
-    }
-    esn = ReachingEsn(esn_config)
-    esn.fit(list(demos.values()))
-    one_step_error = rms_degrees(np.vstack([esn.one_step_predictions(q) - q[1:] for q in demos.values()]))
-    n_samples = sum(len(q) for q in demos.values())
-    print(f"Trained on {len(demos)} demonstrations ({n_samples} samples)")
+    esn = ReachingEsn(EsnConfig(**config["esn"]))
+    esn.fit(list(setup.demos.values()))
+    one_step_error = rms_degrees(np.vstack([esn.one_step_predictions(q) - q[1:] for q in setup.demos.values()]))
+    n_samples = sum(len(q) for q in setup.demos.values())
+    print(f"Trained on {len(setup.demos)} demonstrations ({n_samples} samples)")
     print(f"One-step prediction error {one_step_error:.4f} deg RMS")
 
-    # Run autonomously from each start posture, and let the demonstrator reach from the same postures.
-    n_steps = round(evaluation["duration"] / esn_config.dt)
-    times = esn_config.dt * np.arange(n_steps + 1)
-    starts = start_postures(evaluation, demos)
-    demonstrator_logs = simulate_reaches(demonstrator_config(demo_config, starts, evaluation["duration"]))
-
-    runs, rows = [], []
-    for i, (start, demonstrator_log) in enumerate(zip(starts, demonstrator_logs, strict=True)):
-        q_esn = esn.generate(start.q, n_steps)
-        _, q_ref = resample_joint_angles(demonstrator_log, esn_config.dt)
-        run = Run(start, q_esn, q_ref, endpoint_positions(skeleton, q_esn), endpoint_positions(skeleton, q_ref))
-        joint_trajectory_log(skeleton, times, q_esn, demo_config["task"], producer="autonomous ESN").save(
+    # Run autonomously from each start posture and compare with the demonstrator's reach from it.
+    runs = run_autonomously(esn, setup)
+    rows = []
+    for i, (run, demonstrator_log) in enumerate(zip(runs, setup.demonstrator_logs, strict=True)):
+        joint_trajectory_log(setup.skeleton, setup.times, run.q_esn, setup.task, producer="autonomous ESN").save(
             run_dir / f"esn_{i:02d}.sklog.npz"
         )
         demonstrator_log.save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
-        shape = reach_metrics(times, run.hand_esn, target)
         rows.append(
             {
                 "start": i,
-                "origin": start.origin,
-                "start_q1_deg": float(np.degrees(start.q[0])),
-                "start_q2_deg": float(np.degrees(start.q[1])),
-                "first_step_m": float(np.linalg.norm(run.hand_esn[1] - run.hand_esn[0])),
-                "joint_rms_error_deg": rms_degrees(q_esn - q_ref),
-                "path_distance_m": path_distance(run.hand_esn, run.hand_ref),
-                "final_error_m": float(np.linalg.norm(run.hand_esn[-1] - target)),
-                "peak_timing": shape["peak_timing"],
-                "speed_profile_error": shape["speed_profile_error"],
+                "origin": run.start.origin,
+                "start_q1_deg": float(np.degrees(run.start.q[0])),
+                "start_q2_deg": float(np.degrees(run.start.q[1])),
             }
+            | run_metrics(run, setup)
         )
-        runs.append(run)
 
     with (run_dir / "metrics.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    print_metrics(rows, starts)
+    print_metrics(rows, setup.starts)
 
     title = f"Autonomous ESN: {args.config.stem}"
-    training = [(q, endpoint_positions(skeleton, q)) for q in demos.values()]
-    plot_runs(times, runs, training, target, title).savefig(run_dir / "autonomous.png", dpi=150)
+    training = [(q, endpoint_positions(setup.skeleton, q)) for q in setup.demos.values()]
+    plot_runs(setup.times, runs, training, setup.target, title).savefig(run_dir / "autonomous.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
     print("Replay with:\n  uv run python third_party/skelarm/tools/player.py " + str(run_dir / "esn_00.sklog.npz"))
-
-
-def start_postures(evaluation: dict[str, Any], demos: dict[str, np.ndarray]) -> list[Start]:
-    """The start postures of the autonomous runs: offsets around each demonstration's start, then new ones."""
-    starts = []
-    for name, q in demos.items():
-        for offset in evaluation["start_offsets_deg"]:
-            demonstrated = not any(offset)
-            origin = name if demonstrated else f"{name} {offset[0]:+g},{offset[1]:+g} deg"
-            starts.append(Start(origin, q[0] + np.radians(offset), demonstrated))
-    for q_deg in evaluation.get("extra_start_q_deg", []):
-        starts.append(Start("new", np.radians(q_deg), demonstrated=False))
-    return starts
-
-
-def demonstrator_config(demo_config: dict[str, Any], starts: list[Start], duration: float) -> dict[str, Any]:
-    """The demonstration configuration, changed to reach from ``starts`` for ``duration`` seconds."""
-    reference = copy.deepcopy(demo_config)
-    reference["demonstrations"]["start_q"] = [np.degrees(start.q).tolist() for start in starts]
-    reference["task"]["duration"] = duration
-    return reference
-
-
-def rms_degrees(error: np.ndarray) -> float:
-    """Root mean square of an angle error given in radians, in degrees."""
-    return float(np.degrees(np.sqrt(np.mean(error**2))))
 
 
 def print_metrics(rows: list[dict[str, Any]], starts: list[Start]) -> None:
