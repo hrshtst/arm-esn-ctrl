@@ -1,0 +1,52 @@
+# Stage 1: the ESN trained on all eight demonstrations, run autonomously, with
+# ridge = 1.0, leak_rate = 0.2, and input_scaling = 0.6.
+#
+#   uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all_ridge1_leak0.2_input0.6.toml
+#
+# The combination that generalized best while reaching the target from every
+# start in sweep_tvs_all.toml (run 20260930-232924): path distance 38.8 mm from
+# the new starts and 15.2 mm from the demonstrated ones, worst final error 1.1 mm.
+# Everything else is autonomous_tvs_all.toml.
+
+[demonstrations]
+# A run directory of experiments/make_demonstrations.py, relative to the storage root.
+run = "results/20260930-175440-reach_tvs"
+train = [
+  "demo_00.sklog.npz",
+  "demo_01.sklog.npz",
+  "demo_02.sklog.npz",
+  "demo_03.sklog.npz",
+  "demo_04.sklog.npz",
+  "demo_05.sklog.npz",
+  "demo_06.sklog.npz",
+  "demo_07.sklog.npz",
+]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 300
+spectral_radius = 0.5
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.2
+input_scaling = 0.6
+bias = true
+ridge = 1.0
+seed = 0
+
+[evaluation]
+duration = 3.0         # autonomous run (s); the demonstrations last 2 s
+# Start postures: each demonstration's start plus these offsets (deg).
+start_offsets_deg = [[0.0, 0.0]]
+# Start postures no demonstration starts from (joint angles in degrees): 0.5 m
+# from the target, halfway between the demonstrated directions.
+extra_start_q_deg = [
+  [40.5, 71.4],   # hand ( 0.46, 1.39) m,  22.5 deg
+  [64.2, 43.6],   # hand ( 0.19, 1.66) m,  67.5 deg
+  [77.3, 43.6],   # hand (-0.19, 1.66) m, 112.5 deg
+  [77.2, 71.4],   # hand (-0.46, 1.39) m, 157.5 deg
+  [70.4, 104.8],  # hand (-0.46, 1.01) m, 202.5 deg
+  [52.7, 131.4],  # hand (-0.19, 0.74) m, 247.5 deg
+  [23.6, 131.4],  # hand ( 0.19, 0.74) m, 292.5 deg
+  [21.2, 104.8],  # hand ( 0.46, 1.01) m, 337.5 deg
+]
