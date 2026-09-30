@@ -98,3 +98,18 @@ def reach_metrics(times: NDArray[np.float64], hand: NDArray[np.float64], target:
         "overshoot": float(max(0.0, along.max() - distance) / distance),
         "final_error": float(np.linalg.norm(hand[-1] - target)),
     }
+
+
+def path_distance(path: NDArray[np.float64], reference: NDArray[np.float64]) -> float:
+    """Return how far ``path`` strays from the ``reference`` path, regardless of timing.
+
+    Both are sequences of points, shaped ``(n, 2)``. The result is the largest
+    distance from a point of ``path`` to the nearest point on the polyline through
+    ``reference``.
+    """
+    start, segment = reference[:-1], np.diff(reference, axis=0)
+    length2 = np.maximum(np.sum(segment**2, axis=1), np.finfo(float).tiny)
+    offset = path[:, np.newaxis, :] - start[np.newaxis, :, :]
+    fraction = np.clip(np.sum(offset * segment, axis=2) / length2, 0.0, 1.0)
+    nearest = start + fraction[..., np.newaxis] * segment
+    return float(np.max(np.min(np.linalg.norm(path[:, np.newaxis, :] - nearest, axis=2), axis=1)))

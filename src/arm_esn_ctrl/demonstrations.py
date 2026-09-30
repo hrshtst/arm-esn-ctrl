@@ -11,7 +11,7 @@ A demonstration is a skelarm state log (``*.sklog.npz``). It is either
   ``tools/trajectory_recorder.py``.
 
 Both kinds replay in skelarm's ``tools/player.py`` and load with
-:func:`load_joint_angles`.
+:func:`load_joint_angles`, which resamples them at a fixed period.
 """
 
 from __future__ import annotations
@@ -44,13 +44,17 @@ def simulate_reaches(config: dict[str, Any]) -> list[StateLog]:
 
 
 def load_joint_angles(path: str | Path, dt: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Load the joint angles of a demonstration, resampled at a fixed period ``dt``.
+    """Load the joint angles of a demonstration file, resampled at a fixed period ``dt``."""
+    return resample_joint_angles(StateLog.load(path), dt)
+
+
+def resample_joint_angles(log: StateLog, dt: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Return the joint angles of a log, resampled at a fixed period ``dt``.
 
     Returns the times (starting at zero) and the joint angles in radians, shaped
     ``(n_samples, n_joints)``. Taught demonstrations are not sampled evenly, so
     the angles are linearly interpolated onto the new time grid.
     """
-    log = StateLog.load(path)
     times = log.times - log.times[0]
     q = log.channel("q").reshape(len(times), -1)
     new_times = np.arange(0.0, times[-1] + 0.5 * dt, dt, dtype=np.float64)
@@ -67,3 +71,17 @@ def endpoint_positions(skeleton: Skeleton, q: NDArray[np.float64]) -> NDArray[np
         tip = skeleton.links[-1]
         positions[i] = tip.xe, tip.ye
     return positions
+
+
+def joint_trajectory_log(
+    skeleton: Skeleton, times: NDArray[np.float64], q: NDArray[np.float64], task: dict[str, Any], producer: str
+) -> StateLog:
+    """Make a skelarm log of a joint-angle trajectory, so that skelarm's player can replay it.
+
+    ``task`` is a skelarm ``[task]`` table; the player draws its target.
+    """
+    log = StateLog(skeleton, producer=producer, extra={"playback": {"task": task}})
+    dq = np.gradient(q, times, axis=0)
+    for t, qi, dqi in zip(times, q, dq, strict=True):
+        log.record(float(t), q=qi, dq=dqi)
+    return log

@@ -6,7 +6,7 @@
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.metrics import reach_metrics
+from arm_esn_ctrl.metrics import path_distance, reach_metrics
 
 START = np.array([0.5, 1.2])
 TARGET = np.array([0.0, 1.2])
@@ -51,3 +51,17 @@ def test_movement_time_excludes_the_hold():
 
     # Minimum-jerk speed exceeds 5 % of its peak for about 88 % of the duration.
     assert 0.8 * 0.8 < m["movement_time"] < 0.8
+
+
+def test_path_distance_ignores_timing():
+    line = np.column_stack([np.linspace(0.0, 1.0, 11), np.zeros(11)])
+    slower_on_the_same_line = np.column_stack([np.linspace(0.0, 1.0, 101) ** 2, np.zeros(101)])
+
+    assert path_distance(slower_on_the_same_line, line) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_path_distance_is_the_largest_distance_to_the_nearest_point():
+    line = np.array([[0.0, 0.0], [1.0, 0.0]])
+    bowed = np.array([[0.0, 0.0], [0.5, 0.2], [1.0, 0.05], [1.3, 0.0]])
+
+    assert path_distance(bowed, line) == pytest.approx(0.3)

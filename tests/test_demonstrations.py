@@ -8,9 +8,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from skelarm import Skeleton
+from skelarm import Skeleton, StateLog
 
-from arm_esn_ctrl.demonstrations import endpoint_positions, load_joint_angles, simulate_reaches
+from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log, load_joint_angles, simulate_reaches
 from arm_esn_ctrl.storage import REPO_ROOT
 
 CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
@@ -60,3 +60,19 @@ def test_endpoint_positions_follow_forward_kinematics():
     hand = endpoint_positions(skeleton, q)
 
     assert hand == pytest.approx(np.array([[1.8, 0.0], [0.0, 1.8], [1.0, 0.8]]), abs=1e-12)
+
+
+def test_joint_trajectory_log_replays_the_trajectory(tmp_path: Path):
+    skeleton = Skeleton.from_toml(CONFIG)
+    times = np.linspace(0.0, 1.0, 11)
+    q = np.column_stack([np.linspace(0.3, 0.8, 11), np.linspace(2.0, 1.6, 11)])
+    task = {"type": "reaching", "target": {"pos": [0.0, 1.2], "tolerance": 0.02}}
+    path = tmp_path / "trajectory.sklog.npz"
+
+    joint_trajectory_log(skeleton, times, q, task, producer="test").save(path)
+    log = StateLog.load(path)
+
+    assert log.times == pytest.approx(times)
+    assert log.channel("q") == pytest.approx(q)
+    assert log.channel("dq")[:, 0] == pytest.approx(0.5)
+    assert log.extra["playback"]["task"] == task

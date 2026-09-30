@@ -363,6 +363,27 @@ uv run python third_party/skelarm/tools/trajectory_recorder.py \
     --multi-take --output storage/data/taught_reach/reach.sklog.npz --show-past-trails
 ```
 
+## Running the ESN autonomously (Stage 1)
+
+`experiments/autonomous_esn.py` trains an ESN on one demonstration and runs
+it autonomously, feeding its output back as its next input. It runs from the
+demonstration's start posture and from slightly disturbed ones, and compares
+each run with the demonstrator's own reach from the same posture:
+
+```bash
+uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_demo07.toml
+```
+
+The configuration names the demonstration run and file, the ESN
+hyperparameters (`[esn]`), and the start-posture offsets and run duration
+(`[evaluation]`). To explore a hyperparameter, copy the file, change the
+value, and run the copy. Each run is recorded in its own directory.
+
+The run directory receives the ESN's trajectories (`esn_00.sklog.npz`, ...)
+and the demonstrator's (`demonstrator_00.sklog.npz`, ...), which both replay
+in skelarm's player. It also receives their differences (`metrics.csv`) and a
+figure of the hand paths, joint angles, and hand speeds (`autonomous.png`).
+
 ## Development
 
 ```bash
@@ -399,7 +420,7 @@ Each report has five parts:
 
 ## Roadmap
 
-- [ ] **Scaffold.** Add the submodules, the uv environment,
+- [x] **Scaffold.** Add the submodules, the uv environment,
       configuration loading, and the storage root. Build a minimal
       pipeline: demonstration → ESN training → autonomous run → plot.
 - [ ] **Autonomous ESN.** Replicate one reaching motion of a two-link
