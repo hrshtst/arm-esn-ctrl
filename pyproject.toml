@@ -13,6 +13,7 @@ dependencies = [
   # Built from the pinned submodules (see [tool.uv.sources]).
   "rclib",
   "skelarm",
+  "tomli-w>=1.2",
 ]
 
 [build-system]
@@ -47,7 +48,10 @@ select = ["E", "W", "F", "I", "B", "UP", "NPY", "SIM", "RUF"]
 # Type checking is moderate: annotations are encouraged but not required. The
 # main purpose of the configuration is to let the editor's language server
 # resolve the project and the libraries installed in .venv.
-[tool.basedpyright]
+#
+# [tool.pyright] is read by both pyright and basedpyright, whereas
+# [tool.basedpyright] would be ignored by plain pyright.
+[tool.pyright]
 include = ["src", "tests"]
 venvPath = "."
 venv = ".venv"
@@ -57,8 +61,14 @@ typeCheckingMode = "standard"
 [tool.mypy]
 python_version = "3.12"
 files = ["src", "tests"]
+# Resolve imports with the project's environment, also when the editor runs a
+# mypy installed elsewhere (for example, with pipx).
+python_executable = "$MYPY_CONFIG_FILE_DIR/.venv/bin/python"
 # Also check the bodies of functions that have no annotations.
 check_untyped_defs = true
+# Treat installed packages without type information as untyped instead of
+# reporting them. Modules that cannot be found at all are still reported.
+disable_error_code = ["import-untyped"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

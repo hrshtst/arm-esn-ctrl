@@ -206,17 +206,37 @@ Typical examples are:
   simulation belongs to skelarm. Fix issues upstream first, then advance
   the submodule pin in a separate commit.
 
-## Configuration and reproducibility *(planned)*
+## Configuration and reproducibility
 
 Every run is described by a human-readable TOML configuration file. It
 holds every parameter that affects the result: the robot, the
 demonstrations, the ESN hyperparameters, the tracker gains, the
-scenario, and the random seeds. Each run saves the following next to
-its outputs:
+scenario, and the random seeds.
 
-- a copy of the configuration file as used, including the random seeds;
-- the commit hash of this repository, and whether the working tree had
-  uncommitted changes.
+Every experiment script starts with `start_run` from
+`arm_esn_ctrl.storage`. It loads the configuration file and creates a
+run directory, where the script then writes its outputs:
+
+```python
+config, run_dir = start_run("configs/example.toml")
+```
+
+The run directory records how the result was produced:
+
+- `config.toml`: an exact copy of the configuration file, including the
+  random seeds;
+- `run.toml`: the command, start time, host name, commit hash of this
+  repository, and whether the working tree had uncommitted changes.
+
+```toml
+# run.toml
+config = "configs/example.toml"
+command = "experiments/example.py configs/example.toml"
+started = 2026-09-30 17:16:42+09:00
+host = "workstation"
+commit = "494d8652eabf8a55fa3e0c9e63f34231b61a2458"
+uncommitted_changes = false
+```
 
 The goal is modest: running the same configuration again on the same
 machine reproduces the same result. Small numerical differences on
@@ -226,7 +246,7 @@ hash is there to investigate why a reproduced result differs, by
 showing what the implementation looked like when the result was
 produced.
 
-## Data and results storage *(planned)*
+## Data and results storage
 
 Demonstrations and run outputs can grow large, so they live in a
 storage root, usually outside the Git repository. The storage root is
@@ -242,14 +262,18 @@ chosen in this order:
 storage_root = "/path/to/storage"
 ```
 
-A relative path in `storage.toml` is resolved against the repository
-root. Both `storage.toml` and `storage/` are specific to one machine, so
-Git ignores them.
+A relative path is resolved against the repository root. Both
+`storage.toml` and `storage/` are specific to one machine, so Git
+ignores them.
 
 ```text
 <storage root>/
-├── data/      # demonstrations (*.sklog.npz)
-└── results/   # one directory per run: configuration, commit hash, outputs
+├── data/                            # demonstrations (*.sklog.npz)
+└── results/
+    └── 20260930-171642-example/     # one directory per run: <date>-<time>-<config name>
+        ├── config.toml
+        ├── run.toml
+        └── ...                      # outputs written by the experiment
 ```
 
 Git tracks only the data and results behind a specific report. They are
@@ -267,7 +291,7 @@ arm-esn-ctrl/
 └── third_party/        # rclib and skelarm (Git submodules)
 ```
 
-## Getting started *(planned)*
+## Getting started
 
 Prerequisites:
 
@@ -301,7 +325,9 @@ uv run basedpyright && uv run mypy           # type checking
 ```
 
 Type annotations are encouraged but not required. The type checkers run
-in their standard (non-strict) modes.
+in their standard (non-strict) modes. Their settings in `pyproject.toml`
+also apply when your editor runs its own pyright, basedpyright, or mypy,
+so imports resolve against the project's `.venv`.
 
 To teach a demonstration interactively, use skelarm's trajectory
 recorder. Drag the arm tip with the mouse, then export the motion as a
