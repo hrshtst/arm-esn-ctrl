@@ -316,9 +316,27 @@ echo 'storage_root = "/path/to/storage"' > storage.toml
 If you cloned without `--recursive`, run
 `git submodule update --init --recursive`.
 
-uv installs rclib and skelarm from the submodules but does not notice
-when their source changes. After advancing a submodule pin, reinstall
-them with `uv sync --reinstall-package rclib --reinstall-package skelarm`.
+### Advancing a submodule pin
+
+Fix issues in rclib or skelarm upstream first. Once the fix is on the
+library's `main` branch, advance the pin here in a commit of its own
+(rclib shown; skelarm is the same):
+
+```bash
+git -C third_party/rclib fetch origin
+git -C third_party/rclib checkout <commit>                  # the new pin
+git -C third_party/rclib submodule update --init --recursive  # the library's own submodules
+git add third_party/rclib
+uv sync --reinstall-package rclib
+uv run pytest
+```
+
+Do not run `git submodule update` in this repository between checking
+out the new commit and `git add`: it resets the submodule to the old pin.
+uv installs the libraries from the submodules but does not notice when
+their source changes, so reinstall them with `--reinstall-package`. After
+committing the new pin, rerun the experiments whose results depend on
+the library.
 
 ## Making demonstrations
 
