@@ -8,17 +8,22 @@ Load a robot and its reaching task (a skelarm TOML file with ``[skeleton]`` and
 ``[task]``, such as ``configs/demonstrations/reach_tvs.toml``) and an ESN saved by
 ``experiments/autonomous_esn.py`` (``esn.toml`` in a run directory). Drag the arm tip
 with the mouse to choose a start posture (inverse kinematics), then press Play: the
-ESN is reset, driven by the held start posture for its warm-up (shown at negative
-times), and then runs autonomously, its output fed back as its next input. The arm
-shows every posture the ESN generates, and keeps running until you pause it. Reset
-returns the arm to the start posture of the last run, where you can pose it again.
+ESN is reset, driven by the held start posture for its warm-up, and then runs
+autonomously, its output fed back as its next input. The warm-up is consumed at once,
+so the run starts at time 0; with "Show the warm-up in real time" (``--show-warmup``)
+it plays at negative times instead. The arm shows every posture the ESN generates, and
+keeps running until you pause it. Reset returns the arm to the start posture of the
+last run, where you can pose it again.
 
 While the ESN runs, the side panel shows the metrics of :mod:`arm_esn_ctrl.metrics`:
 the first-step jump, when the hand arrives within the target tolerance, and whether it
 stays there during the hold window. If the file also holds ``[controller]`` and
-``[simulator]`` tables (a demonstration configuration), the demonstrator's own reach
-from the same start posture is drawn for comparison, and the panel compares the ESN
-with it.
+``[simulator]`` tables (a demonstration configuration), "Compare with the
+demonstrator" simulates the demonstrator's own reach from the same start posture in
+a background thread, so the ESN starts at once; when the simulation is ready, the
+demonstrator's path is drawn under the ESN's and the panel compares the two, including
+the steps already taken. With the checkbox off (``--no-demonstrator``), nothing is
+simulated.
 
 Keys, as in skelarm's player: ``Space`` play/pause, ``Right``/``F`` one step while
 paused, ``R`` or ``Home`` reset, ``Q`` quit.
@@ -32,16 +37,19 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 import tomllib
 from collections.abc import Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtGui import QColor, QKeySequence, QShortcut
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QCloseEvent, QColor, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -85,6 +93,28 @@ class Demonstrator:
     arrival_time: float | None
 
 
+def simulate_demonstrator(
+    config: dict[str, Any],
+    start_q: NDArray[np.float64],
+    *,
+    dt: float,
+    target: NDArray[np.float64],
+    radius: float,
+) -> Demonstrator:
+    """Simulate the demonstrator's reach from ``start_q`` and resample it at the ESN's period ``dt``.
+
+    ``config`` holds the skelarm scenario tables of the demonstrator. The simulation
+    builds its own robot and touches nothing shared, so it can run in a worker thread.
+    """
+    scenario = {name: config[name] for name in _DEMONSTRATOR_TABLES}
+    scenario["demonstrations"] = {"start_q": [np.degrees(start_q).tolist()]}
+    log = simulate_reaches(scenario)[0]
+    _, q = resample_joint_angles(log, dt)
+    hand = endpoint_positions(log.build_skeleton(), q)
+    arrival = arrival_index(hand, target, radius)
+    return Demonstrator(q, hand, None if arrival is None else arrival * dt)
+
+
 @dataclass
 class LiveRun:
     """One autonomous run of the ESN, recorded and measured as it goes.
@@ -102,6 +132,8 @@ class LiveRun:
     dt: float
     warmup_steps: int
     demonstrator: Demonstrator | None = None
+    demonstrator_pending: bool = False  # the demonstrator is being simulated in the background
+    demonstrator_error: str | None = None  # why simulating the demonstrator failed
     times: list[float] = field(default_factory=list)
     q: list[NDArray[np.float64]] = field(default_factory=list)
     hand: list[NDArray[np.float64]] = field(default_factory=list)
@@ -132,6 +164,16 @@ class LiveRun:
             self.hold_observed = time - self.arrival_time
         if self.demonstrator is not None:
             self._compare_with_demonstrator(self.demonstrator, time, q, hand)
+
+    def attach_demonstrator(self, demonstrator: Demonstrator) -> None:
+        """Compare with ``demonstrator`` from now on, and catch up on the steps already taken."""
+        self.demonstrator = demonstrator
+        self.reach_path_distance = 0.0
+        self._joint_error_sum = 0.0
+        self._joint_error_count = 0
+        for time, q, hand in zip(self.times, self.q, self.hand, strict=True):
+            if time >= 0.0:
+                self._compare_with_demonstrator(demonstrator, time, q, hand)
 
     def _compare_with_demonstrator(
         self, demonstrator: Demonstrator, time: float, q: NDArray[np.float64], hand: NDArray[np.float64]
@@ -192,13 +234,22 @@ class EsnReferenceApp(QMainWindow):
         Hold duration after arrival (s).
     demonstrator_config : dict, optional
         Skelarm scenario tables (``[skeleton]``, ``[task]``, ``[simulator]``,
-        ``[controller]``) of the demonstrator, which is then simulated from each
-        run's start posture for comparison.
+        ``[controller]``) of the demonstrator. While "Compare with the demonstrator"
+        is on, the demonstrator is simulated from each run's start posture in a
+        background thread, and the run is compared with it once it is ready.
+    compare : bool, optional
+        Whether "Compare with the demonstrator" starts on (default: True).
+    show_warmup : bool, optional
+        Whether "Show the warm-up in real time" starts on (default: False). When it
+        is off, Play consumes the warm-up at once and the run starts at time 0.
     speed : float, optional
         Initial playback speed (task seconds per real second).
     name : str, optional
         The model's name, shown in the side panel and the title.
     """
+
+    # A demonstrator simulated in the background, or the error that stopped it, for a run.
+    demonstrator_ready = pyqtSignal(object, object)
 
     def __init__(
         self,
@@ -208,6 +259,8 @@ class EsnReferenceApp(QMainWindow):
         *,
         hold: float,
         demonstrator_config: dict[str, Any] | None = None,
+        compare: bool = True,
+        show_warmup: bool = False,
         speed: float = 1.0,
         name: str | None = None,
     ) -> None:
@@ -229,6 +282,9 @@ class EsnReferenceApp(QMainWindow):
         self._last_trail: TrailOverlay | None = None  # the last run's tip path, shown faintly after a reset
         self._pending_steps = 0.0  # fractional ESN steps owed to the playback clock
         self._last_start_q = skeleton.q.copy()
+        # Simulates the demonstrator off the UI thread; one worker serves the runs in order.
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="demonstrator")
+        self.demonstrator_ready.connect(self._on_demonstrator_ready)
 
         self.setWindowTitle("ESN reference generator" + (f" - {name}" if name else ""))
         self.resize(1100, 780)
@@ -280,11 +336,18 @@ class EsnReferenceApp(QMainWindow):
         self.trail_checkbox.setChecked(True)
         self.trail_checkbox.toggled.connect(self._on_overlays_toggled)
         controls.addWidget(self.trail_checkbox)
-        self.demonstrator_checkbox = QCheckBox("Show the demonstrator's path")
-        self.demonstrator_checkbox.setChecked(True)
+        self.demonstrator_checkbox = QCheckBox("Compare with the demonstrator")
+        self.demonstrator_checkbox.setToolTip(
+            "Simulate the demonstrator from the start posture, draw its path, and compare"
+        )
+        self.demonstrator_checkbox.setChecked(compare and demonstrator_config is not None)
         self.demonstrator_checkbox.setVisible(demonstrator_config is not None)
-        self.demonstrator_checkbox.toggled.connect(self._on_overlays_toggled)
+        self.demonstrator_checkbox.toggled.connect(self._on_compare_toggled)
         controls.addWidget(self.demonstrator_checkbox)
+        self.warmup_checkbox = QCheckBox("Show the warm-up in real time")
+        self.warmup_checkbox.setToolTip("Off: Play consumes the warm-up at once, and the run starts at t = 0")
+        self.warmup_checkbox.setChecked(show_warmup)
+        controls.addWidget(self.warmup_checkbox)
         self.com_checkbox = QCheckBox("Show center of mass")
         self.com_checkbox.toggled.connect(self._on_overlays_toggled)
         controls.addWidget(self.com_checkbox)
@@ -326,11 +389,15 @@ class EsnReferenceApp(QMainWindow):
         self.transport_bar.set_playing(False)
 
     def step(self) -> None:
-        """Take one ESN step while paused (starting a run if there is none)."""
+        """Take one ESN step while paused; without a run, start one and show its first posture."""
         if self.is_playing:
             return
         if self.run is None:
             self._start_run()
+            assert self.run is not None
+            if self.run.times:  # the warm-up was consumed at once: show time 0
+                self._refresh()
+                return
         assert self.run is not None
         self.run.take_step()
         self._refresh()
@@ -375,21 +442,46 @@ class EsnReferenceApp(QMainWindow):
             hold=self.hold,
             dt=self.esn.config.dt,
             warmup_steps=self.esn.config.warmup_steps,
-            demonstrator=self._simulate_demonstrator(start_q),
         )
+        if self.demonstrator_checkbox.isChecked():
+            self._request_demonstrator(self.run)
+        if not self.warmup_checkbox.isChecked():
+            for _ in range(self.esn.config.warmup_steps + 1):  # the warm-up, then time 0
+                self.run.take_step()
 
-    def _simulate_demonstrator(self, start_q: NDArray[np.float64]) -> Demonstrator | None:
-        """Simulate the demonstrator's reach from ``start_q``, if a demonstrator is configured."""
-        if self.demonstrator_config is None:
-            return None
-        config = {name: self.demonstrator_config[name] for name in _DEMONSTRATOR_TABLES}
-        config["demonstrations"] = {"start_q": [np.degrees(start_q).tolist()]}
-        log = simulate_reaches(config)[0]
-        _, q = resample_joint_angles(log, self.esn.config.dt)
-        hand = endpoint_positions(self.skeleton, q)
-        arrival = arrival_index(hand, self.target, self.radius)
-        self._set_posture(start_q)  # endpoint_positions moved the shared skeleton
-        return Demonstrator(q, hand, None if arrival is None else arrival * self.esn.config.dt)
+    def _request_demonstrator(self, run: LiveRun) -> None:
+        """Simulate the demonstrator from ``run``'s start posture in the background, unless done or underway."""
+        if self.demonstrator_config is None or run.demonstrator is not None or run.demonstrator_pending:
+            return
+        run.demonstrator_pending = True
+        future = self._executor.submit(
+            simulate_demonstrator,
+            self.demonstrator_config,
+            run.start_q.copy(),
+            dt=self.esn.config.dt,
+            target=self.target,
+            radius=self.radius,
+        )
+        future.add_done_callback(lambda done: self._report_demonstrator(run, done))
+
+    def _report_demonstrator(self, run: LiveRun, future: Future[Demonstrator]) -> None:
+        """Hand a finished simulation to the UI thread (this runs in the worker thread)."""
+        if future.cancelled():
+            return
+        error = future.exception()
+        with contextlib.suppress(RuntimeError):  # the window was destroyed while the simulation ran
+            self.demonstrator_ready.emit(run, error if error is not None else future.result())
+
+    def _on_demonstrator_ready(self, run: LiveRun, result: Demonstrator | BaseException) -> None:
+        """Attach a simulated demonstrator to its run, if that run is still the current one."""
+        run.demonstrator_pending = False
+        if run is not self.run:
+            return  # the run was reset or replaced meanwhile
+        if isinstance(result, BaseException):
+            run.demonstrator_error = str(result)
+        else:
+            run.attach_demonstrator(result)
+        self._refresh()
 
     def _set_posture(self, q: NDArray[np.float64]) -> None:
         """Pose the arm at ``q`` as given, even beyond the joint limits (an ESN is not bounded by them)."""
@@ -435,7 +527,11 @@ class EsnReferenceApp(QMainWindow):
         lines.append(f"  First step: {'-' if first_step is None else f'{1000 * first_step:.1f} mm'}")
         arrival = "not yet" if run.arrival_time is None else f"{run.arrival_time:.2f} s"
         lines.append(f"  Arrival (within {1000 * self.radius:g} mm): {arrival}")
-        demonstrator = run.demonstrator
+        demonstrator = run.demonstrator if self.demonstrator_checkbox.isChecked() else None
+        if self.demonstrator_checkbox.isChecked() and run.demonstrator_pending:
+            lines.append("  Demonstrator: simulating...")
+        elif self.demonstrator_checkbox.isChecked() and run.demonstrator_error is not None:
+            lines.append(f"  Demonstrator: failed ({run.demonstrator_error})")
         if demonstrator is not None:
             if demonstrator.arrival_time is not None and run.arrival_time is not None:
                 lines.append(f"  Arrival delay: {run.arrival_time - demonstrator.arrival_time:+.2f} s")
@@ -481,6 +577,19 @@ class EsnReferenceApp(QMainWindow):
         self._show_last_trail()
         self._update_overlays()
 
+    def _on_compare_toggled(self, compare: bool) -> None:
+        """Start comparing the current run with the demonstrator, or hide the comparison."""
+        if compare and self.run is not None:
+            self._request_demonstrator(self.run)
+        self._update_overlays()
+        self._update_labels()
+
+    def closeEvent(self, a0: QCloseEvent | None) -> None:
+        """Stop the background simulations along with the window."""
+        self.clock.stop()
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        super().closeEvent(a0)
+
     def _on_play_toggled(self, playing: bool) -> None:
         if playing:
             self.play()
@@ -511,7 +620,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="first start posture in degrees, e.g. 18.2,119.9 (default: [initial], else the first demonstrated start)",
     )
-    parser.add_argument("--no-demonstrator", action="store_true", help="do not simulate the demonstrator")
+    parser.add_argument(
+        "--no-demonstrator", action="store_true", help="start with the comparison with the demonstrator off"
+    )
+    parser.add_argument(
+        "--show-warmup", action="store_true", help="show the warm-up in real time instead of consuming it at once"
+    )
     return parser
 
 
@@ -534,7 +648,7 @@ def main() -> None:
         if len(pose) != skeleton.num_joints:
             parser.error(f"--pose has {len(pose)} values but the arm has {skeleton.num_joints} joints")
         skeleton.q = pose
-    has_demonstrator = all(name in config for name in _DEMONSTRATOR_TABLES) and not args.no_demonstrator
+    has_demonstrator = all(name in config for name in _DEMONSTRATOR_TABLES)
 
     app = QApplication(sys.argv)
     try:
@@ -544,6 +658,8 @@ def main() -> None:
             ReachingEsn.load(args.model),
             hold=args.hold,
             demonstrator_config=config if has_demonstrator else None,
+            compare=not args.no_demonstrator,
+            show_warmup=args.show_warmup,
             speed=args.speed,
             name=str(args.model),
         )

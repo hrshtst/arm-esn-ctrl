@@ -461,13 +461,16 @@ uv run python tools/esn_reference_app.py configs/demonstrations/reach_tvs.toml \
 ```
 
 Drag the arm tip to choose a start posture, then press Play: the ESN is reset,
-driven by the held start posture for its warm-up (at negative times), and then
-runs autonomously, and the arm shows every posture it generates until you pause
-it. The side panel shows the reach and hold metrics as the run goes. If the TOML
-file also has `[controller]` and `[simulator]` tables, as the demonstration
-configurations do, the demonstrator's reach from the same start posture is drawn
-under the ESN's path and compared with it. Reset returns the arm to the start
-posture of the last run, ready to be posed again.
+driven by the held start posture for its warm-up (consumed at once, or played at
+negative times with "Show the warm-up in real time" or `--show-warmup`), and
+then runs autonomously, and the arm shows every posture it generates until you
+pause it. The side panel shows the reach and hold metrics as the run goes. If the
+TOML file also has `[controller]` and `[simulator]` tables, as the demonstration
+configurations do, "Compare with the demonstrator" simulates the demonstrator's
+reach from the same start posture in the background, draws it under the ESN's
+path, and compares the two; with the checkbox off (`--no-demonstrator`), nothing
+is simulated. Reset returns the arm to the start posture of the last run, ready
+to be posed again.
 
 Keys, as in skelarm's player: `Space` play/pause, `→`/`F` one step while paused,
 `R` or `Home` reset, `Q` quit.
