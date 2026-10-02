@@ -27,14 +27,22 @@ from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance
 from arm_esn_ctrl.storage import storage_root
 
+# The keys allowed in an [evaluation] table.
+EVALUATION_KEYS = {"duration", "hold", "start_offsets_deg", "extra_starts"}
+
 
 @dataclass(frozen=True)
 class Start:
     """A start posture of an autonomous run."""
 
-    origin: str  # where it comes from: "demo_07", "demo_07 +3,-3 deg", or "new"
+    origin: str  # where it comes from: "demo_07", "demo_07 +3,-3 deg", or "<group> <index>"
     q: NDArray[np.float64]  # joint angles (rad)
-    demonstrated: bool  # whether a training demonstration starts exactly here
+    group: str  # "demonstrated", "offset", or the name of a group of extra start postures
+
+    @property
+    def demonstrated(self) -> bool:
+        """Whether a training demonstration starts exactly here."""
+        return self.group == "demonstrated"
 
 
 @dataclass(frozen=True)
@@ -100,15 +108,29 @@ def load_setup(config: dict[str, Any]) -> Setup:
 
 
 def start_postures(evaluation: dict[str, Any], demos: dict[str, NDArray[np.float64]]) -> list[Start]:
-    """The start postures of the autonomous runs: offsets around each demonstration's start, then new ones."""
+    """The start postures of the autonomous runs.
+
+    First, each demonstration's start plus every offset in ``start_offsets_deg``
+    (a zero offset is the demonstrated start itself). Then the extra start postures
+    in the ``extra_starts`` table, which maps a group name to a list of joint angles
+    in degrees, such as ``between = [[40.5, 71.4], ...]``.
+    """
+    unknown = sorted(set(evaluation) - EVALUATION_KEYS)
+    if unknown:
+        msg = f"unknown keys in [evaluation]: {', '.join(unknown)}"
+        raise ValueError(msg)
     starts = []
     for name, q in demos.items():
         for offset in evaluation["start_offsets_deg"]:
-            demonstrated = not any(offset)
-            origin = name if demonstrated else f"{name} {offset[0]:+g},{offset[1]:+g} deg"
-            starts.append(Start(origin, q[0] + np.radians(offset), demonstrated))
-    for q_deg in evaluation.get("extra_start_q_deg", []):
-        starts.append(Start("new", np.radians(q_deg), demonstrated=False))
+            if any(offset):
+                starts.append(Start(f"{name} {offset[0]:+g},{offset[1]:+g} deg", q[0] + np.radians(offset), "offset"))
+            else:
+                starts.append(Start(name, q[0] + np.radians(offset), "demonstrated"))
+    for group, postures in evaluation.get("extra_starts", {}).items():
+        if group in ("demonstrated", "offset"):
+            msg = f"[evaluation.extra_starts] cannot use the reserved group name {group!r}"
+            raise ValueError(msg)
+        starts.extend(Start(f"{group} {i}", np.radians(q_deg), group) for i, q_deg in enumerate(postures))
     return starts
 
 

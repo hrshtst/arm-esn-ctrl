@@ -407,6 +407,7 @@ posture:
 | --- | --- | --- |
 | `configs/esn/autonomous_tvs_demo07.toml` | demo 7 only | its start, and offsets of 3 and 10 deg around it |
 | `configs/esn/autonomous_tvs_all.toml` | all 8 demonstrations | their 8 starts, and 8 new starts halfway between them |
+| `configs/esn/autonomous_tvs_all_distances.toml` | all 8 demonstrations | as above, plus starts 0.25 m and 0.75 m from the target (the demonstrations start 0.5 m away) |
 
 ```bash
 uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
@@ -414,7 +415,10 @@ uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
 
 The configuration names the demonstration run and the training files
 (`[demonstrations]`), the ESN hyperparameters (`[esn]`), and the start
-postures and run duration (`[evaluation]`). To explore a hyperparameter,
+postures, run duration, and hold duration (`[evaluation]`). Start postures
+that no demonstration starts from are listed in named groups under
+`[evaluation.extra_starts]`, such as `between`, `nearer`, and `farther`, and
+the script summarizes the metrics for each group. To explore a hyperparameter,
 copy the file, change the value, and run the copy. Each run is recorded in
 its own directory.
 

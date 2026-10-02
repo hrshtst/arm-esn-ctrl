@@ -11,8 +11,9 @@ of two kinds:
 
 - each training demonstration's start posture, plus the configured offsets
   (an offset of zero tests replication; others, slightly disturbed starts);
-- further start postures that no demonstration starts from (``extra_start_q_deg``),
-  which test whether the ESN generalizes outside the demonstrated trajectories.
+- further start postures that no demonstration starts from, in named groups
+  (``[evaluation.extra_starts]``), which test whether the ESN generalizes outside
+  the demonstrated trajectories.
 
 Each run is compared with the demonstrator's own reach from the same start
 posture, simulated with the controller that made the demonstrations. The run
@@ -112,19 +113,19 @@ def print_metrics(rows: list[dict[str, Any]], starts: list[Start]) -> None:
             f"  {r['arrival_delay_s']:+9.2f}"
             f"  {left:>4}  {1000 * r['hold_error_m']:10.1f}  {r['hold_observed_s']:8.2f}"
         )
-    for kind, demonstrated in (("demonstrated starts", True), ("other starts", False)):
-        group = [r for r, s in zip(rows, starts, strict=True) if s.demonstrated == demonstrated]
-        if group:
-            first_step = 1000 * np.mean([r["first_step_m"] for r in group])
-            distance = 1000 * np.mean([r["reach_path_distance_m"] for r in group])
-            joint_error = np.mean([r["reach_joint_error_deg"] for r in group])
-            successes = sum(r["success"] for r in group)
-            hold_error = 1000 * np.nanmedian([r["hold_error_m"] for r in group])
-            print(
-                f"{len(group)} {kind}: mean first step {first_step:.1f} mm, mean reach path distance {distance:.1f} mm,"
-                f" mean reach joint error {joint_error:.2f} deg; {successes} of {len(group)} arrive and stay,"
-                f" median hold error {hold_error:.1f} mm"
-            )
+    for name in dict.fromkeys(s.group for s in starts):  # the groups, in the order of the table
+        group = [r for r, s in zip(rows, starts, strict=True) if s.group == name]
+        first_step = 1000 * np.mean([r["first_step_m"] for r in group])
+        distance = 1000 * np.mean([r["reach_path_distance_m"] for r in group])
+        joint_error = np.mean([r["reach_joint_error_deg"] for r in group])
+        successes = sum(r["success"] for r in group)
+        hold_error = 1000 * np.nanmedian([r["hold_error_m"] for r in group])
+        print(
+            f"{len(group)} {name} starts: mean first step {first_step:.1f} mm,"
+            f" mean reach path distance {distance:.1f} mm,"
+            f" mean reach joint error {joint_error:.2f} deg; {successes} of {len(group)} arrive and stay,"
+            f" median hold error {hold_error:.1f} mm"
+        )
 
 
 def plot_runs(
