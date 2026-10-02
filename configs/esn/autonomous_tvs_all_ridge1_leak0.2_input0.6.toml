@@ -35,8 +35,8 @@ ridge = 1.0
 seed = 0
 
 [evaluation]
-duration = 3.0         # autonomous run (s); the demonstrations last 4 s
-hold = 1.0             # hold window after arrival (s): the hand must stay within the target tolerance
+duration = 5.0         # autonomous run (s); the demonstrations last 4 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 # Start postures: each demonstration's start plus these offsets (deg).
 start_offsets_deg = [[0.0, 0.0]]
 # Start postures no demonstration starts from (joint angles in degrees): 0.5 m
