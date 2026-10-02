@@ -7,6 +7,12 @@ Human point-to-point reaching has a roughly straight hand path and a smooth,
 single-peaked (bell-shaped) hand speed profile, well described by the minimum-jerk
 model (Flash and Hogan, 1985). :func:`reach_metrics` measures how close a reach
 comes to that description.
+
+A reach is split into two phases at the **arrival time** t_a, the first time the
+hand comes within the goal radius r of the target (:func:`arrival_index`): the
+reach phase [0, t_a] and the hold window [t_a, t_a + T_h], where T_h is the hold
+duration. :func:`hold_metrics` measures whether the hand dwells at the target
+during the hold window; it needs no reference trajectory.
 """
 
 from __future__ import annotations
@@ -113,3 +119,54 @@ def path_distance(path: NDArray[np.float64], reference: NDArray[np.float64]) -> 
     fraction = np.clip(np.sum(offset * segment, axis=2) / length2, 0.0, 1.0)
     nearest = start + fraction[..., np.newaxis] * segment
     return float(np.max(np.min(np.linalg.norm(path[:, np.newaxis, :] - nearest, axis=2), axis=1)))
+
+
+def arrival_index(hand: NDArray[np.float64], target: ArrayLike, radius: float) -> int | None:
+    """Return the first sample index where the hand is within ``radius`` of the target, or None if never."""
+    inside = np.linalg.norm(hand - np.asarray(target, dtype=np.float64), axis=1) <= radius
+    return int(np.argmax(inside)) if inside.any() else None
+
+
+def hold_metrics(
+    times: NDArray[np.float64], hand: NDArray[np.float64], target: ArrayLike, radius: float, hold: float
+) -> dict[str, float | bool]:
+    """Measure whether the hand dwells within ``radius`` of the target after it arrives.
+
+    The hold window is [t_a, t_a + ``hold``], cut at the end of the trajectory if
+    it does not fit.
+
+    Returns
+    -------
+    dict[str, float | bool]
+        - ``arrived``: whether the hand ever comes within ``radius`` of the target.
+        - ``arrival_time_s``: t_a (NaN if the hand never arrives).
+        - ``left_goal``: whether the hand leaves the goal radius during the hold window.
+        - ``hold_error_m``: the distance from the hand to the target at the end of the
+          hold window (NaN if the hand never arrives).
+        - ``hold_observed_s``: how much of the hold window the trajectory covers, which
+          is less than ``hold`` when the trajectory ends early (0 if the hand never arrives).
+        - ``success``: arrived and did not leave the goal radius during the hold window.
+    """
+    arrival = arrival_index(hand, target, radius)
+    if arrival is None:
+        nan = float("nan")
+        return {
+            "arrived": False,
+            "arrival_time_s": nan,
+            "left_goal": False,
+            "hold_error_m": nan,
+            "hold_observed_s": 0.0,
+            "success": False,
+        }
+    distance = np.linalg.norm(hand - np.asarray(target, dtype=np.float64), axis=1)
+    # The tolerance keeps the last sample of the window when t_a + hold rounds just below it.
+    window = (times >= times[arrival]) & (times <= times[arrival] + hold + 1e-9)
+    left_goal = bool(np.any(distance[window] > radius))
+    return {
+        "arrived": True,
+        "arrival_time_s": float(times[arrival]),
+        "left_goal": left_goal,
+        "hold_error_m": float(distance[window][-1]),
+        "hold_observed_s": float(times[window][-1] - times[arrival]),
+        "success": not left_goal,
+    }

@@ -26,6 +26,7 @@ seed = 0
 
 [evaluation]
 duration = 3.0         # autonomous run (s); the demonstration lasts 2 s
+hold = 1.0             # hold window after arrival (s): the hand must stay within the target tolerance
 # Start postures: the demonstration's start plus these offsets (deg).
 start_offsets_deg = [
   [0.0, 0.0],

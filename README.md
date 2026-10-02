@@ -177,10 +177,19 @@ empirically and report it.
 Metrics depend on the task, and each report defines the ones it uses.
 Typical examples are:
 
-- **Autonomous ESN:** the error between the generated and demonstrated
-  trajectories, over time and at the goal, and the deviation from the
-  demonstrated path measured without time alignment (distance to the
-  nearest demonstrated point).
+- **Autonomous ESN:** each run is split at its **arrival time** t_a, the
+  first time the hand comes within the goal radius r of the target (the
+  target tolerance of the task). The **reach** [0, t_a] is compared with
+  the demonstrator's reach from the same start posture: the hand
+  displacement in the first step (a jump shows the ESN snapping back to a
+  learned trajectory), the deviation from the demonstrated path regardless
+  of timing, the joint-angle error over time, and the arrival delay. The
+  **hold** window [t_a, t_a + T_h], with the hold duration T_h set by
+  `hold` in `[evaluation]`, needs no reference: a run succeeds if it
+  arrives and does not leave the goal radius during the window, and the
+  hold error is the distance to the target at the window's end. A window
+  that would run past the end of the run is cut there, and the observed
+  hold length is recorded.
 - **ESN with the robot:** the goal error, the deviation from the
   demonstrated path, the joint torques (or accelerations) generated to
   recover after a disturbance, and the smoothness of the reference,
@@ -411,10 +420,10 @@ its own directory.
 
 The run directory receives the ESN's trajectories (`esn_00.sklog.npz`, ...)
 and the demonstrator's (`demonstrator_00.sklog.npz`, ...), which both replay
-in skelarm's player. It also receives their differences (`metrics.csv`, with
-the origin of each start posture) and a figure of the hand paths, joint
-angles, and hand speeds (`autonomous.png`), in which filled markers show
-demonstrated start postures and hollow ones the others.
+in skelarm's player. It also receives their reach and hold metrics
+(`metrics.csv`, with the origin of each start posture) and a figure of the
+hand paths, joint angles, and hand speeds (`autonomous.png`), in which
+filled markers show demonstrated start postures and hollow ones the others.
 
 ### Sweeping hyperparameters
 
@@ -426,9 +435,11 @@ hyperparameters), all on the same demonstrations and start postures:
 uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all.toml
 ```
 
-The run directory receives `sweep.csv`, with one row per combination and its
-metrics averaged over the demonstrated and the other start postures, and
-`sweep.png`, with heatmaps of the main metrics. To look at a combination in
+The run directory receives `sweep.csv`, with one row per combination: its
+reach metrics averaged over the demonstrated and the other start postures,
+the number of failed runs (never arriving or leaving the goal), and the
+median and largest hold error. `sweep.png` shows heatmaps of the main
+metrics. To look at a combination in
 detail, copy its values into a configuration for `autonomous_esn.py`.
 
 ## Development

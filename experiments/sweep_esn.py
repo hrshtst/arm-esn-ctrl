@@ -10,9 +10,11 @@ table, which lists values for two or three of the ``[esn]`` hyperparameters. Eve
 combination of those values is trained on the same demonstrations and run from
 the same start postures as in ``autonomous_esn.py``. The run directory receives:
 
-- ``sweep.csv``: one row per combination, with its hyperparameters and the
-  metrics of :func:`arm_esn_ctrl.autonomous.run_metrics`, averaged over the
-  demonstrated start postures and over the other ones;
+- ``sweep.csv``: one row per combination, with its hyperparameters, the reach
+  metrics of :func:`arm_esn_ctrl.autonomous.run_metrics` averaged over the
+  demonstrated start postures and over the other ones, and the hold over all runs:
+  how many runs fail (never arrive or leave the goal), and the median and largest
+  hold error of the runs that arrive;
 - ``sweep.png``: heatmaps of the main metrics over the swept values.
 
 To look at one combination in detail, copy its values into a configuration for
@@ -29,7 +31,7 @@ from typing import Any
 
 import numpy as np
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, Normalize
 from matplotlib.figure import Figure
 
 from arm_esn_ctrl.autonomous import Run, Setup, load_setup, rms_degrees, run_autonomously, run_metrics
@@ -39,15 +41,15 @@ from arm_esn_ctrl.storage import start_run
 TEXT_COLOR = "#52514e"
 COLORMAP = "Blues"  # sequential: darker is larger
 SURFACE_COLOR = "#fcfcfb"
-# A run counts as reaching the goal if its hand ends within this distance of the target.
-GOAL_TOLERANCE = 0.01  # m
 
-# The heatmaps: metric column in sweep.csv, title, and factor to its display unit.
+# The heatmaps: metric column in sweep.csv, title, factor to its display unit, and
+# whether its colors follow a logarithmic scale.
 HEATMAPS = [
-    ("other_path_distance_m", "Path distance, other starts (mm)", 1000.0),
-    ("other_joint_rms_error_deg", "Joint error, other starts (deg RMS)", 1.0),
-    ("demonstrated_joint_rms_error_deg", "Joint error, demonstrated starts (deg RMS)", 1.0),
-    ("worst_final_error_m", "Worst final error, all starts (mm)", 1000.0),
+    ("other_reach_path_distance_m", "Reach path distance, other starts (mm)", 1000.0, True),
+    ("other_reach_joint_error_deg", "Reach joint error, other starts (deg RMS)", 1.0, True),
+    ("demonstrated_reach_joint_error_deg", "Reach joint error, demonstrated starts (deg RMS)", 1.0, True),
+    ("failures", "Failed runs: never arrive or leave the goal", 1.0, False),
+    ("max_hold_error_m", "Largest hold error of the runs that arrive (mm)", 1000.0, True),
 ]
 
 
@@ -74,8 +76,8 @@ def main() -> None:
         values = ", ".join(f"{name}={value:g}" for name, value in combination.items())
         print(
             f"[{i + 1:3d}/{len(combinations)}] {values}:"
-            f" path distance, other starts {1000 * row['other_path_distance_m']:6.1f} mm;"
-            f" worst final error {1000 * row['worst_final_error_m']:.1f} mm"
+            f" reach path distance, other starts {1000 * row['other_reach_path_distance_m']:6.1f} mm;"
+            f" {row['failures']} of {row['runs']} runs fail; largest hold error {1000 * row['max_hold_error_m']:.1f} mm"
         )
 
     with (run_dir / "sweep.csv").open("w", newline="") as f:
@@ -88,34 +90,37 @@ def main() -> None:
 
 
 def summarize(runs: list[Run], setup: Setup) -> dict[str, float]:
-    """Average the run metrics over the demonstrated start postures and over the other ones."""
+    """Average the reach metrics by kind of start posture, and count and measure the holds of all runs."""
     metrics = [run_metrics(run, setup) for run in runs]
-    summary = {}
+    summary: dict[str, float] = {}
     for kind, demonstrated in (("demonstrated", True), ("other", False)):
         group = [m for m, run in zip(metrics, runs, strict=True) if run.start.demonstrated == demonstrated]
-        for name in ("first_step_m", "joint_rms_error_deg", "path_distance_m"):
+        for name in ("first_step_m", "reach_path_distance_m", "reach_joint_error_deg"):
             summary[f"{kind}_{name}"] = float(np.mean([m[name] for m in group])) if group else float("nan")
-    summary["worst_final_error_m"] = max(m["final_error_m"] for m in metrics)
+    hold_errors = [m["hold_error_m"] for m in metrics if m["arrived"]]
+    summary["runs"] = len(metrics)
+    summary["failures"] = sum(not m["success"] for m in metrics)
+    summary["median_hold_error_m"] = float(np.median(hold_errors)) if hold_errors else float("nan")
+    summary["max_hold_error_m"] = float(np.max(hold_errors)) if hold_errors else float("nan")
     return summary
 
 
 def print_best(rows: list[dict[str, Any]], names: list[str], count: int = 5) -> None:
-    """Print the combinations with the smallest path distance from the other starts that reach the goal."""
-    reaching = [r for r in rows if r["worst_final_error_m"] < GOAL_TOLERANCE]
-    best = sorted(reaching, key=lambda r: r["other_path_distance_m"])[:count]
-    print(
-        f"\n{len(reaching)} of {len(rows)} combinations end within {1000 * GOAL_TOLERANCE:g} mm"
-        " of the target from every start."
-    )
-    print("Smallest path distance from the other starts among them:")
+    """Print the combinations without failures that have the smallest reach path distance from the other starts."""
+    succeeding = [r for r in rows if r["failures"] == 0]
+    best = sorted(succeeding, key=lambda r: r["other_reach_path_distance_m"])[:count]
+    print(f"\n{len(succeeding)} of {len(rows)} combinations arrive and stay at the goal from every start.")
+    print("Smallest reach path distance from the other starts among them:")
     for r in best:
         values = ", ".join(f"{name}={r[name]:g}" for name in names)
         print(
-            f"  {values}: path distance {1000 * r['other_path_distance_m']:.1f} mm (other),"
-            f" {1000 * r['demonstrated_path_distance_m']:.1f} mm (demonstrated);"
-            f" joint error {r['other_joint_rms_error_deg']:.2f} deg (other),"
-            f" {r['demonstrated_joint_rms_error_deg']:.2f} deg (demonstrated);"
-            f" first step {1000 * r['other_first_step_m']:.1f} mm (other)"
+            f"  {values}: reach path distance {1000 * r['other_reach_path_distance_m']:.1f} mm (other),"
+            f" {1000 * r['demonstrated_reach_path_distance_m']:.1f} mm (demonstrated);"
+            f" reach joint error {r['other_reach_joint_error_deg']:.2f} deg (other),"
+            f" {r['demonstrated_reach_joint_error_deg']:.2f} deg (demonstrated);"
+            f" first step {1000 * r['other_first_step_m']:.1f} mm (other);"
+            f" hold error median {1000 * r['median_hold_error_m']:.1f} mm,"
+            f" largest {1000 * r['max_hold_error_m']:.1f} mm"
         )
 
 
@@ -130,9 +135,14 @@ def plot_sweep(rows: list[dict[str, Any]], sweep: dict[str, list[Any]], title: s
     fig.suptitle(title, color="#0b0b0b")
     axes = fig.subplots(len(HEATMAPS), len(panel_values), squeeze=False)
 
-    for row_axes, (metric, label, factor) in zip(axes, HEATMAPS, strict=True):
+    for row_axes, (metric, label, factor, log) in zip(axes, HEATMAPS, strict=True):
         values = np.array([r[metric] for r in rows], dtype=float) * factor
-        norm = LogNorm(vmin=max(values.min(), 1e-3), vmax=values.max())  # one scale per metric
+        finite = values[np.isfinite(values)]
+        top = float(finite.max()) if finite.size else 1.0
+        # One color scale per metric, shared by its panels.
+        norm = LogNorm(vmin=max(float(finite.min()), 1e-3), vmax=top) if log and finite.size else Normalize(0.0, top)
+        if metric == "failures":
+            label = f"{label} (of {rows[0]['runs']})"
         for ax, panel_value in zip(row_axes, panel_values, strict=True):
             grid = np.full((len(sweep[y_name]), len(sweep[x_name])), np.nan)
             for r in rows:
@@ -140,10 +150,9 @@ def plot_sweep(rows: list[dict[str, Any]], sweep: dict[str, list[Any]], title: s
                     grid[sweep[y_name].index(r[y_name]), sweep[x_name].index(r[x_name])] = r[metric] * factor
             ax.imshow(grid, cmap=COLORMAP, norm=norm, origin="lower", aspect="auto")
             for (y, x), value in np.ndenumerate(grid):
-                dark = norm(value) > 0.6
-                ax.text(
-                    x, y, f"{value:.3g}", ha="center", va="center", fontsize=7, color="white" if dark else "#0b0b0b"
-                )
+                dark = np.isfinite(value) and norm(value) > 0.6
+                text = f"{value:.3g}" if np.isfinite(value) else "-"
+                ax.text(x, y, text, ha="center", va="center", fontsize=7, color="white" if dark else "#0b0b0b")
             ax.set_xticks(range(len(sweep[x_name])), [f"{v:g}" for v in sweep[x_name]])
             ax.set_yticks(range(len(sweep[y_name])), [f"{v:g}" for v in sweep[y_name]])
             ax.set_xlabel(x_name, color=TEXT_COLOR)

@@ -20,9 +20,8 @@ directory receives:
 
 - ``esn_00.sklog.npz``, ...: the ESN's trajectories, one per start posture;
 - ``demonstrator_00.sklog.npz``, ...: the demonstrator's reaches from the same postures;
-- ``metrics.csv``: how far each ESN trajectory is from the demonstrator's, and how far
-  the hand moves in the ESN's first step (a jump shows that the ESN snaps back to
-  a trajectory it learned);
+- ``metrics.csv``: for each start posture, the reach compared with the demonstrator's
+  and the hold at the target (see :func:`arm_esn_ctrl.autonomous.run_metrics`);
 - ``autonomous.png``: hand paths, joint angles, and hand speeds of both, over the
   training demonstrations.
 
@@ -101,24 +100,30 @@ def main() -> None:
 
 
 def print_metrics(rows: list[dict[str, Any]], starts: list[Start]) -> None:
-    """Print the metrics as a table, one start posture per line, then averages by kind of start."""
-    print("start  origin                first step  joint error  path distance  final error  peak    profile")
-    print("                             (mm)        (deg RMS)    (mm)           (mm)         timing  error")
+    """Print the metrics as a table, one start posture per line, then a summary by kind of start."""
+    print("                             ------------------ reach ------------------   ----------- hold -----------")
+    print("start  origin                first step  path dist.  joint error  arrival   left  hold error  observed")
+    print("                             (mm)        (mm)        (deg RMS)    delay (s) goal  (mm)        (s)")
     for r in rows:
+        left = "-" if not r["arrived"] else ("yes" if r["left_goal"] else "no")
         print(
-            f"{r['start']:5d}  {r['origin']:<20}  {1000 * r['first_step_m']:10.1f}  {r['joint_rms_error_deg']:11.2f}"
-            f"  {1000 * r['path_distance_m']:13.1f}  {1000 * r['final_error_m']:11.1f}"
-            f"  {r['peak_timing']:6.2f}  {r['speed_profile_error']:7.2f}"
+            f"{r['start']:5d}  {r['origin']:<20}  {1000 * r['first_step_m']:10.1f}"
+            f"  {1000 * r['reach_path_distance_m']:10.1f}  {r['reach_joint_error_deg']:11.2f}"
+            f"  {r['arrival_delay_s']:+9.2f}"
+            f"  {left:>4}  {1000 * r['hold_error_m']:10.1f}  {r['hold_observed_s']:8.2f}"
         )
     for kind, demonstrated in (("demonstrated starts", True), ("other starts", False)):
         group = [r for r, s in zip(rows, starts, strict=True) if s.demonstrated == demonstrated]
         if group:
             first_step = 1000 * np.mean([r["first_step_m"] for r in group])
-            joint_error = np.mean([r["joint_rms_error_deg"] for r in group])
-            distance = 1000 * np.mean([r["path_distance_m"] for r in group])
+            distance = 1000 * np.mean([r["reach_path_distance_m"] for r in group])
+            joint_error = np.mean([r["reach_joint_error_deg"] for r in group])
+            successes = sum(r["success"] for r in group)
+            hold_error = 1000 * np.nanmedian([r["hold_error_m"] for r in group])
             print(
-                f"Mean over {len(group)} {kind}: first step {first_step:.1f} mm,"
-                f" joint error {joint_error:.2f} deg, path distance {distance:.1f} mm"
+                f"{len(group)} {kind}: mean first step {first_step:.1f} mm, mean reach path distance {distance:.1f} mm,"
+                f" mean reach joint error {joint_error:.2f} deg; {successes} of {len(group)} arrive and stay,"
+                f" median hold error {hold_error:.1f} mm"
             )
 
 

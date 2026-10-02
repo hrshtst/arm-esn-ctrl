@@ -6,7 +6,7 @@
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.metrics import path_distance, reach_metrics
+from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance, reach_metrics
 
 START = np.array([0.5, 1.2])
 TARGET = np.array([0.0, 1.2])
@@ -65,3 +65,64 @@ def test_path_distance_is_the_largest_distance_to_the_nearest_point():
     bowed = np.array([[0.0, 0.0], [0.5, 0.2], [1.0, 0.05], [1.3, 0.0]])
 
     assert path_distance(bowed, line) == pytest.approx(0.3)
+
+
+def hand_path(distances):
+    """A hand moving along the x axis toward the target at the origin, at the given distances (one per 0.1 s)."""
+    times = np.asarray(0.1 * np.arange(len(distances)), dtype=np.float64)
+    return times, np.column_stack([distances, np.zeros(len(distances))])
+
+
+def test_arrival_is_the_first_sample_within_the_radius():
+    _, hand = hand_path([0.5, 0.3, 0.03, 0.02, 0.01])
+
+    assert arrival_index(hand, [0.0, 0.0], radius=0.02) == 3
+    assert arrival_index(hand, [0.0, 0.0], radius=0.001) is None
+
+
+def test_hold_succeeds_when_the_hand_arrives_and_stays():
+    times, hand = hand_path([0.3, 0.1, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0, 0.0])
+
+    m = hold_metrics(times, hand, [0.0, 0.0], radius=0.02, hold=0.4)
+
+    assert m["arrived"] and m["success"] and not m["left_goal"]
+    assert m["arrival_time_s"] == pytest.approx(0.2)
+    assert m["hold_error_m"] == pytest.approx(0.001)  # at t_a + 0.4 s = 0.6 s
+    assert m["hold_observed_s"] == pytest.approx(0.4)
+
+
+def test_hold_fails_when_the_hand_leaves_the_goal_within_the_window():
+    times, hand = hand_path([0.3, 0.02, 0.01, 0.03, 0.01, 0.0, 0.0])
+
+    m = hold_metrics(times, hand, [0.0, 0.0], radius=0.02, hold=0.3)
+
+    assert m["arrived"] and m["left_goal"] and not m["success"]
+
+
+def test_leaving_after_the_window_does_not_count():
+    times, hand = hand_path([0.3, 0.02, 0.01, 0.01, 0.05])
+
+    m = hold_metrics(times, hand, [0.0, 0.0], radius=0.02, hold=0.2)
+
+    assert m["success"]
+    assert m["hold_error_m"] == pytest.approx(0.01)
+
+
+def test_hold_fails_when_the_hand_never_arrives():
+    times, hand = hand_path([0.3, 0.2, 0.1, 0.05])
+
+    m = hold_metrics(times, hand, [0.0, 0.0], radius=0.02, hold=0.2)
+
+    assert not m["arrived"] and not m["success"]
+    assert np.isnan(m["hold_error_m"]) and np.isnan(m["arrival_time_s"])
+    assert m["hold_observed_s"] == 0.0
+
+
+def test_a_late_arrival_is_judged_on_the_part_of_the_window_that_fits():
+    times, hand = hand_path([0.3, 0.2, 0.1, 0.02, 0.01])
+
+    m = hold_metrics(times, hand, [0.0, 0.0], radius=0.02, hold=1.0)
+
+    assert m["success"]
+    assert m["hold_observed_s"] == pytest.approx(0.1)
+    assert m["hold_error_m"] == pytest.approx(0.01)  # at the end of the trajectory
