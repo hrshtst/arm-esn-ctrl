@@ -24,11 +24,14 @@ not depend on how long the demonstrations hold still.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+import tomllib
+from collections.abc import Iterator, Sequence
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import numpy as np
 import rclib
+import tomli_w
 from numpy.typing import ArrayLike, NDArray
 
 
@@ -54,16 +57,24 @@ class EsnConfig:
 
 
 class ReachingEsn:
-    """An ESN trained on a joint-angle trajectory and run autonomously.
+    """An ESN trained on joint-angle trajectories and run autonomously.
 
     Parameters
     ----------
     config : EsnConfig
         The ESN hyperparameters.
+    model : rclib.ESN, optional
+        An rclib model built with ``config``, such as one loaded by :meth:`load`;
+        by default a new, untrained one is built.
     """
 
-    def __init__(self, config: EsnConfig) -> None:
+    def __init__(self, config: EsnConfig, model: rclib.ESN | None = None) -> None:
         self.config = config
+        if model is not None:
+            self.model = model
+            self.center = np.zeros(0)  # middle of each joint's range in the training data
+            self.half_range = np.ones(0)  # half of that range
+            return
         self.model = rclib.ESN()
         self.model.add_reservoir(
             rclib.reservoirs.RandomSparse(
@@ -114,6 +125,55 @@ class ReachingEsn:
         # Prime with the held start posture, exactly as in training, then feed outputs back.
         generated = self.model.predict_generative(self._with_warmup(start), n_steps)
         return self._denormalize(np.vstack([start, generated]))
+
+    def stream(self, start_q: ArrayLike) -> Iterator[NDArray[np.float64]]:
+        """Run the ESN autonomously from ``start_q`` one step at a time, without end.
+
+        Yields the posture at every step, as :meth:`generate` would compute it: the
+        start posture held through the warm-up (``warmup_steps`` times, at times
+        before 0), the start posture once more (time 0), and then each generated
+        posture. Only the next step is computed, so a caller can run the ESN live.
+        """
+        start = self._normalize(np.asarray(start_q, dtype=np.float64)[np.newaxis, :])
+        held = self._denormalize(start)[0]
+        self.model.reset_reservoirs()
+        for _ in range(self.config.warmup_steps):
+            self.model.predict_online(start)
+            yield held
+        output = self.model.predict_online(start)  # the start posture's own step gives the first output
+        yield held
+        while True:
+            yield self._denormalize(output)[0]
+            output = self.model.predict_online(output)
+
+    def save(self, path: str | Path) -> None:
+        """Save the trained ESN to ``path``, a TOML file, and the rclib model beside it.
+
+        The TOML file holds the hyperparameters and the normalization, readable by
+        people. The rclib model file has the same name with the suffix ``.rclib`` and
+        holds the reservoir, the readout weights, and the reservoir state.
+        """
+        path = Path(path)
+        model_path = path.with_suffix(".rclib")
+        self.model.save(model_path)
+        record = {
+            "model": model_path.name,
+            "esn": asdict(self.config),
+            "normalization": {"center_rad": self.center.tolist(), "half_range_rad": self.half_range.tolist()},
+        }
+        header = "# A trained ESN of arm_esn_ctrl; load it with arm_esn_ctrl.esn.ReachingEsn.load(<this file>).\n"
+        path.write_text(header + tomli_w.dumps(record), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str | Path) -> ReachingEsn:
+        """Load an ESN saved by :meth:`save` from its TOML file."""
+        path = Path(path)
+        with path.open("rb") as f:
+            record = tomllib.load(f)
+        esn = cls(EsnConfig(**record["esn"]), model=rclib.ESN.load(path.parent / record["model"]))
+        esn.center = np.asarray(record["normalization"]["center_rad"], dtype=np.float64)
+        esn.half_range = np.asarray(record["normalization"]["half_range_rad"], dtype=np.float64)
+        return esn
 
     def _with_warmup(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
         """Prepend the first sample, held for the warm-up period."""

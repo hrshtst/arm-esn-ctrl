@@ -19,6 +19,8 @@ Each run is compared with the demonstrator's own reach from the same start
 posture, simulated with the controller that made the demonstrations. The run
 directory receives:
 
+- ``esn.toml`` and ``esn.rclib``: the trained ESN (load it with
+  :meth:`arm_esn_ctrl.esn.ReachingEsn.load`);
 - ``esn_00.sklog.npz``, ...: the ESN's trajectories, one per start posture;
 - ``demonstrator_00.sklog.npz``, ...: the demonstrator's reaches from the same postures;
 - ``metrics.csv``: for each start posture, the reach compared with the demonstrator's
@@ -64,6 +66,7 @@ def main() -> None:
     # Train on the demonstrations.
     esn = ReachingEsn(EsnConfig(**config["esn"]))
     esn.fit(list(setup.demos.values()))
+    esn.save(run_dir / "esn.toml")
     one_step_error = rms_degrees(np.vstack([esn.one_step_predictions(q) - q[1:] for q in setup.demos.values()]))
     n_samples = sum(len(q) for q in setup.demos.values())
     print(f"Trained on {len(setup.demos)} demonstrations ({n_samples} samples)")

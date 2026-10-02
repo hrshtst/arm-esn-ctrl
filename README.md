@@ -422,9 +422,11 @@ the script summarizes the metrics for each group. To explore a hyperparameter,
 copy the file, change the value, and run the copy. Each run is recorded in
 its own directory.
 
-The run directory receives the ESN's trajectories (`esn_00.sklog.npz`, ...)
-and the demonstrator's (`demonstrator_00.sklog.npz`, ...), which both replay
-in skelarm's player. It also receives their reach and hold metrics
+The run directory receives the trained ESN (`esn.toml`, with the
+hyperparameters and the joint-angle normalization, and `esn.rclib`, rclib's
+model file), the ESN's trajectories (`esn_00.sklog.npz`, ...), and the
+demonstrator's (`demonstrator_00.sklog.npz`, ...), which both replay in
+skelarm's player. It also receives their reach and hold metrics
 (`metrics.csv`, with the origin of each start posture) and a figure of the
 hand paths, joint angles, and hand speeds (`autonomous.png`), in which
 filled markers show demonstrated start postures and hollow ones the others.

@@ -90,3 +90,31 @@ def test_normalization_does_not_depend_on_how_long_the_hold_lasts():
     normalized = (q - short.center) / short.half_range
     assert normalized.min(axis=0) == pytest.approx([-1.0, -1.0])
     assert normalized.max(axis=0) == pytest.approx([1.0, 1.0])
+
+
+def test_stream_yields_what_generate_computes():
+    q = joint_reach()
+    esn = ReachingEsn(CONFIG)
+    esn.fit([q])
+    n = 150
+
+    stream = esn.stream(q[0])
+    streamed = np.array([next(stream) for _ in range(CONFIG.warmup_steps + 1 + n)])
+
+    assert streamed[: CONFIG.warmup_steps + 1] == pytest.approx(np.repeat(q[:1], CONFIG.warmup_steps + 1, axis=0))
+    assert streamed[CONFIG.warmup_steps :] == pytest.approx(esn.generate(q[0], n), abs=1e-12)
+
+
+def test_a_saved_esn_loads_and_runs_identically(tmp_path):
+    q = joint_reach()
+    esn = ReachingEsn(CONFIG)
+    esn.fit([q])
+
+    esn.save(tmp_path / "esn.toml")
+    loaded = ReachingEsn.load(tmp_path / "esn.toml")
+
+    assert (tmp_path / "esn.rclib").exists()
+    assert loaded.config == CONFIG
+    assert np.array_equal(loaded.center, esn.center)
+    assert np.array_equal(loaded.half_range, esn.half_range)
+    assert np.array_equal(loaded.generate(q[0], 200), esn.generate(q[0], 200))
