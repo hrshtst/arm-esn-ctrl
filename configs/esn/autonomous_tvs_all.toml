@@ -12,7 +12,7 @@
 
 [demonstrations]
 # A run directory of experiments/make_demonstrations.py, relative to the storage root.
-run = "results/20260930-175440-reach_tvs"
+run = "results/20261002-194644-reach_tvs"
 train = [
   "demo_00.sklog.npz",
   "demo_01.sklog.npz",
@@ -37,7 +37,7 @@ ridge = 1.0            # strong regularization keeps the autonomous ESN stable
 seed = 0
 
 [evaluation]
-duration = 3.0         # autonomous run (s); the demonstrations last 2 s
+duration = 3.0         # autonomous run (s); the demonstrations last 4 s
 hold = 1.0             # hold window after arrival (s): the hand must stay within the target tolerance
 # Start postures: each demonstration's start plus these offsets (deg).
 start_offsets_deg = [[0.0, 0.0]]
