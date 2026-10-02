@@ -20,7 +20,7 @@ posture, simulated with the controller that made the demonstrations. The run
 directory receives:
 
 - ``esn.toml`` and ``esn.rclib``: the trained ESN (load it with
-  :meth:`arm_esn_ctrl.esn.ReachingEsn.load`);
+  :meth:`arm_esn_ctrl.esn.ReachingEsn.load`, or run it live in ``tools/esn_reference_app.py``);
 - ``esn_00.sklog.npz``, ...: the ESN's trajectories, one per start posture;
 - ``demonstrator_00.sklog.npz``, ...: the demonstrator's reaches from the same postures;
 - ``metrics.csv``: for each start posture, the reach compared with the demonstrator's

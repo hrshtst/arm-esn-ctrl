@@ -301,6 +301,7 @@ copied into that report's directory (see [Reports](#reports)).
 arm-esn-ctrl/
 ├── src/arm_esn_ctrl/   # small library: demonstrations, ESN, autonomous and robot runs, metrics, plots
 ├── experiments/        # one self-contained script per experiment
+├── tools/              # interactive tools, such as the live ESN reference app
 ├── configs/            # TOML configuration files
 ├── reports/            # one directory per study (see Reports)
 ├── tests/              # sanity tests of the core pieces
@@ -447,6 +448,29 @@ the number of failed runs (never arriving or leaving the goal), and the
 median and largest hold error. `sweep.png` shows heatmaps of the main
 metrics. To look at a combination in
 detail, copy its values into a configuration for `autonomous_esn.py`.
+
+### Watching a trained ESN live
+
+`tools/esn_reference_app.py` runs a trained ESN interactively. It loads the
+robot and the task from a skelarm TOML file and the ESN from the `esn.toml`
+that `autonomous_esn.py` saves in its run directory:
+
+```bash
+uv run python tools/esn_reference_app.py configs/demonstrations/reach_tvs.toml \
+    --model <run directory>/esn.toml
+```
+
+Drag the arm tip to choose a start posture, then press Play: the ESN is reset,
+driven by the held start posture for its warm-up (at negative times), and then
+runs autonomously, and the arm shows every posture it generates until you pause
+it. The side panel shows the reach and hold metrics as the run goes. If the TOML
+file also has `[controller]` and `[simulator]` tables, as the demonstration
+configurations do, the demonstrator's reach from the same start posture is drawn
+under the ESN's path and compared with it. Reset returns the arm to the start
+posture of the last run, ready to be posed again.
+
+Keys, as in skelarm's player: `Space` play/pause, `→`/`F` one step while paused,
+`R` or `Home` reset, `Q` quit.
 
 ## Development
 
