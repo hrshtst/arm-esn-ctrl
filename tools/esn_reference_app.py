@@ -41,26 +41,32 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QColor, QKeySequence, QMouseEvent, QShortcut
+from PyQt6.QtGui import QColor, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QVBoxLayout,
     QWidget,
 )
-from skelarm import SkelarmCanvas, Skeleton, Task, TransportBar, bind_quit_key, compute_forward_kinematics
+from skelarm import (
+    PlaybackClock,
+    SkelarmCanvas,
+    Skeleton,
+    SpeedSpinBox,
+    Task,
+    TransportBar,
+    bind_quit_key,
+    compute_forward_kinematics,
+)
 from skelarm.canvas import TrailOverlay
 
 from arm_esn_ctrl.demonstrations import endpoint_positions, resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import arrival_index, path_distance
 
-_TIMER_MS = 20  # render period (ms)
 _PANEL_WIDTH_PX = 340  # fixed side-panel width, so the changing readouts cannot resize it
 _ESN_COLOR = QColor(42, 120, 214)  # the ESN's tip path
 _LAST_RUN_COLOR = QColor(42, 120, 214, 60)  # faint: the tip path of the last run, after a reset
@@ -68,24 +74,6 @@ _LAST_RUN_COLOR = QColor(42, 120, 214, 60)  # faint: the tip path of the last ru
 _DEMONSTRATOR_COLOR = QColor(82, 81, 78, 90)
 _DEMONSTRATOR_WIDTH_PX = 8.0
 _DEMONSTRATOR_TABLES = ("skeleton", "task", "simulator", "controller")
-
-
-class PosingCanvas(SkelarmCanvas):
-    """A :class:`~skelarm.SkelarmCanvas` whose drag-to-pose (inverse kinematics) can be switched off."""
-
-    def __init__(self, skeleton: Skeleton) -> None:
-        super().__init__(skeleton)
-        self.posing_enabled = True
-
-    def mousePressEvent(self, a0: QMouseEvent | None) -> None:
-        """Solve inverse kinematics toward the click, unless posing is switched off."""
-        if self.posing_enabled:
-            super().mousePressEvent(a0)
-
-    def mouseMoveEvent(self, a0: QMouseEvent | None) -> None:
-        """Solve inverse kinematics toward the drag, unless posing is switched off."""
-        if self.posing_enabled:
-            super().mouseMoveEvent(a0)
 
 
 @dataclass
@@ -239,13 +227,12 @@ class EsnReferenceApp(QMainWindow):
         self.demonstrator_config = demonstrator_config
         self.run: LiveRun | None = None
         self._last_trail: TrailOverlay | None = None  # the last run's tip path, shown faintly after a reset
-        self._speed = speed
         self._pending_steps = 0.0  # fractional ESN steps owed to the playback clock
         self._last_start_q = skeleton.q.copy()
 
         self.setWindowTitle("ESN reference generator" + (f" - {name}" if name else ""))
         self.resize(1100, 780)
-        self.canvas = PosingCanvas(skeleton)
+        self.canvas = SkelarmCanvas(skeleton)
         self.canvas.overlay_targets = [(self.target, QColor(task.color), self.radius, True)]
         self.canvas.pose_changed.connect(self._on_posed)
 
@@ -281,11 +268,7 @@ class EsnReferenceApp(QMainWindow):
         self.quit_shortcut = bind_quit_key(self)
 
         controls.addWidget(QLabel("Playback speed"))
-        self.speed_spin = QDoubleSpinBox()
-        self.speed_spin.setDecimals(2)
-        self.speed_spin.setRange(0.1, 10.0)
-        self.speed_spin.setSingleStep(0.1)
-        self.speed_spin.setValue(speed)
+        self.speed_spin = SpeedSpinBox(speed=speed)
         self.speed_spin.valueChanged.connect(self._on_speed_changed)
         controls.addWidget(self.speed_spin)
 
@@ -312,34 +295,34 @@ class EsnReferenceApp(QMainWindow):
         controls.addStretch()
         layout.addWidget(panel, stretch=1)
 
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._on_timeout)
+        self.clock = PlaybackClock(self, speed=speed)
+        self.clock.ticked.connect(self._advance_timeline)
         self._refresh()
 
     @property
     def is_playing(self) -> bool:
         """Whether the ESN is running."""
-        return self._timer.isActive()
+        return self.clock.is_running
 
     @property
     def speed(self) -> float:
         """Playback speed: task seconds per real second."""
-        return self._speed
+        return self.clock.speed
 
     @speed.setter
     def speed(self, value: float) -> None:
-        self._speed = float(value)
+        self.clock.speed = value
 
     def play(self) -> None:
         """Run the ESN: start a run from the current posture, or resume the paused one."""
         if self.run is None:
             self._start_run()
-        self._timer.start(_TIMER_MS)
+        self.clock.start()
         self.transport_bar.set_playing(True)
 
     def pause(self) -> None:
         """Pause the ESN; the run and its reservoir state are kept."""
-        self._timer.stop()
+        self.clock.stop()
         self.transport_bar.set_playing(False)
 
     def step(self) -> None:
@@ -365,9 +348,13 @@ class EsnReferenceApp(QMainWindow):
 
     def advance(self, seconds: float) -> None:
         """Advance the run by ``seconds`` of real time, scaled by :attr:`speed`."""
+        self._advance_timeline(seconds * self.speed)
+
+    def _advance_timeline(self, seconds: float) -> None:
+        """Advance the run by ``seconds`` of task time, as many ESN steps as fit."""
         if self.run is None:
             return
-        self._pending_steps += seconds * self._speed / self.esn.config.dt
+        self._pending_steps += seconds / self.esn.config.dt
         steps = int(self._pending_steps)
         self._pending_steps -= steps
         for _ in range(steps):
@@ -413,7 +400,7 @@ class EsnReferenceApp(QMainWindow):
     def _refresh(self) -> None:
         """Show the latest posture, the overlays, and the readouts."""
         run = self.run
-        self.canvas.posing_enabled = run is None
+        self.canvas.drag_to_pose = run is None
         if run is not None and run.q:
             self._set_posture(run.q[-1])
         self._update_overlays()
@@ -494,9 +481,6 @@ class EsnReferenceApp(QMainWindow):
         self._show_last_trail()
         self._update_overlays()
 
-    def _on_timeout(self) -> None:
-        self.advance(_TIMER_MS / 1000.0)
-
     def _on_play_toggled(self, playing: bool) -> None:
         if playing:
             self.play()
@@ -505,7 +489,7 @@ class EsnReferenceApp(QMainWindow):
         self._update_labels()
 
     def _on_speed_changed(self, value: float) -> None:
-        self._speed = value
+        self.clock.speed = value
 
 
 def build_parser() -> argparse.ArgumentParser:

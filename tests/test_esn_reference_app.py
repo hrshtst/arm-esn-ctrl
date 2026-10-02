@@ -4,6 +4,7 @@
 """Tests for the interactive ESN reference app, run headless."""
 
 import os
+import time
 import tomllib
 
 import numpy as np
@@ -110,7 +111,7 @@ def test_dragging_does_not_move_the_arm_while_a_run_exists(qapp, demo_config, es
 
     app.canvas.mousePressEvent(left_click(10.0, 10.0))
 
-    assert not app.canvas.posing_enabled
+    assert not app.canvas.drag_to_pose
     assert app.skeleton.q == pytest.approx(posture)
 
 
@@ -124,7 +125,7 @@ def test_reset_returns_to_the_start_posture_ready_for_posing(qapp, demo_config, 
 
     assert app.run is None and not app.is_playing
     assert app.skeleton.q == pytest.approx(start)
-    assert app.canvas.posing_enabled
+    assert app.canvas.drag_to_pose
     assert len(app.canvas.static_trails) == 1  # the last run's tip path, drawn faintly
 
 
@@ -167,3 +168,20 @@ def test_the_command_line_needs_a_model():
     args = build_parser().parse_args([str(CONFIG), "--model", "run/esn.toml", "--speed", "0.5"])
 
     assert args.model.name == "esn.toml" and args.speed == 0.5 and args.hold == 2.0
+
+
+def test_playing_runs_the_esn_on_its_own(qapp, demo_config, esn):
+    app = make_app(demo_config, esn, demonstrator=False)
+    app.speed_spin.setValue(2.0)
+
+    app.play()
+    deadline = time.monotonic() + 0.2
+    while time.monotonic() < deadline:  # let the playback clock tick
+        qapp.processEvents()
+        time.sleep(0.002)
+    app.pause()
+
+    assert app.speed == 2.0
+    assert app.run is not None
+    assert len(app.run.times) >= 10  # about 200 ms x 2 / 10 ms per step, less timer jitter
+    assert not app.is_playing
