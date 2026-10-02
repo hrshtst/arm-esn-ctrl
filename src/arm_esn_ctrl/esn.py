@@ -16,8 +16,10 @@ from its reset state to a state that reflects the start posture. The warm-up
 samples are excluded from training, so the ESN learns only to move from the
 start posture, never to stay there.
 
-Joint angles are normalized with the mean and standard deviation of all training
-data before they enter the ESN, and the outputs are converted back.
+Before they enter the ESN, joint angles are normalized by the range each joint
+covers in the training data, so that the training data span [-1, 1], and the
+outputs are converted back. Unlike the mean and standard deviation, the range does
+not depend on how long the demonstrations hold still.
 """
 
 from __future__ import annotations
@@ -75,14 +77,16 @@ class ReachingEsn:
             )
         )
         self.model.set_readout(rclib.readouts.Ridge(alpha=config.ridge, include_bias=True))
-        self.mean = np.zeros(0)
-        self.std = np.ones(0)
+        self.center = np.zeros(0)  # middle of each joint's range in the training data
+        self.half_range = np.ones(0)  # half of that range
 
     def fit(self, trajectories: Sequence[NDArray[np.float64]]) -> None:
         """Train the readout on joint-angle trajectories, each shaped ``(n_samples, n_joints)``."""
         all_samples = np.vstack(trajectories)
-        self.mean = all_samples.mean(axis=0)
-        self.std = all_samples.std(axis=0)
+        low, high = all_samples.min(axis=0), all_samples.max(axis=0)
+        self.center = (low + high) / 2
+        # A joint that never moves in the training data is only centered.
+        self.half_range = np.where(high > low, (high - low) / 2, 1.0)
         sequences = [self._with_warmup(self._normalize(q)) for q in trajectories]
         # Each input predicts the next sample; every sequence's warm-up is washed out.
         self.model.fit_sequences(
@@ -116,7 +120,7 @@ class ReachingEsn:
         return np.vstack([np.repeat(u[:1], self.config.warmup_steps, axis=0), u])
 
     def _normalize(self, q: NDArray[np.float64]) -> NDArray[np.float64]:
-        return (q - self.mean) / self.std
+        return (q - self.center) / self.half_range
 
     def _denormalize(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
-        return u * self.std + self.mean
+        return u * self.half_range + self.center

@@ -76,3 +76,17 @@ def test_each_training_trajectory_is_reproduced_from_its_own_start():
         generated = esn.generate(q[0], len(q) - 1)
         assert np.degrees(np.sqrt(np.mean((generated - q) ** 2))) < 2.0
         assert np.degrees(np.abs(generated[-1] - q[-1])).max() < 0.5
+
+
+def test_normalization_does_not_depend_on_how_long_the_hold_lasts():
+    q = joint_reach()
+    longer_hold = np.vstack([q, np.repeat(q[-1:], 200, axis=0)])
+    short, long = ReachingEsn(CONFIG), ReachingEsn(CONFIG)
+    short.fit([q])
+    long.fit([longer_hold])
+
+    assert long.center == pytest.approx(short.center)
+    assert long.half_range == pytest.approx(short.half_range)
+    normalized = (q - short.center) / short.half_range
+    assert normalized.min(axis=0) == pytest.approx([-1.0, -1.0])
+    assert normalized.max(axis=0) == pytest.approx([1.0, 1.0])
