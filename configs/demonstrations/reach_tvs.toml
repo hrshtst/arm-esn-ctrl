@@ -41,7 +41,7 @@ limits = [-180.0, 180.0]
 [task]
 type = "reaching"
 target = { pos = [0.0, 1.2], tolerance = 0.02 }  # hand goal (m), 2 cm tolerance
-duration = 2.0  # simulated time per demonstration (s): about 1 s to reach, then holding
+duration = 4.0  # simulated time per demonstration (s): about 1 s to reach, then about 3 s of holding
 
 [simulator]
 dt = 0.002  # control and integration step (s)
