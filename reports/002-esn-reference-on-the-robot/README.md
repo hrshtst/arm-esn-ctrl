@@ -131,8 +131,10 @@ The runs used the demonstrations and the ESN in [`data/`](data). The current
 configurations read them as `results/demonstrations/20261002-194644-reach_tvs`
 and `results/multi_demonstration_autonomous_reaching/20261002-213015-autonomous_tvs_all_distances`
 under the storage root, and a run is found by its name anywhere under `results/`;
-place or link the copies there to rerun. The commands give the configurations'
-current paths; the runs recorded the paths they had then.
+place or link the copies there to rerun. The commands and the run records give the
+configurations' current paths: when the runs were filed by experiment, the records
+were updated to them, and `git log --follow` shows where a configuration was at the
+recorded commit.
 
 | Run | Command |
 | --- | --- |

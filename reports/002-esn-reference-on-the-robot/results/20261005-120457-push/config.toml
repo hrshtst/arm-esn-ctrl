@@ -1,7 +1,7 @@
 # Stage 2: a push during the reach. A 5 N force acts on the arm's tip for 0.1 s
 # at 0.4 s, near the reach's peak speed, sideways to the reach.
 #
-#   uv run python experiments/robot_esn.py configs/robot/push.toml
+#   uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/push.toml
 #
 # The ESN, the tracker settings, and the start postures are those of nominal.toml,
 # so the two experiments compare directly.
@@ -16,7 +16,7 @@
 # [demonstrations]) are the ones the time-indexed baseline replays. This one is
 # the best of Stage 1: all eight TVS demonstrations, 600 neurons, spectral radius
 # 1.3, leak rate 0.05, input scaling 0.1, ridge 1e-6, warm-up 0.25 s.
-model = "results/20261002-213015-autonomous_tvs_all_distances/esn.toml"
+model = "results/multi_demonstration_autonomous_reaching/20261002-213015-autonomous_tvs_all_distances/esn.toml"
 
 [tracker]
 # Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).

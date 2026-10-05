@@ -1,5 +1,5 @@
-config = "configs/robot/block_damping.toml"
-command = "experiments/robot_esn.py configs/robot/block_damping.toml"
+config = "experiments/multi_demonstration_robot_tracking/block_damping.toml"
+command = "experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/block_damping.toml"
 started = 2026-10-05 16:07:41+09:00
 host = "delbosque"
 commit = "88c731b6cdbb8d7f1971cf48d6e74f85cfcc05d4"

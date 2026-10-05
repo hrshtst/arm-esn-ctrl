@@ -1,5 +1,5 @@
-config = "configs/robot/nominal.toml"
-command = "experiments/robot_esn.py configs/robot/nominal.toml"
+config = "experiments/multi_demonstration_robot_tracking/nominal.toml"
+command = "experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/nominal.toml"
 started = 2026-10-05 12:04:54+09:00
 host = "delbosque"
 commit = "2d5b5670dba4c5855b2fa31830d923ed00ce5b65"

@@ -1,5 +1,5 @@
-config = "configs/esn/autonomous_tvs_all_distances.toml"
-command = "experiments/autonomous_esn.py configs/esn/autonomous_tvs_all_distances.toml"
+config = "experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all_distances.toml"
+command = "experiments/autonomous_esn.py experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all_distances.toml"
 started = 2026-10-02 21:30:15+09:00
 host = "delbosque"
 commit = "55b43e94d12ec93c432ae99cb24120a4c5949f1e"

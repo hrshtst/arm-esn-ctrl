@@ -1,5 +1,5 @@
-config = "configs/esn/sweep_tvs_all.toml"
-command = "experiments/sweep_esn.py configs/esn/sweep_tvs_all.toml"
+config = "experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all.toml"
+command = "experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all.toml"
 started = 2026-10-02 20:16:14+09:00
 host = "delbosque"
 commit = "10ba1a1a011ce126ca2124d127287b81dc63dfc7"

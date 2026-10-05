@@ -1,5 +1,5 @@
-config = "configs/robot/offset_3deg.toml"
-command = "experiments/robot_esn.py configs/robot/offset_3deg.toml"
+config = "experiments/multi_demonstration_robot_tracking/offset_3deg.toml"
+command = "experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/offset_3deg.toml"
 started = 2026-10-05 12:05:01+09:00
 host = "delbosque"
 commit = "2d5b5670dba4c5855b2fa31830d923ed00ce5b65"

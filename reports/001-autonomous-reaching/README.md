@@ -92,8 +92,10 @@ within the goal radius r of the target.
 
 Each run directory holds the configuration it ran with (`config.toml`) and its run
 record (`run.toml`, with the commit). The runs are deterministic, so on the same
-machine they reproduce exactly from that commit. The commands give the
-configurations' current paths; the runs recorded the paths they had then. The ESN
+machine they reproduce exactly from that commit. The commands and the run records
+give the configurations' current paths: when the runs were filed by experiment, the
+records were updated to them, and `git log --follow` shows where a configuration
+was at the recorded commit. The ESN
 runs read the demonstrations as `results/demonstrations/20261002-194644-reach_tvs`
 under the storage root, and a run is found by its name anywhere under `results/`;
 place or link this report's `data/` copy there to rerun them on the same data. The

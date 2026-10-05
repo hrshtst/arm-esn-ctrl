@@ -1,7 +1,7 @@
 # Stage 1: sweep the reservoir size, spectral radius, and warm-up of the ESN
 # trained on all eight demonstrations.
 #
-#   uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all_reservoir.toml
+#   uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all_reservoir.toml
 #
 # Ridge, leak rate, and input scaling are fixed at the best combination of the
 # ridge / leak rate / input scaling sweep (sweep_tvs_all.toml, run
@@ -10,7 +10,7 @@
 
 [demonstrations]
 # A run directory of experiments/make_demonstrations.py, relative to the storage root.
-run = "results/20261002-194644-reach_tvs"
+run = "results/demonstrations/20261002-194644-reach_tvs"
 train = [
   "demo_00.sklog.npz",
   "demo_01.sklog.npz",

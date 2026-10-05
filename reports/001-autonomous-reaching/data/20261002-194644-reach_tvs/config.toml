@@ -1,7 +1,7 @@
 # Scripted reaching demonstrations: virtual spring-damper with a time-varying
 # stiffness (Sekimoto and Arimoto, IROS 2006).
 #
-#   uv run python experiments/make_demonstrations.py configs/demonstrations/reach_tvs.toml
+#   uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_tvs.toml
 #
 # The [skeleton], [task], [simulator], and [controller] tables follow skelarm's
 # scenario format, so skelarm's tools also read this file.

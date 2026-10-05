@@ -115,9 +115,10 @@ a run directory under `results/`.
 A configuration names the runs it builds on by their paths under the storage
 root, such as `run = "results/demonstrations/20261002-194644-reach_tvs"` for its
 demonstrations. Run names begin with the time the run started, so they are
-unique, and a run is found by its name even where a reference does not say its
-experiment: run records from before the runs were filed by experiment name them
-as `results/<run>`.
+unique, and a run is also found by its name alone, such as `results/<run>`,
+wherever it is filed. The run records made before the runs were filed by
+experiment (2026-10-05) were updated to the paths of this layout then; the
+configuration's old path can be traced with `git log --follow`.
 
 Git tracks only the data and results behind a specific report. They are copied
 into that report's directory (see [Reports](../README.md#reports)).
