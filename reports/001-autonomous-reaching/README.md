@@ -85,15 +85,17 @@ within the goal radius r of the target.
 
 | Run | What it is | Command |
 | --- | --- | --- |
-| [`20261002-194644-reach_tvs`](data/20261002-194644-reach_tvs) | the demonstrations | `uv run python experiments/make_demonstrations.py configs/demonstrations/reach_tvs.toml` |
-| [`20261002-201614-sweep_tvs_all`](results/20261002-201614-sweep_tvs_all) | sweep of ridge, leak rate, and input scaling | `uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all.toml` |
-| [`20261002-202915-sweep_tvs_all_reservoir`](results/20261002-202915-sweep_tvs_all_reservoir) | sweep of reservoir size, spectral radius, and warm-up | `uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all_reservoir.toml` |
-| [`20261002-213015-autonomous_tvs_all_distances`](results/20261002-213015-autonomous_tvs_all_distances) | the final ESN, from every group of starts | `uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all_distances.toml` |
+| [`20261002-194644-reach_tvs`](data/20261002-194644-reach_tvs) | the demonstrations | `uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_tvs.toml` |
+| [`20261002-201614-sweep_tvs_all`](results/20261002-201614-sweep_tvs_all) | sweep of ridge, leak rate, and input scaling | `uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all.toml` |
+| [`20261002-202915-sweep_tvs_all_reservoir`](results/20261002-202915-sweep_tvs_all_reservoir) | sweep of reservoir size, spectral radius, and warm-up | `uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all_reservoir.toml` |
+| [`20261002-213015-autonomous_tvs_all_distances`](results/20261002-213015-autonomous_tvs_all_distances) | the final ESN, from every group of starts | `uv run python experiments/autonomous_esn.py experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all_distances.toml` |
 
 Each run directory holds the configuration it ran with (`config.toml`) and its run
 record (`run.toml`, with the commit). The runs are deterministic, so on the same
-machine they reproduce exactly from that commit. The ESN runs read the
-demonstrations from `results/20261002-194644-reach_tvs` under the storage root;
+machine they reproduce exactly from that commit. The commands give the
+configurations' current paths; the runs recorded the paths they had then. The ESN
+runs read the demonstrations as `results/demonstrations/20261002-194644-reach_tvs`
+under the storage root, and a run is found by its name anywhere under `results/`;
 place or link this report's `data/` copy there to rerun them on the same data. The
 sweeps ran before the start postures were grouped by name; the current
 configurations list the same "between" starts under a named group. The trained

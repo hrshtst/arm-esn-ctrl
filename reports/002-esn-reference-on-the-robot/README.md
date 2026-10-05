@@ -127,21 +127,23 @@ it until arrival, the joint error, the arrival delay, and whether the hand
 
 ### Reproducing the results
 
-The runs used the demonstrations and the ESN in [`data/`](data). Under the
-storage root, they are read from `results/20261002-194644-reach_tvs` and
-`results/20261002-213015-autonomous_tvs_all_distances`; place or link the copies
-there to rerun.
+The runs used the demonstrations and the ESN in [`data/`](data). The current
+configurations read them as `results/demonstrations/20261002-194644-reach_tvs`
+and `results/multi_demonstration_autonomous_reaching/20261002-213015-autonomous_tvs_all_distances`
+under the storage root, and a run is found by its name anywhere under `results/`;
+place or link the copies there to rerun. The commands give the configurations'
+current paths; the runs recorded the paths they had then.
 
 | Run | Command |
 | --- | --- |
-| [`20261005-120454-nominal`](results/20261005-120454-nominal) | `uv run python experiments/robot_esn.py configs/robot/nominal.toml` |
-| [`20261005-120457-push`](results/20261005-120457-push) | `uv run python experiments/robot_esn.py configs/robot/push.toml` |
-| [`20261005-120459-block`](results/20261005-120459-block) | `uv run python experiments/robot_esn.py configs/robot/block.toml` |
-| [`20261005-120501-offset_3deg`](results/20261005-120501-offset_3deg) | `uv run python experiments/robot_esn.py configs/robot/offset_3deg.toml` |
-| [`20261005-120503-offset_10deg`](results/20261005-120503-offset_10deg) | `uv run python experiments/robot_esn.py configs/robot/offset_10deg.toml` |
-| [`20261005-160737-nominal_damping`](results/20261005-160737-nominal_damping) | `uv run python experiments/robot_esn.py configs/robot/nominal_damping.toml` |
-| [`20261005-160739-push_damping`](results/20261005-160739-push_damping) | `uv run python experiments/robot_esn.py configs/robot/push_damping.toml` |
-| [`20261005-160741-block_damping`](results/20261005-160741-block_damping) | `uv run python experiments/robot_esn.py configs/robot/block_damping.toml` |
+| [`20261005-120454-nominal`](results/20261005-120454-nominal) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/nominal.toml` |
+| [`20261005-120457-push`](results/20261005-120457-push) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/push.toml` |
+| [`20261005-120459-block`](results/20261005-120459-block) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/block.toml` |
+| [`20261005-120501-offset_3deg`](results/20261005-120501-offset_3deg) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/offset_3deg.toml` |
+| [`20261005-120503-offset_10deg`](results/20261005-120503-offset_10deg) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/offset_10deg.toml` |
+| [`20261005-160737-nominal_damping`](results/20261005-160737-nominal_damping) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/nominal_damping.toml` |
+| [`20261005-160739-push_damping`](results/20261005-160739-push_damping) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/push_damping.toml` |
+| [`20261005-160741-block_damping`](results/20261005-160741-block_damping) | `uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/block_damping.toml` |
 | [`summary`](results/summary) | `uv run python reports/002-esn-reference-on-the-robot/make_figures.py --animations --traces` |
 
 The first five runs are from commit `2d5b567` and the damping runs from
