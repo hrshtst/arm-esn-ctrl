@@ -590,6 +590,14 @@ reports/001-autonomous-reaching/
 └── results/    # the runs behind its figures: configurations, outputs, figures
 ```
 
+The reports so far:
+
+- [001 Autonomous reaching with an echo state network](reports/001-autonomous-reaching/README.md)
+  (Stage 1): the ESN trained on eight demonstrations, run on its own.
+- [002 The ESN as the reference generator of a robot arm](reports/002-esn-reference-on-the-robot/README.md)
+  (Stage 2): the ESN against the replayed demonstrations, with and without
+  disturbances.
+
 Each report has five parts:
 
 1. **Question:** what we want to know, and why.
