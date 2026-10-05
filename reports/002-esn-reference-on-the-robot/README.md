@@ -18,6 +18,10 @@ and start postures 3° and 10° away from the demonstrated ones.
 - **Gains:** with computed torque, any of the natural frequencies tried
   (5–40 rad/s) works without disturbances. With joint PD, the ESN needs higher
   gains than the replay to hold at the target.
+- **What the ESN generates:** mid-motion, its output is neither the demonstration
+  replayed nor the arm's state. After a push or during a block, it departs from
+  the demonstration about half as far as the arm does. From an offset start, it
+  follows the demonstrator's reach from that start, within 1° RMS.
 - **Damping:** with an underdamped tracker, the replay rings around the target
   after a disturbance but always settles. The ESN rings longer, and at a damping
   ratio of 0.1 it no longer settles after a block, ending 9–15 cm from the target
@@ -138,12 +142,15 @@ there to rerun.
 | [`20261005-160737-nominal_damping`](results/20261005-160737-nominal_damping) | `uv run python experiments/robot_esn.py configs/robot/nominal_damping.toml` |
 | [`20261005-160739-push_damping`](results/20261005-160739-push_damping) | `uv run python experiments/robot_esn.py configs/robot/push_damping.toml` |
 | [`20261005-160741-block_damping`](results/20261005-160741-block_damping) | `uv run python experiments/robot_esn.py configs/robot/block_damping.toml` |
-| [`summary`](results/summary) | `uv run python reports/002-esn-reference-on-the-robot/make_figures.py --animations` |
+| [`summary`](results/summary) | `uv run python reports/002-esn-reference-on-the-robot/make_figures.py --animations --traces` |
 
 The first five runs are from commit `2d5b567` and the damping runs from
 `88c731b` (recorded in each `run.toml`); all are deterministic. Each run directory holds its configuration, its run record, and its
 per-run metrics (`metrics.csv`). [`make_figures.py`](make_figures.py) draws the
-summary figures and prints the tables of Sections 3.1 and 3.6 from those metrics. With
+summary figures and prints the tables of Sections 3.1, 3.6, and 3.7 from those metrics. With
+`--traces`, it measures the comparison of Section 3.7 from the run logs under the
+storage root and saves it to `departures.csv` and `offset_references.csv` in
+[`results/summary`](results/summary), from which the tables are printed. With
 `--animations`, it exports the animations of skelarm's player from the run logs
 under the storage root; the logs are not kept in Git.
 
@@ -237,8 +244,8 @@ hold, against all of the replay's at ω = 10).
 from the push for 1 s.
 
 After the push, the replay's reference stays where it was and pulls the arm back
-onto the demonstrated path. The ESN instead generates its next postures from
-where the push has put the arm. Its path ends up 1.2–2 times as far from the
+onto the demonstrated path. The ESN's output instead moves along with the pushed
+arm, about half as far as the arm (Section 3.7). Its path ends up 1.2–2 times as far from the
 demonstrated path as the replay's (75 against 41 mm at computed torque,
 ω = 10 rad/s). It needs 3–18% less effort (∫τ²) than the replay at every gain
 but one: at computed torque, ω = 5 rad/s, it needs 26% more. At low
@@ -328,10 +335,81 @@ Joint PD, ω = 10 rad/s (ESN / replay):
   torque) and 149 mm (joint PD) from the target on average, still oscillating.
   With joint PD at ζ = 0.5, the ESN holds in at most 1 of 8 runs in any scenario.
 
+### 3.7 What the ESN generates: its output against the arm and the demonstration
+
+![The ESN's output against the arm and the demonstrator](results/summary/traces.png)
+
+**Figure 8.** Joint angles over time from the first start posture, computed torque
+at ω = 10 rad/s, one column per scenario (the shaded band is the disturbance). The
+thick gray line is the demonstrator's undisturbed reach from the same start: for
+the first three columns, the training demonstration itself, which the replay
+replays; for the offset, the demonstrator's reach from the offset start, while
+the replay replays the training demonstration. Bottom row: the distance in joint
+space of the ESN's output (solid) and of its arm (dotted) from the gray line, and
+of the output from its arm (dash-dot).
+
+To see whether the ESN adapts its reference to the arm's state or replays what it
+learned, we measured, in every run, how far its output departs from the
+demonstration compared with how far its arm departs from it. A ratio of 0 means
+the output replays the demonstration whatever the arm does; 1 means it moves as
+far as the arm.
+
+Largest distance from the demonstrator's undisturbed reach (deg), over the reach
+(nominal) or 1 s from the disturbance, means over the 8 starts:
+
+| Scenario | Law | ESN output | ESN arm | Ratio (range) |
+| --- | --- | ---: | ---: | ---: |
+| nominal | computed torque, ω = 10 | 0.20 | 0.40 | 0.51 (0.46 to 0.59) |
+| nominal | joint PD, ω = 20 | 0.51 | 0.79 | 0.65 (0.60 to 0.68) |
+| push | computed torque, ω = 10 | 3.52 | 6.11 | 0.58 (0.55 to 0.60) |
+| push | joint PD, ω = 20 | 1.15 | 2.00 | 0.57 (0.50 to 0.64) |
+| block | computed torque, ω = 10 | 11.98 | 27.00 | 0.45 (0.40 to 0.55) |
+| block | joint PD, ω = 20 | 11.64 | 26.01 | 0.46 (0.40 to 0.55) |
+
+From offset starts, the RMS distance of the ESN's output over the reach
+(0–1.5 s, deg), means over the 32 starts:
+
+| Scenario | Law | From the demonstrator's reach from this start | From the replayed demonstration |
+| --- | --- | ---: | ---: |
+| offset 3° | computed torque, ω = 10 | 0.25 | 2.55 |
+| offset 3° | joint PD, ω = 20 | 0.36 | 2.58 |
+| offset 10° | computed torque, ω = 10 | 0.73 | 8.12 |
+| offset 10° | joint PD, ω = 20 | 0.81 | 8.16 |
+
+- **From an offset start, the ESN adapts fully.** Its output stays within 1° of
+  the reach the demonstrator makes from the actual start, ten times closer than
+  to the demonstration the replay replays. The generalization of report 001 to
+  unseen start postures carries over to the robot.
+- **Mid-motion, it goes halfway.** After a push and during a block, the ESN's
+  output departs from the demonstration about half as far as the arm, in every
+  run, with both laws (ratios 0.40–0.64). It neither replays the demonstration
+  nor follows the arm: it gives way along with the disturbance, partway.
+- **Even without disturbances,** about half of the arm's tracking lag passes into
+  the output (ratios 0.46–0.68), which moves the reference toward the lagging arm.
+  If the output carries half of the arm's departure, the arm departs twice as far
+  as its tracking error, which accounts for the ESN's arm straying about twice as
+  far from the demonstration as the replay's (Section 3.2).
+- **During the block,** the output runs on toward the demonstration in joint 1,
+  but nearly waits in joint 2 (Figure 8). After the release, the output itself
+  overshoots the target, by 3° in joint 1 from this start, so the overshoot of
+  Section 3.5 starts in the reference, not only in the tracking.
+- **After the push,** the demonstrator under the same push, whose own controller
+  pulls toward the target, departs from its path by at most 1.4° and is back
+  within a fifth of that about 0.45 s after the push ends. The ESN's output
+  departs by up to 5.1°, dips below the path (Figure 8), and takes about 0.7 s.
+
+Why halfway? The ESN's input is scaled down (input scaling 0.1) and its
+reservoir leaks slowly (leak rate 0.05, a memory of about 0.2 s). The measured
+posture likely moves the reservoir's state only partway, so the state, and the
+output, still carry much of the learned motion. We have not tested this.
+
 ## 4. Observations
 
-- **The ESN's reference follows the measured state.** That is its strength and
-  its weakness. Wherever the arm is, the ESN generates a reach from there:
+- **The ESN's reference partly follows the measured state.** From an offset
+  start, it follows it fully: it generates the reach the demonstrator would make
+  from there. Mid-motion, it gives way about half as far as the arm is displaced,
+  between replaying the demonstration and following the arm (Section 3.7). That
+  is its strength and its weakness:
   - **Strength:** it never jumps, and it fights a disturbance less (initial
     offsets, the push, the block).
   - **Weakness:** it does not pull the arm back onto the demonstrated path, and
@@ -347,7 +425,7 @@ Joint PD, ω = 10 rad/s (ESN / replay):
     After a block, it fails to settle at every gain.
 - **An underdamped tracker exposes the same weakness.** Its ringing decays when
   the reference holds still, as the replay's does at the target, but the ESN
-  turns it into a lasting oscillation by following the measured state. The ESN
+  turns it into a lasting oscillation by partly following the measured state. The ESN
   needs a well-damped tracker more than the replay does.
 - **Every failure is a failure to hold, not to arrive.** Every run of every arm
   arrives. The ESN's failing runs leave the 2 cm goal radius while oscillating,
@@ -373,7 +451,9 @@ Joint PD, ω = 10 rad/s (ESN / replay):
   produce a flow back toward them. Training with noise added to its inputs (noisy
   teacher forcing) is a standard way to teach that return. It may also stiffen
   the reference and cost some of the compliance that helped here. This is open
-  for discussion before any experiment.
+  for discussion before any experiment. The departure ratio of Section 3.7 would
+  measure the change directly: a reference that steers the arm back would depart
+  from the demonstration less than the arm does, and toward it.
 - **Waiting under a block** may need other data, such as demonstrations that
   pause midway, or a shorter reservoir memory.
 - **A fairer baseline:** a time-indexed replay that blends in from the actual
