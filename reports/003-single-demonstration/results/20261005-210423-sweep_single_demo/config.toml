@@ -1,0 +1,46 @@
+# Stage 1, Phase 3: sweep ridge, leak rate, and input scaling of the ESN trained on
+# the single demonstration, scored over the grid of start postures of Phase 1.
+#
+#   uv run python experiments/sweep_esn.py experiments/single_demonstration_autonomous_reaching/sweep_single_demo.toml
+#
+# The other [esn] values are those of grid_single_demo_settings.toml, as in the
+# first sweep of eight demonstrations (sweep_tvs_all.toml in
+# multi_demonstration_autonomous_reaching).
+#
+# The input scaling also stands for the scale of the joint-angle normalization.
+# Normalizing the training data to [-s, s] instead of [-1, 1] gives exactly the
+# runs of input scaling s times the value here: the input weights are linear, the
+# reservoir's bias does not depend on either, and the ridge readout scales with its
+# target. With one demonstration, the range covers only that reach (30.4 deg in
+# joint 1, 22.7 deg in joint 2), so a 15 deg offset is half a range or more beyond
+# what was trained; the smallest input scalings leave the most room around it.
+
+[demonstrations]
+# A run directory of experiments/make_demonstrations.py, relative to the storage root.
+run = "results/demonstrations/20261005-185525-reach_tvs_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 300
+spectral_radius = 0.5
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.3        # swept
+input_scaling = 1.0    # swept
+bias = true
+ridge = 1.0            # swept
+seed = 0
+
+[sweep]
+# The first two are the heatmap axes (x, then y); each value of the third gets its own column.
+ridge = [1e-6, 1e-4, 1e-2, 1e-1, 1.0, 10.0]
+leak_rate = [0.05, 0.1, 0.2, 0.3, 0.5, 1.0]
+input_scaling = [0.03, 0.1, 0.3, 0.6, 1.0, 1.5, 3.0]
+
+[evaluation]
+duration = 5.0         # autonomous run (s); the demonstration lasts 4 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint (169 start postures)
+step_deg = 2.5

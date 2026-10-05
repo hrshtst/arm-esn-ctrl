@@ -1,0 +1,30 @@
+# Stage 1, Phase 2: the reservoir states of the single-demonstration ESN trained
+# with the settings first used for a single demonstration (grid_single_demo_settings.toml), compared by principal components.
+#
+#   uv run python experiments/reservoir_states.py experiments/single_demonstration_autonomous_reaching/states_single_demo_settings.toml
+#
+# The states while the demonstration is fed in (teacher forcing) give the principal
+# components; the autonomous runs from the same grid of start postures as Phase 1
+# are projected onto them and compared with the demonstration's states over time.
+# states_multi_demo_settings.toml does the same for the other settings.
+
+[esn]
+# The trained ESN: esn.toml of the Phase 1 run, relative to the storage root. Its
+# run directory names the demonstration it was trained on.
+model = "results/single_demonstration_autonomous_reaching/20261005-190403-grid_single_demo_settings/esn.toml"
+
+[evaluation]
+duration = 4.0         # autonomous run (s): as long as the demonstration, so every state has one to compare with
+[evaluation.start_grid]
+span_deg = 15.0        # the start offsets of Phase 1: -15 to 15 deg in each joint
+step_deg = 2.5
+
+[states]
+n_components = 10      # principal components each state is projected onto (projections.npz)
+join_threshold = 0.1   # a run joins the demonstration's states once the time-matched distance stays below this
+phase_window = [0.1, 1.0]  # the phase lead is the median over these times (s): the reach
+# The start offsets (deg) whose runs pca.png and convergence.png draw: the outer ring of the grid.
+shown_offsets_deg = [
+  [15.0, 0.0], [-15.0, 0.0], [0.0, 15.0], [0.0, -15.0],
+  [15.0, 15.0], [15.0, -15.0], [-15.0, 15.0], [-15.0, -15.0],
+]

@@ -1,0 +1,6 @@
+config = "experiments/single_demonstration_autonomous_reaching/states_single_demo_settings.toml"
+command = "experiments/reservoir_states.py experiments/single_demonstration_autonomous_reaching/states_single_demo_settings.toml"
+started = 2026-10-05 19:19:29+09:00
+host = "delbosque"
+commit = "8b71f04a3f468985ae75679bb7bb9ad0572353f3"
+uncommitted_changes = false

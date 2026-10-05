@@ -1,0 +1,2 @@
+demo,start_q1_deg,start_q2_deg,movement_time,peak_speed,peak_timing,speed_profile_error,speed_peaks,path_deviation,overshoot,final_error
+0,18.2,119.9,1.1020000000000008,0.8575233416294675,0.45282506838857617,0.12445323894142445,1.0,0.002200572380877225,4.555703625603684e-06,5.420799638382024e-15

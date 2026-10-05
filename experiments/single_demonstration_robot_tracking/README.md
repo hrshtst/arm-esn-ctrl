@@ -5,6 +5,7 @@ arm, driven by the arm's measured posture, and a tracker follows it, as in
 [multi-demonstration robot tracking](../multi_demonstration_robot_tracking/README.md).
 Each run is compared with the demonstration replayed by time and with the
 demonstrator's own controller.
+The results are in [report 003](../../reports/003-single-demonstration/README.md).
 
 [Single-demonstration autonomous reaching](../single_demonstration_autonomous_reaching/README.md)
 found two ESNs trained on the same demonstration that run in different ways:

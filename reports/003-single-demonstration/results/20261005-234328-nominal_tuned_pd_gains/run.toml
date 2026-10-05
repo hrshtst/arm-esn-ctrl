@@ -1,0 +1,6 @@
+config = "experiments/single_demonstration_robot_tracking/nominal_tuned_pd_gains.toml"
+command = "experiments/robot_esn.py experiments/single_demonstration_robot_tracking/nominal_tuned_pd_gains.toml"
+started = 2026-10-05 23:43:28+09:00
+host = "delbosque"
+commit = "0c228ab54dcb79f8c90437fa2a88f8ed68a42e99"
+uncommitted_changes = false

@@ -13,7 +13,8 @@ disturbances. We study whether this state-driven ESN reference generator
 makes the arm more robust than the standard approach of tracking a
 time-indexed reference trajectory.
 
-> **Status:** Stages 1 and 2 have first results, in reports 001 and 002.
+> **Status:** Stages 1 and 2 have first results, in reports 001 and 002 (eight
+> demonstrations) and 003 (one demonstration).
 
 ## Motivation
 
@@ -239,7 +240,8 @@ that run them are shared:
 | Experiment | What it studies | Report |
 | --- | --- | --- |
 | [demonstrations](experiments/demonstrations/README.md) | scripted reaching demonstrations of a two-link arm | |
-| [single_demonstration_autonomous_reaching](experiments/single_demonstration_autonomous_reaching/README.md) | an ESN trained on one demonstration, run on its own (Stage 1) | |
+| [single_demonstration_autonomous_reaching](experiments/single_demonstration_autonomous_reaching/README.md) | an ESN trained on one demonstration, run on its own (Stage 1) | [003](reports/003-single-demonstration/README.md) |
+| [single_demonstration_robot_tracking](experiments/single_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | [003](reports/003-single-demonstration/README.md) |
 | [multi_demonstration_autonomous_reaching](experiments/multi_demonstration_autonomous_reaching/README.md) | an ESN trained on eight demonstrations, run on its own (Stage 1) | [001](reports/001-autonomous-reaching/README.md) |
 | [multi_demonstration_robot_tracking](experiments/multi_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | [002](reports/002-esn-reference-on-the-robot/README.md) |
 
@@ -326,6 +328,9 @@ The reports so far:
 - [002 The ESN as the reference generator of a robot arm](reports/002-esn-reference-on-the-robot/README.md)
   (Stage 2): the ESN against the replayed demonstrations, with and without
   disturbances.
+- [003 One demonstration: what the ESN learns, and how it drives a robot arm](reports/003-single-demonstration/README.md)
+  (Stages 1 and 2): an ESN trained on a single demonstration learns a clock or a
+  path; on the robot, the path-type ESN's reference waits for a blocked arm.
 
 Each report has five parts:
 

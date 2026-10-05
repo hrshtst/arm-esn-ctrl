@@ -1,0 +1,25 @@
+# Stage 1, Phase 3: the single-demonstration ESN trained with the settings found best for eight demonstrations
+# (grid_multi_demo_settings.toml, a 0.25 s warm-up), run with other warm-ups.
+#
+#   uv run python experiments/warmup_esn.py experiments/single_demonstration_autonomous_reaching/warmup_multi_demo_settings.toml
+#
+# A warm-up longer by some time makes an ESN that times its reach from the reset
+# arrive earlier by that time; one that times its reach from the end of the warm-up
+# arrives as before. warmup_single_demo_settings.toml does the same for the other
+# settings.
+
+[esn]
+# The trained ESN: esn.toml of the Phase 1 run, relative to the storage root. Its
+# run directory names the demonstration it was trained on.
+model = "results/single_demonstration_autonomous_reaching/20261005-190405-grid_multi_demo_settings/esn.toml"
+
+[warmup]
+# Warm-ups to run with (s); the trained one is added if missing.
+durations = [0.0, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 2.5]
+
+[evaluation]
+duration = 5.0         # autonomous run (s); the demonstration lasts 4 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the start offsets of Phase 1: -15 to 15 deg in each joint
+step_deg = 2.5

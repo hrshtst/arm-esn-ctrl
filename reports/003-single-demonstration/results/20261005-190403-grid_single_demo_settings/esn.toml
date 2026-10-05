@@ -1,0 +1,24 @@
+# A trained ESN of arm_esn_ctrl; load it with arm_esn_ctrl.esn.ReachingEsn.load(<this file>).
+model = "esn.rclib"
+
+[esn]
+dt = 0.01
+warmup = 1.0
+n_neurons = 300
+spectral_radius = 0.5
+sparsity = 0.1
+leak_rate = 0.3
+input_scaling = 1.0
+bias = true
+ridge = 1.0
+seed = 0
+
+[normalization]
+center_rad = [
+    0.5828603822226444,
+    1.894386965552084,
+]
+half_range_rad = [
+    0.2652104583596763,
+    0.19826280758911718,
+]

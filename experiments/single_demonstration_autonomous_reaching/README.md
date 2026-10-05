@@ -2,7 +2,8 @@
 
 An ESN trained on one demonstration runs on its own, its output fed back as its
 next input, from a grid of start postures around the demonstrated one. Each run is
-compared with the demonstrator's own reach from the same posture. The questions:
+compared with the demonstrator's own reach from the same posture. The results are
+in [report 003](../../reports/003-single-demonstration/README.md). The questions:
 
 1. **Replication:** does the ESN reproduce the demonstration?
 2. **Generalization:** from which start postures does it still arrive and hold,
