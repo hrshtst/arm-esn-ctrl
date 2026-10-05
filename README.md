@@ -534,6 +534,37 @@ holds, besides the reach and hold metrics of Stage 1:
 `timeline.png` the hand's distance to the target and the joint torque over time
 from the first start posture.
 
+### Simulating the robot interactively
+
+`tools/robot_app.py` simulates the arm in real time, so you can pose it, watch
+it reach, and push it by hand:
+
+```bash
+# The ESN generates the reference; the tracker follows it.
+uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml \
+    --law computed_torque --omega 10 \
+    --model "$STORAGE/results/20261002-213015-autonomous_tvs_all_distances/esn.toml"
+# The demonstrator's reach from each run's start posture, replayed by time.
+uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --law pd --omega 20
+# The demonstrator's reach from a given posture, replayed by time: pose the arm
+# elsewhere before Play to emulate an initial offset.
+uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --law pd --omega 20 --pose 29.4,88.2
+# The demonstrator's own controller, without a reference.
+uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --demonstrator
+```
+
+`$STORAGE` stands for the storage root. The reference generator, the tracking law,
+and ω are fixed at launch and shown in the side panel. Before Play, dragging the tip
+poses the arm. During a run, running or paused, dragging pulls the tip toward the
+cursor with a spring force (the drag stiffness in the panel), which acts on top of
+the controller's torque. External forces never act during the ESN's warm-up, which
+is consumed at once when a run starts. Reset returns the arm to the start posture of
+the last run, ready to be posed again. A faint gray arm shows the initial posture
+(the given one, or else the last run's start), and a faint colored arm the reference
+posture. The side panel shows the arrival and the hold, the tracking error and the
+reference's joint speed, and the joint torque, its squared integral, and the external
+force, live.
+
 ## Development
 
 ```bash
