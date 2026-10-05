@@ -66,7 +66,8 @@ uv run python experiments/reservoir_states.py \
 The run directory receives `states.csv` (per start posture: the distance from the
 demonstration's state at the end of the warm-up and later, when the run joins the
 demonstration's states, and its phase lead), `projections.npz` (every state on the
-first principal components), `pca.png`, and `convergence.png`.
+first principal components), `pca.png`, and `convergence.png` (the distance and the
+phase lead over time, and maps of them over the start offsets).
 
 ## Runs
 
@@ -77,3 +78,5 @@ the demonstration `results/demonstrations/20261005-185525-reach_tvs_single`:
 | --- | --- |
 | `20261005-190403-grid_single_demo_settings` | `grid_single_demo_settings.toml` |
 | `20261005-190405-grid_multi_demo_settings` | `grid_multi_demo_settings.toml` |
+| `20261005-191929-states_single_demo_settings` | `states_single_demo_settings.toml` |
+| `20261005-191932-states_multi_demo_settings` | `states_multi_demo_settings.toml` |
