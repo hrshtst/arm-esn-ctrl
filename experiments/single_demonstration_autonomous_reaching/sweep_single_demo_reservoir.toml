@@ -1,0 +1,41 @@
+# Stage 1, Phase 3: sweep the reservoir size, spectral radius, and warm-up of the
+# ESN trained on the single demonstration, scored over the grid of start postures
+# of Phase 1.
+#
+#   uv run python experiments/sweep_esn.py experiments/single_demonstration_autonomous_reaching/sweep_single_demo_reservoir.toml
+#
+# Ridge, leak rate, and input scaling are fixed at the best combination of the
+# ridge / leak rate / input scaling sweep (sweep_single_demo.toml, run
+# 20261005-204413): ridge 10, leak rate 0.2, input scaling 3, the combination that
+# arrives and holds from every start with the smallest reach path distance from the
+# other starts. Everything else is sweep_single_demo.toml.
+
+[demonstrations]
+# A run directory of experiments/make_demonstrations.py, relative to the storage root.
+run = "results/demonstrations/20261005-185525-reach_tvs_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # swept: the held start posture drives the ESN this long before it moves (s)
+n_neurons = 300        # swept
+spectral_radius = 0.5  # swept
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.2
+input_scaling = 3.0
+bias = true
+ridge = 10.0
+seed = 0
+
+[sweep]
+# The first two are the heatmap axes (x, then y); each value of the third gets its own column.
+n_neurons = [150, 200, 300, 400, 600, 800]
+spectral_radius = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
+warmup = [0.0, 0.25, 0.5, 1.0, 1.5, 2.5]
+
+[evaluation]
+duration = 5.0         # autonomous run (s); the demonstration lasts 4 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint (169 start postures)
+step_deg = 2.5

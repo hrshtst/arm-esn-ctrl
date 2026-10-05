@@ -55,6 +55,10 @@ HEATMAPS = [
     ("max_hold_error_m", "Largest hold error of the runs that arrive (mm)", 1000.0, True),
 ]
 
+# Fixed tops of color scales. Far from the training path, ratios grow without bound in
+# failed runs; the scale stops at 1.5, as in the grid maps of autonomous_esn.py.
+COLOR_TOPS = {"other_median_training_path_ratio": 1.5}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -150,6 +154,8 @@ def plot_sweep(rows: list[dict[str, Any]], sweep: dict[str, list[Any]], title: s
         values = np.array([r[metric] for r in rows], dtype=float) * factor
         finite = values[np.isfinite(values)]
         top = float(finite.max()) if finite.size else 1.0
+        if metric in COLOR_TOPS:
+            top = COLOR_TOPS[metric]  # larger values take the darkest color; the cells print them
         # One color scale per metric, shared by its panels.
         norm = LogNorm(vmin=max(float(finite.min()), 1e-3), vmax=top) if log and finite.size else Normalize(0.0, top)
         if metric == "failures":
