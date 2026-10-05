@@ -56,7 +56,6 @@ from PyQt6.QtGui import QCloseEvent, QColor, QKeySequence, QMouseEvent, QShortcu
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -66,6 +65,7 @@ from PyQt6.QtWidgets import (
 from skelarm import (
     Controller,
     PlaybackClock,
+    ShortcutFriendlySpinBox,
     SkelarmCanvas,
     Skeleton,
     SpeedSpinBox,
@@ -359,7 +359,7 @@ class RobotApp(QMainWindow):
         self.speed_spin.valueChanged.connect(self._on_speed_changed)
         controls.addWidget(self.speed_spin)
         controls.addWidget(QLabel("Drag stiffness (N/m)"))
-        self.stiffness_spin = QDoubleSpinBox()
+        self.stiffness_spin = ShortcutFriendlySpinBox()  # leaves Space and the letters to the shortcuts
         self.stiffness_spin.setToolTip("The drag pulls the tip with this force per meter from the tip to the cursor")
         self.stiffness_spin.setRange(0.0, 10000.0)
         self.stiffness_spin.setDecimals(1)

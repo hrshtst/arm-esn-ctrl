@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 from skelarm import LinkProp, Skeleton, Task
 
@@ -288,3 +289,17 @@ def test_playing_runs_the_esn_on_its_own(qapp, demo_config, esn):
     assert app.run is not None
     assert len(app.run.times) - steps_at_start >= 10  # about 200 ms x 2 / 10 ms per step, less timer jitter
     assert not app.is_playing
+
+
+def test_space_plays_while_the_speed_box_has_the_focus(qapp, demo_config, esn):
+    app = make_app(demo_config, esn, demonstrator=False)
+    app.show()
+    app.activateWindow()
+    app.speed_spin.setFocus()
+    qapp.processEvents()
+
+    QTest.keyClick(app.speed_spin, Qt.Key.Key_Space)  # type: ignore[call-overload]  # PyQt6 stubs type QTest methods as bound
+
+    assert app.is_playing
+    app.pause()
+    app.close()

@@ -14,6 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 from skelarm import Skeleton
 
@@ -242,6 +243,21 @@ def test_the_demonstrator_mode_reaches_as_the_demonstrations(qapp, demo_config):
     demonstration = simulate_reaches(config)[0]
     assert app.run is not None and app.run.tracker is None
     assert app.skeleton.q == pytest.approx(demonstration.channel("q")[500], abs=1e-12)  # at 1.0 s
+
+
+@pytest.mark.parametrize("box", ["speed_spin", "stiffness_spin"])
+def test_space_plays_while_a_number_box_has_the_focus(qapp, demo_config, box):
+    app = make_app(demo_config)
+    app.show()
+    app.activateWindow()
+    getattr(app, box).setFocus()
+    qapp.processEvents()
+
+    QTest.keyClick(getattr(app, box), Qt.Key.Key_Space)  # type: ignore[call-overload]  # PyQt6 stubs type QTest methods as bound
+
+    assert app.is_playing
+    app.pause()
+    app.close()
 
 
 @pytest.mark.parametrize(
