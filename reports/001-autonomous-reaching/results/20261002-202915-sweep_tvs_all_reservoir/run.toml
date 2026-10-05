@@ -1,0 +1,6 @@
+config = "configs/esn/sweep_tvs_all_reservoir.toml"
+command = "experiments/sweep_esn.py configs/esn/sweep_tvs_all_reservoir.toml"
+started = 2026-10-02 20:29:15+09:00
+host = "delbosque"
+commit = "38b518a21ebf4d2f0ac3ba04080de76efb1467df"
+uncommitted_changes = false

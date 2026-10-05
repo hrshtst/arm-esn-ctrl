@@ -1,0 +1,6 @@
+config = "configs/demonstrations/reach_tvs.toml"
+command = "experiments/make_demonstrations.py configs/demonstrations/reach_tvs.toml"
+started = 2026-10-02 19:46:44+09:00
+host = "delbosque"
+commit = "0bd7070ae627c1def00d238228827f4e4d49b7df"
+uncommitted_changes = false
