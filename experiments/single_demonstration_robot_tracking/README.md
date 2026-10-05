@@ -77,3 +77,15 @@ Under `results/single_demonstration_robot_tracking/` in the storage:
 | `20261005-231156-push_backward_multi_demo_settings` | `push_backward_multi_demo_settings.toml` |
 | `20261005-231204-block_tuned` | `block_tuned.toml` |
 | `20261005-231213-block_multi_demo_settings` | `block_multi_demo_settings.toml` |
+| `20261005-234328-nominal_tuned_pd_gains` | `nominal_tuned_pd_gains.toml` |
+| `20261005-234338-nominal_multi_demo_settings_pd_gains` | `nominal_multi_demo_settings_pd_gains.toml` |
+| `20261005-234328-offsets_tuned_pd_gains` | `offsets_tuned_pd_gains.toml` |
+| `20261005-234328-offsets_multi_demo_settings_pd_gains` | `offsets_multi_demo_settings_pd_gains.toml` |
+| `20261005-234346-push_across_tuned_pd_gains` | `push_across_tuned_pd_gains.toml` |
+| `20261005-234356-push_across_multi_demo_settings_pd_gains` | `push_across_multi_demo_settings_pd_gains.toml` |
+| `20261005-234405-push_forward_tuned_pd_gains` | `push_forward_tuned_pd_gains.toml` |
+| `20261005-234415-push_forward_multi_demo_settings_pd_gains` | `push_forward_multi_demo_settings_pd_gains.toml` |
+| `20261005-234424-push_backward_tuned_pd_gains` | `push_backward_tuned_pd_gains.toml` |
+| `20261005-234434-push_backward_multi_demo_settings_pd_gains` | `push_backward_multi_demo_settings_pd_gains.toml` |
+| `20261005-234443-block_tuned_pd_gains` | `block_tuned_pd_gains.toml` |
+| `20261005-234453-block_multi_demo_settings_pd_gains` | `block_multi_demo_settings_pd_gains.toml` |
