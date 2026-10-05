@@ -1,0 +1,6 @@
+config = "configs/robot/push_damping.toml"
+command = "experiments/robot_esn.py configs/robot/push_damping.toml"
+started = 2026-10-05 16:07:39+09:00
+host = "delbosque"
+commit = "88c731b6cdbb8d7f1971cf48d6e74f85cfcc05d4"
+uncommitted_changes = false

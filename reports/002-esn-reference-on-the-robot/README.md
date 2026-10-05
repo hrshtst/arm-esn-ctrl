@@ -18,6 +18,10 @@ and start postures 3° and 10° away from the demonstrated ones.
 - **Gains:** with computed torque, any of the natural frequencies tried
   (5–40 rad/s) works without disturbances. With joint PD, the ESN needs higher
   gains than the replay to hold at the target.
+- **Damping:** with an underdamped tracker, the replay rings around the target
+  after a disturbance but always settles. The ESN rings longer, and at a damping
+  ratio of 0.1 it no longer settles after a block, ending 9–15 cm from the target
+  on average.
 
 ## 1. Question
 
@@ -44,10 +48,24 @@ reference is updated every 10 ms, the ESN's period:
    - *computed torque*, which cancels the arm's dynamics using an exact model;
    - *joint PD*, which does not.
 
-The gains come from one natural frequency ω of the tracking error, critically
-damped: kp = ω² and kd = 2ω for computed torque, scaled by each joint's inertia
-(at the posture where the reaches end) for joint PD. Every scenario runs both
-laws at ω = 5, 10, 20, and 40 rad/s.
+The gains come from the natural frequency ω and the damping ratio ζ of each
+joint's tracking error e = q_ref − q, which behaves as a second-order system:
+
+| Law | Tracking error | Gains | Natural frequency and damping ratio |
+| --- | --- | --- | --- |
+| computed torque | ë + kd ė + kp e = 0 (exactly) | kp = ω², kd = 2ζω | ω = √kp, ζ = kd / (2√kp) |
+| joint PD | M_ii ë + kd ė + kp e ≈ 0 | kp = M_ii ω², kd = 2ζ M_ii ω | ω = √(kp / M_ii), ζ = kd / (2√(kp M_ii)) |
+
+M_ii is the joint's inertia (the diagonal of the mass matrix) at the posture
+where the reaches end; for joint PD, the relation is only approximate, since the
+inertia changes with the posture and couples the joints. At ζ = 1, the error is
+**critically damped**: it returns as fast as it can without overshooting. Below 1,
+it oscillates at ω√(1 − ζ²) as it decays; after a step, it overshoots by 16% at
+ζ = 0.5, 37% at ζ = 0.3, and 73% at ζ = 0.1.
+
+Every scenario runs both laws at ω = 5, 10, 20, and 40 rad/s, critically damped.
+The nominal, push, and block scenarios run again at ω = 10 rad/s with ζ = 1, 0.5,
+0.3, and 0.1 (Section 3.6).
 
 ### Three arms
 
@@ -93,6 +111,11 @@ it until arrival, the joint error, the arrival delay, and whether the hand
 
 - **peak reference joint speed**: a jump of the reference shows as a high speed;
 - **peak hand speed**;
+- **settling time** (damping runs): from when the hand stays within the goal
+  radius until the end of the 5 s run; a run that ends outside has not
+  **settled**. Unlike "arrive and hold", which fails at the first exit from the
+  goal, it lets the hand ring through the goal before staying;
+- **final distance** to the target at the end of the run (damping runs);
 - over an **effort window**: the peak joint torque, the integral of the squared
   joint torques (∫τ²), and the peak disturbance force. The window starts with
   the disturbance and lasts 1 s: 0.4–1.4 s for the push, 0.3–1.3 s for the
@@ -112,12 +135,15 @@ there to rerun.
 | [`20261005-120459-block`](results/20261005-120459-block) | `uv run python experiments/robot_esn.py configs/robot/block.toml` |
 | [`20261005-120501-offset_3deg`](results/20261005-120501-offset_3deg) | `uv run python experiments/robot_esn.py configs/robot/offset_3deg.toml` |
 | [`20261005-120503-offset_10deg`](results/20261005-120503-offset_10deg) | `uv run python experiments/robot_esn.py configs/robot/offset_10deg.toml` |
+| [`20261005-160737-nominal_damping`](results/20261005-160737-nominal_damping) | `uv run python experiments/robot_esn.py configs/robot/nominal_damping.toml` |
+| [`20261005-160739-push_damping`](results/20261005-160739-push_damping) | `uv run python experiments/robot_esn.py configs/robot/push_damping.toml` |
+| [`20261005-160741-block_damping`](results/20261005-160741-block_damping) | `uv run python experiments/robot_esn.py configs/robot/block_damping.toml` |
 | [`summary`](results/summary) | `uv run python reports/002-esn-reference-on-the-robot/make_figures.py --animations` |
 
-All five runs are from commit `2d5b567` (recorded in each `run.toml`) and are
-deterministic. Each run directory holds its configuration, its run record, and its
+The first five runs are from commit `2d5b567` and the damping runs from
+`88c731b` (recorded in each `run.toml`); all are deterministic. Each run directory holds its configuration, its run record, and its
 per-run metrics (`metrics.csv`). [`make_figures.py`](make_figures.py) draws the
-summary figure and prints the tables of Section 3.1 from those metrics. With
+summary figures and prints the tables of Sections 3.1 and 3.6 from those metrics. With
 `--animations`, it exports the animations of skelarm's player from the run logs
 under the storage root; the logs are not kept in Git.
 
@@ -249,6 +275,59 @@ force, so compare the arrows only within an animation.
   of the replay's and the demonstrator's. Every run still arrives and ends within
   7 mm of the target.
 
+### 3.6 Damping: an underdamped tracker
+
+![Settling against the damping ratio](results/summary/damping.png)
+
+**Figure 6.** The nominal, push, and block scenarios at ω = 10 rad/s as the
+damping ratio ζ falls (to the right). Rows: the runs that arrive and hold, the
+runs that have settled by the end of the 5 s run, and their settling time. Blue
+circles: ESN; orange squares: replay; solid: computed torque; dashed: joint PD.
+
+Computed torque, ω = 10 rad/s (ESN / replay):
+
+| ζ | Hold, nominal (%) | Hold, push (%) | Hold, block (%) | Settled, block (%) | Final distance, block (mm) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 100 / 100 | 100 / 100 | 25 / 100 | 100 / 100 | 1.5 / 0.0 |
+| 0.5 | 100 / 100 | 50 / 100 | 12 / 0 | 100 / 100 | 1.5 / 0.0 |
+| 0.3 | 100 / 100 | 0 / 88 | 38 / 0 | 100 / 100 | 1.6 / 0.0 |
+| 0.1 | 88 / 100 | 0 / 12 | 0 / 0 | 0 / 100 | 89.1 / 4.2 |
+
+Joint PD, ω = 10 rad/s (ESN / replay):
+
+| ζ | Hold, nominal (%) | Hold, push (%) | Hold, block (%) | Settled, block (%) | Final distance, block (mm) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 38 / 100 | 38 / 100 | 12 / 100 | 100 / 100 | 1.7 / 0.0 |
+| 0.5 | 0 / 100 | 12 / 100 | 0 / 12 | 100 / 100 | 8.1 / 0.0 |
+| 0.3 | 0 / 88 | 0 / 75 | 12 / 0 | 62 / 100 | 16.9 / 0.0 |
+| 0.1 | 0 / 25 | 0 / 12 | 0 / 0 | 0 / 100 | 149.0 / 6.3 |
+
+![Block timeline at lower damping ratios](results/20261005-160741-block_damping/timeline.png)
+
+**Figure 7.** The block from demonstration 0's start at ω = 10 rad/s, ζ = 1 to 0.1
+(left to right), over the whole 5 s run.
+
+| ESN | replay |
+| :---: | :---: |
+| ![ESN under a block, joint PD, damping ratio 0.3](results/summary/block_damping_pd_z0.3_esn_00.gif) | ![Replay under a block, joint PD, damping ratio 0.3](results/summary/block_damping_pd_z0.3_replay_00.gif) |
+
+**Animation 3.** The block from the same start, joint PD at ω = 10 rad/s and
+ζ = 0.3, in real time.
+
+- **The replay oscillates, and then settles.** With less damping, the replayed
+  arm overshoots the target and rings around it, so it fails to hold more often:
+  after the block from ζ = 0.5 on, and even without a disturbance at ζ = 0.1 with
+  joint PD (25% hold). But its reference holds still at the target, so the
+  ringing decays: all 192 replayed runs settle within the 5 s, after the block in
+  1.3–4.1 s on average (4.8 s at worst), and end within 12 mm of the target. The largest error, the reference 23° ahead of
+  the arm at the block's release, rings the most (Figure 7).
+- **The ESN oscillates more, and stops settling.** At every damping ratio, the
+  ESN's runs settle later than the replay's. Fed the ringing arm's posture, the
+  ESN moves its reference with it, so the oscillation is not damped by a fixed
+  goal. At ζ = 0.1, no ESN run settles after the block: they end 89 mm (computed
+  torque) and 149 mm (joint PD) from the target on average, still oscillating.
+  With joint PD at ζ = 0.5, the ESN holds in at most 1 of 8 runs in any scenario.
+
 ## 4. Observations
 
 - **The ESN's reference follows the measured state.** That is its strength and
@@ -266,6 +345,10 @@ force, so compare the arrows only within an animation.
     does not hold in general. With joint PD, the ESN needs higher gains than the
     replay, because it amplifies the arm's overshoot instead of correcting it.
     After a block, it fails to settle at every gain.
+- **An underdamped tracker exposes the same weakness.** Its ringing decays when
+  the reference holds still, as the replay's does at the target, but the ESN
+  turns it into a lasting oscillation by following the measured state. The ESN
+  needs a well-damped tracker more than the replay does.
 - **Every failure is a failure to hold, not to arrive.** Every run of every arm
   arrives. The ESN's failing runs leave the 2 cm goal radius while oscillating,
   and end within 7 mm of the target.
@@ -280,6 +363,8 @@ force, so compare the arrows only within an animation.
     and one block stiffness. The spring yields 13–20 mm at ω = 40 rad/s.
   - **One ESN, one seed, in simulation.** Computed torque used the exact model of
     the arm.
+  - **The damping comparison** used one natural frequency (10 rad/s) and the
+    5 s runs, so "settled" means settled within those 5 s.
 
 ## 5. Next steps
 

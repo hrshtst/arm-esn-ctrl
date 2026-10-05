@@ -8,8 +8,11 @@
 
 The summary compares the three arms (the ESN, the replayed demonstration, and the
 demonstrator) across the five scenarios, at one representative gain of each
-tracking law. It reads the ``metrics.csv`` of each run under ``results/``, writes
-``results/summary/summary.png``, and prints the tables of the report.
+tracking law. The damping comparison follows the ESN and the replay as the
+tracker's damping ratio falls, in the nominal, push, and block scenarios. Both
+read the ``metrics.csv`` of the runs under ``results/``, write
+``results/summary/summary.png`` and ``results/summary/damping.png``, and print the
+tables of the report.
 
 With ``--animations``, it also exports animated GIFs of a few runs with skelarm's
 player. Their logs are not kept in Git, so this reads them from the runs under
@@ -53,9 +56,24 @@ METRICS = [  # column, title, factor to the display unit, log scale
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
-# The animations: (scenario, arm, start index) at computed torque, omega = 10 rad/s.
-ANIMATIONS = [("block", "esn", 0), ("block", "replay", 0), ("block", "demonstrator", 0)]
-ANIMATIONS += [("offset 10°", "esn", 0), ("offset 10°", "replay", 0)]
+# The damping comparison: one natural frequency, and damping ratios from critical down.
+DAMPING_SCENARIOS = {  # label: run directory
+    "nominal": "20261005-160737-nominal_damping",
+    "push": "20261005-160739-push_damping",
+    "block": "20261005-160741-block_damping",
+}
+DAMPINGS = [1.0, 0.5, 0.3, 0.1]
+LAW_STYLES = {"computed_torque": "-", "pd": "--"}
+# The animations: GIF name, run directory, tracker setting (None for the demonstrator), arm, and start index.
+ANIMATIONS = [
+    ("block_esn_00", SCENARIOS["block"], "computed_torque_w10", "esn", 0),
+    ("block_replay_00", SCENARIOS["block"], "computed_torque_w10", "replay", 0),
+    ("block_demonstrator_00", SCENARIOS["block"], None, "demonstrator", 0),
+    ("offset_10deg_esn_00", SCENARIOS["offset 10°"], "computed_torque_w10", "esn", 0),
+    ("offset_10deg_replay_00", SCENARIOS["offset 10°"], "computed_torque_w10", "replay", 0),
+    ("block_damping_pd_z0.3_esn_00", DAMPING_SCENARIOS["block"], "pd_w10_z0.3", "esn", 0),
+    ("block_damping_pd_z0.3_replay_00", DAMPING_SCENARIOS["block"], "pd_w10_z0.3", "replay", 0),
+]
 ANIMATION_FPS = 20.0  # a whole number of milliseconds per frame, so GIFs play in real time
 
 
@@ -73,7 +91,16 @@ def main() -> None:
     }
     plot_summary(means).savefig(SUMMARY / "summary.png", dpi=150)
     print_tables(means)
-    print(f"Wrote {SUMMARY / 'summary.png'}")
+    stats = {
+        (scenario, law, damping, arm): damping_stats(scenario, law, damping, arm)
+        for scenario in DAMPING_SCENARIOS
+        for law in LAW_NAMES
+        for damping in DAMPINGS
+        for arm in ("esn", "replay")
+    }
+    plot_damping(stats).savefig(SUMMARY / "damping.png", dpi=150)
+    print_damping_tables(stats)
+    print(f"Wrote {SUMMARY / 'summary.png'} and {SUMMARY / 'damping.png'}")
     if args.animations:
         export_animations()
 
@@ -147,19 +174,104 @@ def print_tables(means: dict[tuple[str, str, float, str], dict[str, float]]) -> 
             print(f"| {scenario} | {starts} | " + " | ".join(cells) + " |")
 
 
+def damping_stats(scenario: str, law: str, damping: float, arm: str) -> dict[str, float]:
+    """How the runs of one arm settle at one damping ratio, over the start postures.
+
+    The share that arrives and holds, the share that has settled by the end of the
+    run (it stays within the goal radius from some time on), the mean settling
+    time of those, and the mean final distance to the target.
+    """
+    with (RESULTS / DAMPING_SCENARIOS[scenario] / "metrics.csv").open(newline="") as f:
+        rows = [r for r in csv.DictReader(f) if r["arm"] == arm and r["law"] == law and float(r["damping"]) == damping]
+    settling = np.array([float(r["settling_time_s"]) for r in rows])
+    settled = np.isfinite(settling)
+    return {
+        "hold": 100.0 * np.mean([r["success"] == "True" for r in rows]),
+        "settled": 100.0 * float(np.mean(settled)),
+        "settling_time": float(settling[settled].mean()) if settled.any() else float("nan"),
+        "final_distance": 1000.0 * float(np.mean([float(r["final_distance_m"]) for r in rows])),
+    }
+
+
+def plot_damping(stats: dict[tuple[str, str, float, str], dict[str, float]]) -> Figure:
+    """One column per scenario, one row per measure of settling, against the damping ratio (falling to the right)."""
+    measures = [
+        ("hold", "Arrive and hold (% of start postures)"),
+        ("settled", "Settled by the end of the run\n(% of start postures)"),
+        ("settling_time", "Settling time of the runs that settle (s)"),
+    ]
+    fig = Figure(figsize=(13, 9.5), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(
+        "Lowering the tracker's damping ratio at ω = 10 rad/s: means over the 8 start postures", color="#0b0b0b"
+    )
+    axes = fig.subplots(len(measures), len(DAMPING_SCENARIOS), squeeze=False)
+    for (measure, title), row in zip(measures, axes, strict=True):
+        for scenario, ax in zip(DAMPING_SCENARIOS, row, strict=True):
+            ax.set_facecolor(SURFACE_COLOR)
+            ax.grid(color=GRID_COLOR, linewidth=0.8)
+            ax.tick_params(colors=TEXT_COLOR, labelcolor=TEXT_COLOR)
+            for spine in ax.spines.values():
+                spine.set_color(GRID_COLOR)
+            for arm in ("esn", "replay"):
+                for law in LAW_NAMES:
+                    values = [stats[(scenario, law, damping, arm)][measure] for damping in DAMPINGS]
+                    ax.plot(
+                        DAMPINGS,
+                        values,
+                        linestyle=LAW_STYLES[law],
+                        marker=ARM_MARKERS[arm],
+                        markersize=6,
+                        linewidth=1.8,
+                        color=ARM_COLORS[arm],
+                        label=f"{ARM_LABELS[arm]}, {LAW_NAMES[law]}",
+                    )
+            ax.set_xscale("log")
+            ax.set_xticks(DAMPINGS, [f"{damping:g}" for damping in DAMPINGS])
+            ax.minorticks_off()
+            ax.set_xlim(1.25, 0.08)  # less damping to the right
+            if measure != "settling_time":
+                ax.set_ylim(-5, 105)
+            ax.set_title(f"{scenario}: {title}", color=TEXT_COLOR, fontsize=10)
+            ax.set_xlabel("damping ratio ζ", color=TEXT_COLOR, fontsize=9)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", ncol=4, frameon=False, labelcolor=TEXT_COLOR)
+    return fig
+
+
+def print_damping_tables(stats: dict[tuple[str, str, float, str], dict[str, float]]) -> None:
+    """Print one Markdown table per tracking law: each cell gives the ESN / replay."""
+    for law in LAW_NAMES:
+        print(f"\n{LAW_NAMES[law]}, ω = 10 rad/s (ESN / replay)\n")
+        columns = ["Hold, nominal (%)", "Hold, push (%)", "Hold, block (%)", "Settled, block (%)"]
+        print("| ζ | " + " | ".join(columns) + " | Final distance, block (mm) |")
+        print("| ---: | ---: | ---: | ---: | ---: | ---: |")
+        for damping in DAMPINGS:
+            cells = [
+                stats[("nominal", law, damping, "esn")]["hold"],
+                stats[("nominal", law, damping, "replay")]["hold"],
+                stats[("push", law, damping, "esn")]["hold"],
+                stats[("push", law, damping, "replay")]["hold"],
+                stats[("block", law, damping, "esn")]["hold"],
+                stats[("block", law, damping, "replay")]["hold"],
+                stats[("block", law, damping, "esn")]["settled"],
+                stats[("block", law, damping, "replay")]["settled"],
+            ]
+            pairs = [f"{cells[i]:.0f} / {cells[i + 1]:.0f}" for i in range(0, len(cells), 2)]
+            distance = [stats[("block", law, damping, arm)]["final_distance"] for arm in ("esn", "replay")]
+            print(f"| {damping:g} | " + " | ".join(pairs) + f" | {distance[0]:.1f} / {distance[1]:.1f} |")
+
+
 def export_animations() -> None:
     """Export GIFs of a few runs with skelarm's player, from the logs under the storage root."""
     from arm_esn_ctrl.storage import REPO_ROOT, storage_root
 
     player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
-    for scenario, arm, start in ANIMATIONS:
-        run = storage_root() / "results" / SCENARIOS[scenario]
+    for name, run_name, setting, arm, start in ANIMATIONS:
+        run = storage_root() / "results" / run_name
         log = (
-            run / f"{arm}_{start:02d}.sklog.npz"
-            if arm == "demonstrator"
-            else run / "computed_torque_w10" / f"{arm}_{start:02d}.sklog.npz"
+            run / f"{arm}_{start:02d}.sklog.npz" if setting is None else run / setting / f"{arm}_{start:02d}.sklog.npz"
         )
-        gif = SUMMARY / f"{SCENARIOS[scenario].split('-', 2)[2]}_{arm}_{start:02d}.gif"
+        gif = SUMMARY / f"{name}.gif"
         subprocess.run(
             [sys.executable, str(player), str(log), "--export", str(gif), "--fps", f"{ANIMATION_FPS:g}"],
             check=True,

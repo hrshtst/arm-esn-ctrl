@@ -1,0 +1,38 @@
+# Stage 2: how the tracker's damping ratio changes the recovery from a push.
+#
+#   uv run python experiments/robot_esn.py configs/robot/push_damping.toml
+#
+# The same as push.toml, but at one natural frequency, 10 rad/s, with the
+# damping ratio lowered from critical (1) to 0.1. Joint PD at 10 rad/s holds the
+# replay at the target every time when critically damped (see push.toml).
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstrations it was trained on (that run's
+# [demonstrations]) are the ones the time-indexed baseline replays. This one is
+# the best of Stage 1: all eight TVS demonstrations, 600 neurons, spectral radius
+# 1.3, leak rate 0.05, input scaling 0.1, ridge 1e-6, warm-up 0.25 s.
+model = "results/20261002-213015-autonomous_tvs_all_distances/esn.toml"
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["computed_torque", "pd"]
+# One natural frequency of the tracking error (rad/s) and several damping ratios:
+# 1 is critically damped, and smaller ratios make the error oscillate as it decays.
+# Computed torque: kp = omega^2, kd = 2 zeta omega. Joint PD: the same, scaled by
+# each joint's inertia at the posture where the reaches end.
+omegas = [10.0]
+dampings = [1.0, 0.5, 0.3, 0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+
+[evaluation]
+duration = 5.0         # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start postures only
+effort_window = [0.4, 1.4]  # torque, effort, and force are measured from the push for 1 s (s)
+
+[disturbance]
+type = "push"
+force = 5.0      # N, perpendicular to the reach (start hand position to target), counterclockwise
+onset = 0.4      # task time when the push starts (s)
+duration = 0.1   # s
