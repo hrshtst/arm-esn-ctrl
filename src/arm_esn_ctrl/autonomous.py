@@ -64,13 +64,16 @@ class Setup:
 
 @dataclass(frozen=True)
 class Run:
-    """The ESN's autonomous run from one start posture, and the demonstrator's reach from it."""
+    """A run from one start posture, sampled at the ESN's period, and the demonstrator's reach from it.
+
+    In Stage 1, the run is the ESN's autonomous trajectory; in Stage 2, the robot arm's.
+    """
 
     start: Start
-    q_esn: NDArray[np.float64]
-    q_ref: NDArray[np.float64]
-    hand_esn: NDArray[np.float64]
-    hand_ref: NDArray[np.float64]
+    q: NDArray[np.float64]  # joint angles of the run
+    q_ref: NDArray[np.float64]  # the demonstrator's joint angles
+    hand: NDArray[np.float64]  # hand positions of the run
+    hand_ref: NDArray[np.float64]  # the demonstrator's hand positions
 
 
 def load_setup(config: dict[str, Any]) -> Setup:
@@ -152,7 +155,7 @@ def run_autonomously(esn: ReachingEsn, setup: Setup) -> list[Run]:
 
 
 def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
-    """Measure an autonomous run's reach against the demonstrator's, and its hold at the target.
+    """Measure a run's reach against the demonstrator's, and its hold at the target.
 
     The reach phase lasts until the arrival time t_a, when the hand first comes
     within the goal radius of the target; the hold window is [t_a, t_a + T_h].
@@ -162,7 +165,7 @@ def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
     dict[str, float | bool]
         Reach, compared with the demonstrator's reach from the same start posture:
 
-        - ``first_step_m``: how far the hand moves in the ESN's first step; a jump
+        - ``first_step_m``: how far the hand moves in the run's first step; a jump
           shows that the ESN snaps back to a trajectory it learned.
         - ``reach_path_distance_m``: how far the hand path strays from the
           demonstrator's until t_a (the whole run if the hand never arrives),
@@ -176,18 +179,18 @@ def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
         ``left_goal``, ``hold_error_m``, ``hold_observed_s``, and ``success``
         (see :func:`arm_esn_ctrl.metrics.hold_metrics`).
     """
-    hold = hold_metrics(setup.times, run.hand_esn, setup.target, setup.radius, setup.hold)
-    arrival = arrival_index(run.hand_esn, setup.target, setup.radius)
+    hold = hold_metrics(setup.times, run.hand, setup.target, setup.radius, setup.hold)
+    arrival = arrival_index(run.hand, setup.target, setup.radius)
     arrival_ref = arrival_index(run.hand_ref, setup.target, setup.radius)
-    reach_end = len(run.hand_esn) if arrival is None else arrival + 1
+    reach_end = len(run.hand) if arrival is None else arrival + 1
     reach_end_ref = len(run.q_ref) if arrival_ref is None else arrival_ref + 1
     delay = float("nan")
     if arrival is not None and arrival_ref is not None:
         delay = float(setup.times[arrival] - setup.times[arrival_ref])
     return {
-        "first_step_m": float(np.linalg.norm(run.hand_esn[1] - run.hand_esn[0])),
-        "reach_path_distance_m": path_distance(run.hand_esn[:reach_end], run.hand_ref),
-        "reach_joint_error_deg": rms_degrees(run.q_esn[:reach_end_ref] - run.q_ref[:reach_end_ref]),
+        "first_step_m": float(np.linalg.norm(run.hand[1] - run.hand[0])),
+        "reach_path_distance_m": path_distance(run.hand[:reach_end], run.hand_ref),
+        "reach_joint_error_deg": rms_degrees(run.q[:reach_end_ref] - run.q_ref[:reach_end_ref]),
         "arrival_delay_s": delay,
     } | hold
 

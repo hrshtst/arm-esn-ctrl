@@ -76,7 +76,7 @@ def main() -> None:
     runs = run_autonomously(esn, setup)
     rows = []
     for i, (run, demonstrator_log) in enumerate(zip(runs, setup.demonstrator_logs, strict=True)):
-        joint_trajectory_log(setup.skeleton, setup.times, run.q_esn, setup.task, producer="autonomous ESN").save(
+        joint_trajectory_log(setup.skeleton, setup.times, run.q, setup.task, producer="autonomous ESN").save(
             run_dir / f"esn_{i:02d}.sklog.npz"
         )
         demonstrator_log.save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
@@ -169,15 +169,15 @@ def plot_runs(
         esn_label = "ESN, run autonomously from each start" if i == 0 else None
         ref_label = "demonstrator, reaching from each start" if i == 0 else None
         ax_hand.plot(run.hand_ref[:, 0], run.hand_ref[:, 1], label=ref_label, **ref_line)
-        ax_hand.plot(run.hand_esn[:, 0], run.hand_esn[:, 1], label=esn_label, **esn_line)
+        ax_hand.plot(run.hand[:, 0], run.hand[:, 1], label=esn_label, **esn_line)
         face = ESN_COLOR if run.start.demonstrated else SURFACE_COLOR
-        ax_hand.plot(*run.hand_esn[0], marker="o", markersize=6, color=ESN_COLOR, markerfacecolor=face)
+        ax_hand.plot(*run.hand[0], marker="o", markersize=6, color=ESN_COLOR, markerfacecolor=face)
         t_ref = times[: len(run.hand_ref)]
         ax_speed.plot(t_ref, hand_speed(t_ref, run.hand_ref), **ref_line)
-        ax_speed.plot(times, hand_speed(times, run.hand_esn), **esn_line)
+        ax_speed.plot(times, hand_speed(times, run.hand), **esn_line)
         for ax, j in ((ax_q1, 0), (ax_q2, 1)):
             ax.plot(times[: len(run.q_ref)], np.degrees(run.q_ref[:, j]), **ref_line)
-            ax.plot(times, np.degrees(run.q_esn[:, j]), **esn_line)
+            ax.plot(times, np.degrees(run.q[:, j]), **esn_line)
 
     ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
     ax_hand.set(title="Hand paths", xlabel="x (m)", ylabel="y (m)", aspect="equal")
@@ -185,7 +185,7 @@ def plot_runs(
     fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
     # A jump in the ESN's first step would squash the reach speeds, so the axis stops above them.
     reach_speed = max(hand_speed(times[: len(run.hand_ref)], run.hand_ref).max() for run in runs)
-    first_step_speed = max(np.linalg.norm(run.hand_esn[1] - run.hand_esn[0]) / times[1] for run in runs)
+    first_step_speed = max(np.linalg.norm(run.hand[1] - run.hand[0]) / times[1] for run in runs)
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)", ylim=(0.0, 1.6 * reach_speed))
     if first_step_speed > 1.6 * reach_speed:
         ax_speed.annotate(

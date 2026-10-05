@@ -113,13 +113,13 @@ def test_a_run_identical_to_the_demonstrator_has_no_reach_error_and_holds():
 
 def test_a_run_that_never_arrives_fails_and_is_measured_over_the_whole_run():
     q_ref = joint_reach([18.2, 119.9], [48.6, 97.2])
-    q_esn = joint_reach([18.2, 119.9], [30.0, 110.0])  # stops short of the target
+    q_run = joint_reach([18.2, 119.9], [30.0, 110.0])  # stops short of the target
     setup = reach_setup(q_ref)
-    hand_esn = endpoint_positions(setup.skeleton, q_esn)
-    run = Run(setup.starts[0], q_esn, q_ref, hand_esn, setup.hand_refs[0])
+    hand_run = endpoint_positions(setup.skeleton, q_run)
+    run = Run(setup.starts[0], q_run, q_ref, hand_run, setup.hand_refs[0])
 
     m = run_metrics(run, setup)
 
     assert not m["arrived"] and not m["success"]
     assert np.isnan(m["arrival_delay_s"])
-    assert m["reach_path_distance_m"] == pytest.approx(path_distance(hand_esn, setup.hand_refs[0]))
+    assert m["reach_path_distance_m"] == pytest.approx(path_distance(hand_run, setup.hand_refs[0]))
