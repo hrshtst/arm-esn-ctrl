@@ -296,7 +296,10 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, title: str) -> Figure:
         else:
             finite = data[np.isfinite(data)]
             norm: Normalize | None
-            if log:
+            if finite.size and finite.max() <= 1.01 * finite.min():  # all but equal: say so, rather than map noise
+                norm = Normalize(vmin=0.5 * finite.min(), vmax=1.5 * finite.max())
+                label = f"{label}\nall {finite.mean():.3g}"
+            elif log:
                 norm = LogNorm(vmin=max(finite.min(), 1e-3), vmax=max(finite.max(), 1e-2)) if finite.size else None
             else:
                 norm = Normalize(vmin=0.0, vmax=_MAX_RATIO_SHOWN)
