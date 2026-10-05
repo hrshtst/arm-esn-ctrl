@@ -262,10 +262,17 @@ def test_the_command_line_rejects_contradictions(arguments, complaint, capsys):
     assert complaint in capsys.readouterr().err
 
 
+def test_ct_is_short_for_computed_torque():
+    args = build_parser().parse_args([str(CONFIG), "--law", "ct", "--omega", "10"])
+
+    assert args.law == "computed_torque"
+
+
 def test_the_command_line_accepts_each_mode():
     parser = build_parser()
     for arguments in (
         ["--law", "computed_torque", "--omega", "10", "--model", "esn.toml"],
+        ["--law", "ct", "--omega", "10", "--model", "esn.toml"],
         ["--law", "pd", "--omega", "20"],
         ["--law", "pd", "--omega", "20", "--pose", "29.4,88.2"],
         ["--demonstrator", "--pose", "29.4,88.2"],

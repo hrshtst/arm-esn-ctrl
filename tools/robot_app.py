@@ -91,6 +91,7 @@ _MAX_STEPS_PER_TICK = 200  # simulation steps per clock tick at most, so a slow 
 _DEFAULT_PERIOD = 0.01  # period of the replayed reference without a model (s): the ESN period of Stage 2
 _DEFAULT_ACCELERATION_FILTER = 0.02  # as in configs/robot/*.toml (s)
 _DEFAULT_STIFFNESS = 20.0  # N/m for the mouse drag, as in skelarm's controlled simulators
+_LAW_ALIASES = {"ct": "computed_torque"}  # short names of the tracking laws on the command line
 _GHOST_WIDTH_PX = 9.0
 _INITIAL_COLOR = QColor(82, 81, 78, 60)
 _MODE_COLORS = {  # the reference's color in each mode, as in experiments/robot_esn.py
@@ -695,7 +696,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="demonstration configuration: the robot, the task, and the demonstrator (skelarm's scenario tables)",
     )
-    parser.add_argument("--law", choices=sorted(LAWS), help="tracking law (required unless --demonstrator)")
+    parser.add_argument(
+        "--law",
+        type=lambda name: _LAW_ALIASES.get(name, name),
+        choices=sorted(LAWS),
+        help="tracking law, or ct for computed_torque (required unless --demonstrator)",
+    )
     parser.add_argument(
         "--omega", type=float, help="natural frequency of the tracking error (rad/s; required unless --demonstrator)"
     )

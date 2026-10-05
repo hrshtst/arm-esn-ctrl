@@ -553,8 +553,9 @@ uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --law pd 
 uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --demonstrator
 ```
 
-`$STORAGE` stands for the storage root. The reference generator, the tracking law,
-and ω are fixed at launch and shown in the side panel. Before Play, dragging the tip
+`$STORAGE` stands for the storage root, and `--law ct` is short for
+`--law computed_torque`. The reference generator, the tracking law, and ω are fixed
+at launch and shown in the side panel. Before Play, dragging the tip
 poses the arm. During a run, running or paused, dragging pulls the tip toward the
 cursor with a spring force (the drag stiffness in the panel), which acts on top of
 the controller's torque. External forces never act during the ESN's warm-up, which
