@@ -43,6 +43,31 @@ space, the ESN's reach stays from the demonstrated path with how far the
 demonstrator's own reach from the same start does: near 0, the ESN returns onto
 the demonstrated path; near 1, it reaches as the demonstrator would from there.
 
+## Phase 2: reservoir states by principal components
+
+`experiments/reservoir_states.py` loads a Phase 1 ESN and records its reservoir
+state at every step, while the demonstration is fed in (teacher forcing) and in the
+autonomous runs from the same grid of start postures. The principal components of
+the demonstration's states are the axes every state is projected onto, and every
+run's states are compared with the demonstration's over time, in the full state
+space: how far they are at the same time, and whether they keep the
+demonstration's timing (the phase of the nearest demonstration state).
+
+| Configuration | ESN |
+| --- | --- |
+| `states_single_demo_settings.toml` | of `grid_single_demo_settings.toml` |
+| `states_multi_demo_settings.toml` | of `grid_multi_demo_settings.toml` |
+
+```bash
+uv run python experiments/reservoir_states.py \
+    experiments/single_demonstration_autonomous_reaching/states_multi_demo_settings.toml
+```
+
+The run directory receives `states.csv` (per start posture: the distance from the
+demonstration's state at the end of the warm-up and later, when the run joins the
+demonstration's states, and its phase lead), `projections.npz` (every state on the
+first principal components), `pca.png`, and `convergence.png`.
+
 ## Runs
 
 Under `results/single_demonstration_autonomous_reaching/` in the storage, both on

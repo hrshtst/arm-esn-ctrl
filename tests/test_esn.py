@@ -134,3 +134,19 @@ def test_a_saved_esn_loads_and_runs_identically(tmp_path):
     assert np.array_equal(loaded.center, esn.center)
     assert np.array_equal(loaded.half_range, esn.half_range)
     assert np.array_equal(loaded.generate(q[0], 200), esn.generate(q[0], 200))
+
+
+def test_the_reservoir_state_is_readable_at_every_step():
+    q = joint_reach()
+    esn = ReachingEsn(CONFIG)
+    esn.fit([q])
+
+    esn.reset()
+    reset = esn.state()
+    esn.step(q[0])
+    first = esn.state()
+    esn.step(q[0])
+
+    assert reset.shape == (CONFIG.n_neurons,) and np.all(reset == 0.0)
+    assert np.linalg.norm(first) > 0.0
+    assert not np.allclose(esn.state(), first)  # a copy: it does not change with later steps

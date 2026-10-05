@@ -161,6 +161,10 @@ class ReachingEsn:
         u = self._normalize(np.asarray(q, dtype=np.float64)[np.newaxis, :])
         return self._denormalize(self.model.predict_online(u))[0]
 
+    def state(self) -> NDArray[np.float64]:
+        """The reservoir's current state, one value per neuron (a copy)."""
+        return np.array(self.model.get_reservoir(0).getState(), dtype=np.float64).ravel()
+
     def save(self, path: str | Path) -> None:
         """Save the trained ESN to ``path``, a TOML file, and the rclib model beside it.
 
