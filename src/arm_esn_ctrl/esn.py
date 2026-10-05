@@ -146,6 +146,21 @@ class ReachingEsn:
             yield self._denormalize(output)[0]
             output = self.model.predict_online(output)
 
+    def reset(self) -> None:
+        """Reset the reservoir, as before every run."""
+        self.model.reset_reservoirs()
+
+    def step(self, q: ArrayLike) -> NDArray[np.float64]:
+        """Drive the ESN one step with the joint angles ``q``, and return the next joint angles it gives.
+
+        On a robot, ``q`` is the measured posture. After :meth:`reset`, the start
+        posture drives the ESN ``warmup_steps`` times for the warm-up, and once more
+        for its first output, as in training; fed its own outputs from then on, the
+        ESN generates its autonomous run (:meth:`generate`).
+        """
+        u = self._normalize(np.asarray(q, dtype=np.float64)[np.newaxis, :])
+        return self._denormalize(self.model.predict_online(u))[0]
+
     def save(self, path: str | Path) -> None:
         """Save the trained ESN to ``path``, a TOML file, and the rclib model beside it.
 

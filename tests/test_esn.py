@@ -105,6 +105,22 @@ def test_stream_yields_what_generate_computes():
     assert streamed[CONFIG.warmup_steps :] == pytest.approx(esn.generate(q[0], n), abs=1e-12)
 
 
+def test_stepping_on_its_own_outputs_generates_the_autonomous_run():
+    q = joint_reach()
+    esn = ReachingEsn(CONFIG)
+    esn.fit([q])
+    n = 150
+
+    esn.reset()
+    for _ in range(CONFIG.warmup_steps):  # the warm-up: the held start posture
+        esn.step(q[0])
+    stepped = [q[0], esn.step(q[0])]  # the start posture's own step gives the first posture
+    for _ in range(n - 1):
+        stepped.append(esn.step(stepped[-1]))
+
+    assert np.array(stepped) == pytest.approx(esn.generate(q[0], n), abs=1e-12)
+
+
 def test_a_saved_esn_loads_and_runs_identically(tmp_path):
     q = joint_reach()
     esn = ReachingEsn(CONFIG)
