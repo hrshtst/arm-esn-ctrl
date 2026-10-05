@@ -113,3 +113,8 @@ the demonstration `results/demonstrations/20261005-185525-reach_tvs_single`:
 | `20261005-190405-grid_multi_demo_settings` | `grid_multi_demo_settings.toml` |
 | `20261005-191929-states_single_demo_settings` | `states_single_demo_settings.toml` |
 | `20261005-191932-states_multi_demo_settings` | `states_multi_demo_settings.toml` |
+| `20261005-210423-sweep_single_demo` | `sweep_single_demo.toml` |
+| `20261005-210421-sweep_single_demo_reservoir` | `sweep_single_demo_reservoir.toml` |
+| `20261005-212407-grid_tuned_settings` | `grid_tuned_settings.toml` |
+| `20261005-204749-warmup_single_demo_settings` | `warmup_single_demo_settings.toml` |
+| `20261005-205009-warmup_multi_demo_settings` | `warmup_multi_demo_settings.toml` |
