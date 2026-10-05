@@ -6,8 +6,8 @@
 # The ESN, the tracker settings, and the start postures are those of nominal.toml,
 # so the two experiments compare directly.
 #
-# 20 N, first proposed, deflects the hand by 16 to 75 cm at omega <= 10 rad/s, more
-# than the 50 cm reach; 5 N deflects the replayed demonstration by 4 to 8 cm there
+# 20 N, first proposed, deflects the hand by 11 to 75 cm at omega <= 10 rad/s, up to more
+# than the 50 cm reach; 5 N deflects the replayed demonstration by 2 to 8 cm there
 # and by 6 mm at omega = 40 rad/s (start 0, probed before this run).
 
 [esn]
