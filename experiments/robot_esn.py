@@ -14,8 +14,9 @@ reach from each start posture:
   time-indexed baseline);
 - ``demonstrator``: the controller that made the demonstrations, on its own.
 
-The ESN and the replay run with every tracking law and natural frequency of the
-tracking error listed in ``[tracker]``. Their runs start with the arm holding its
+The ESN and the replay run with every tracking law, natural frequency of the
+tracking error, and damping ratio listed in ``[tracker]`` (``dampings`` is
+optional; its default, 1, is critically damped). Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table pushes or blocks all three arms alike
 (see :mod:`arm_esn_ctrl.disturbances`); start postures away from the demonstrated
@@ -24,12 +25,14 @@ ones (``start_offsets_deg`` in ``[evaluation]``) make the initial-offset scenari
 Every run is compared with the demonstrator's undisturbed reach from the same
 start posture, and the run directory receives:
 
-- ``<law>_w<omega>/esn_00.sklog.npz``, ``replay_00.sklog.npz``, ...: the arm's runs,
+- ``<law>_w<omega>/esn_00.sklog.npz``, ``replay_00.sklog.npz``, ...: the arm's runs
+  (``<law>_w<omega>_z<damping>`` below critical damping),
   with the reference (``q_ref``), the tracking error (``error``), and the
   disturbance (``ext_force``);
 - ``demonstrator_00.sklog.npz``, ...: the demonstrator's reaches, under the same disturbance;
 - ``metrics.csv``: the metrics of every run (see :func:`arm_metrics`);
-- ``metrics.png``: those metrics against the natural frequency, for each law;
+- ``metrics.png``: those metrics against the natural frequency (or the damping
+  ratio, if that is what varies), for each law;
 - ``paths.png``: the hand paths of every run;
 - ``timeline.png``: the hand's distance to the target and the joint torque over
   time, from the first start posture.
@@ -42,6 +45,7 @@ from __future__ import annotations
 import argparse
 import csv
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -112,48 +116,57 @@ def main() -> None:
             log = simulate_disturbed_reach(demo_config, start.q, evaluation["duration"], disturbance_from(i))
         log.save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
         rows.append(
-            {"law": "", "omega": "", "arm": "demonstrator", "start": i, "origin": start.origin, "replayed": ""}
+            {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
+            | {"replayed": ""}
             | arm_metrics(log, i, setup, esn.config.dt, window)
         )
 
     tracker = config["tracker"]
+    settings = tracker_settings(tracker)
     end_posture = np.mean([q[-1] for q in setup.demos.values()], axis=0)  # where the reaches end
-    for law in tracker["laws"]:
-        for omega in tracker["omegas"]:
-            setting = TrackerConfig(law, float(omega), tracker["acceleration_filter"])
-            gains = tracking_gains(setting, setup.skeleton, end_posture)
-            setting_dir = run_dir / f"{law}_w{omega:g}"
-            setting_dir.mkdir()
-            for i, start in enumerate(setup.starts):
-                replayed = nearest_demonstration(start.q, setup.demos)
-                sources: dict[str, ReferenceSource] = {
-                    "esn": EsnSource(esn),
-                    "replay": ReplaySource(setup.demos[replayed]),
-                }
-                for arm, source in sources.items():
-                    log = track(
-                        posed(setup.skeleton, start.q),
-                        source,
-                        setting,
-                        gains,
-                        period=esn.config.dt,
-                        warmup_steps=esn.config.warmup_steps,
-                        duration=evaluation["duration"],
-                        dt=demo_config["simulator"]["dt"],
-                        enforce_limits=demo_config["simulator"].get("enforce_limits", True),
-                        extra={
-                            "playback": {"task": setup.task},
-                            "tracking": {"reference": arm, "law": law, "omega": float(omega), "start": start.origin},
+    for setting in settings:
+        law, omega = setting.law, setting.omega
+        tracker_config = TrackerConfig(law, omega, tracker["acceleration_filter"], damping=setting.damping)
+        gains = tracking_gains(tracker_config, setup.skeleton, end_posture)
+        setting_dir = run_dir / setting.name
+        setting_dir.mkdir()
+        for i, start in enumerate(setup.starts):
+            replayed = nearest_demonstration(start.q, setup.demos)
+            sources: dict[str, ReferenceSource] = {
+                "esn": EsnSource(esn),
+                "replay": ReplaySource(setup.demos[replayed]),
+            }
+            for arm, source in sources.items():
+                log = track(
+                    posed(setup.skeleton, start.q),
+                    source,
+                    tracker_config,
+                    gains,
+                    period=esn.config.dt,
+                    warmup_steps=esn.config.warmup_steps,
+                    duration=evaluation["duration"],
+                    dt=demo_config["simulator"]["dt"],
+                    enforce_limits=demo_config["simulator"].get("enforce_limits", True),
+                    extra={
+                        "playback": {"task": setup.task},
+                        "tracking": {
+                            "reference": arm,
+                            "law": law,
+                            "omega": omega,
+                            "damping": setting.damping,
+                            "start": start.origin,
                         },
-                        external_force=disturbance_from(i),
-                    )
-                    log.save(setting_dir / f"{arm}_{i:02d}.sklog.npz")
-                    rows.append(
-                        {"law": law, "omega": float(omega), "arm": arm, "start": i, "origin": start.origin}
-                        | {"replayed": replayed if arm == "replay" else ""}
-                        | arm_metrics(log, i, setup, esn.config.dt, window)
-                    )
-            print(f"Ran {law} at omega = {omega:g} rad/s (kp = {np.round(gains[0], 2).tolist()})")
+                    },
+                    external_force=disturbance_from(i),
+                )
+                log.save(setting_dir / f"{arm}_{i:02d}.sklog.npz")
+                rows.append(
+                    {"law": law, "omega": omega, "damping": setting.damping, "arm": arm, "start": i}
+                    | {"origin": start.origin}
+                    | {"replayed": replayed if arm == "replay" else ""}
+                    | arm_metrics(log, i, setup, esn.config.dt, window)
+                )
+        print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
     with (run_dir / "metrics.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
@@ -162,14 +175,54 @@ def main() -> None:
     print_summary(rows, len(setup.starts), window)
 
     title = f"ESN on the robot: {args.config.stem}"
-    laws, omegas = tracker["laws"], tracker["omegas"]
-    plot_metrics(rows, laws, len(setup.starts), window, title).savefig(run_dir / "metrics.png", dpi=150)
-    plot_paths(run_dir, setup, laws, omegas, title).savefig(run_dir / "paths.png", dpi=150)
+    swept = "damping" if len(tracker.get("dampings", [1.0])) > 1 else "omega"
+    plot_metrics(rows, tracker["laws"], len(setup.starts), window, swept, title).savefig(
+        run_dir / "metrics.png", dpi=150
+    )
+    plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
     span = disturbance_span(disturbance)
-    plot_timeline(run_dir, setup, laws, omegas, span, title).savefig(run_dir / "timeline.png", dpi=150)
+    plot_timeline(run_dir, setup, settings, span, title).savefig(run_dir / "timeline.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
-    first = f"{laws[0]}_w{omegas[0]:g}"
-    print(f"Replay with:\n  uv run python third_party/skelarm/tools/player.py {run_dir / first / 'esn_00.sklog.npz'}")
+    first = run_dir / settings[0].name / "esn_00.sklog.npz"
+    print(f"Replay with:\n  uv run python third_party/skelarm/tools/player.py {first}")
+
+
+@dataclass(frozen=True)
+class Setting:
+    """One tracker setting: a tracking law, and the natural frequency and damping ratio of its error."""
+
+    law: str
+    omega: float  # rad/s
+    damping: float  # 1 is critically damped
+
+    @property
+    def name(self) -> str:
+        """Its directory in the run: ``pd_w10``, or ``pd_w10_z0.3`` below critical damping."""
+        return f"{self.law}_w{self.omega:g}" + ("" if self.damping == 1.0 else f"_z{self.damping:g}")
+
+    @property
+    def label(self) -> str:
+        """Its name in titles and messages."""
+        label = f"{self.law.replace('_', ' ')}, ω = {self.omega:g} rad/s"
+        return label + ("" if self.damping == 1.0 else f", ζ = {self.damping:g}")
+
+
+def tracker_settings(tracker: dict[str, Any]) -> list[Setting]:
+    """Every combination of the laws, natural frequencies, and damping ratios of ``[tracker]``, law by law.
+
+    Only one of the natural frequency and the damping ratio may take several values,
+    so that the metrics plot against it.
+    """
+    omegas, dampings = tracker["omegas"], tracker.get("dampings", [1.0])
+    if len(omegas) > 1 and len(dampings) > 1:
+        msg = "[tracker] can sweep the natural frequencies (omegas) or the damping ratios (dampings), not both"
+        raise ValueError(msg)
+    return [
+        Setting(law, float(omega), float(damping))
+        for law in tracker["laws"]
+        for omega in omegas
+        for damping in dampings
+    ]
 
 
 def posed(skeleton: Skeleton, q: NDArray[np.float64]) -> Skeleton:
@@ -190,6 +243,9 @@ def arm_metrics(log: StateLog, i: int, setup: Setup, period: float, window: list
     - ``peak_reference_speed_dps``: the reference's fastest joint speed, which
       shows a jump of the reference (as a jump of a few degrees in one period);
     - ``peak_hand_speed_mps``: the hand's fastest speed, sampled every period;
+    - ``settling_time_s``: the time from which the hand stays within the goal
+      radius until the end of the run (NaN if it ends outside);
+    - ``final_distance_m``: the hand's distance to the target at the end of the run;
 
     and over the effort window (``effort_window`` in ``[evaluation]``):
 
@@ -210,6 +266,13 @@ def arm_metrics(log: StateLog, i: int, setup: Setup, period: float, window: list
     nan = float("nan")
     tau = log.channel("tau")
     force = log.channel("ext_force") if "ext_force" in log.channel_names else np.zeros((len(times), 2))
+    distance = np.linalg.norm(hand - setup.target, axis=1)
+    outside = np.flatnonzero(distance > setup.radius)
+    settling_time = nan
+    if len(outside) == 0:
+        settling_time = float(setup.times[0])
+    elif outside[-1] < len(distance) - 1:
+        settling_time = float(setup.times[outside[-1] + 1])
     reference_speed = nan
     if tracked:
         q_ref = log.channel("q_ref")[task]
@@ -218,6 +281,8 @@ def arm_metrics(log: StateLog, i: int, setup: Setup, period: float, window: list
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
         "peak_reference_speed_dps": reference_speed,
         "peak_hand_speed_mps": float(hand_speed(setup.times, hand).max()),
+        "settling_time_s": settling_time,
+        "final_distance_m": float(distance[-1]),
         "peak_torque_nm": float(np.abs(tau[in_window]).max()),
         "effort_n2m2s": float(np.sum(tau[in_window] ** 2) * np.diff(times).mean()),
         "peak_external_force_n": float(np.linalg.norm(force[in_window], axis=1).max()),
@@ -234,25 +299,30 @@ def disturbance_span(disturbance: dict[str, Any] | None) -> tuple[float, float] 
 
 
 def print_summary(rows: list[dict[str, Any]], n_starts: int, window: list[float]) -> None:
-    """Print the metrics of each arm and tracker setting: means over the start postures."""
+    """Print the metrics of each arm and tracker setting: means over the start postures.
+
+    The settling time is the mean over the runs that settle.
+    """
     print(f"\nMeans over the {n_starts} start postures (torque, effort, force: t = {window[0]:g} to {window[1]:g} s)")
-    print("                        ------- reach -------  hold   tracking  ref.   hand   peak    effort    peak")
-    print(
-        "law              omega arm          error  path  delay  succ.  error     speed  speed  torque  (N2 m2 s) force"
-    )
-    print(
-        "                 (rad/s)            (deg)  (mm)  (s)           (deg)     (dps)  (m/s)  (N m)             (N)"
-    )
-    for key in dict.fromkeys((r["law"], r["omega"], r["arm"]) for r in rows):
-        group = [r for r in rows if (r["law"], r["omega"], r["arm"]) == key]
-        law, omega, arm = key
+    # Columns: reach joint error and path distance, hold successes, settling time, final distance, peak reference
+    # joint speed, peak hand speed, peak torque, effort, and peak disturbance force.
+    names = ["error", "path", "hold", "settle", "final", "ref.", "hand", "torque", "effort", "force"]
+    units = ["(deg)", "(mm)", "", "(s)", "(mm)", "(dps)", "(m/s)", "(N m)", "(N2m2s)", "(N)"]
+    widths = [6, 6, 7, 7, 7, 7, 6, 7, 9, 7]
+    print(f"{'law':<16}{'ω':<6}{'ζ':<5}{'arm':<12}" + "".join(f"{n:>{w}}" for n, w in zip(names, widths, strict=True)))
+    print(f"{'':<16}{'rad/s':<6}{'':<17}" + "".join(f"{u:>{w}}" for u, w in zip(units, widths, strict=True)))
+    keys = ("law", "omega", "damping", "arm")
+    for key in dict.fromkeys(tuple(r[name] for name in keys) for r in rows):
+        group = [r for r in rows if tuple(r[name] for name in keys) == key]
+        law, omega, damping, arm = key
         m = {name: mean_of(group, name) for name in group[0] if isinstance(group[0][name], float)}
+        setting = "-" if law == "" else f"{law.replace('_', ' '):<15} {omega:<5g} {damping:<4g}"
         print(
-            f"{law or '-':<16} {f'{omega:g}' if omega != '' else '-':>5} {arm:<12}"
-            f" {m['reach_joint_error_deg']:5.2f} {1000 * m['reach_path_distance_m']:5.1f} {m['arrival_delay_s']:+5.2f}"
-            f" {sum(r['success'] for r in group):2d}/{n_starts:<3d} {m['tracking_error_deg']:6.3f}"
-            f" {m['peak_reference_speed_dps']:8.0f} {m['peak_hand_speed_mps']:6.2f} {m['peak_torque_nm']:7.1f}"
-            f" {m['effort_n2m2s']:9.1f} {m['peak_external_force_n']:6.1f}"
+            f"{setting:<26} {arm:<12}"
+            f" {m['reach_joint_error_deg']:5.2f} {1000 * m['reach_path_distance_m']:5.1f}"
+            f" {sum(r['success'] for r in group):2d}/{n_starts:<3d} {m['settling_time_s']:6.2f}"
+            f" {1000 * m['final_distance_m']:6.1f} {m['peak_reference_speed_dps']:6.0f} {m['peak_hand_speed_mps']:5.2f}"
+            f" {m['peak_torque_nm']:6.1f} {m['effort_n2m2s']:8.1f} {m['peak_external_force_n']:6.1f}"
         )
 
 
@@ -270,11 +340,13 @@ def style(ax: Axes) -> None:
         spine.set_color(GRID_COLOR)
 
 
-def plot_metrics(rows: list[dict[str, Any]], laws: list[str], n_starts: int, window: list[float], title: str) -> Figure:
-    """Plot each metric's mean over the start postures (and its range) against the natural frequency.
+def plot_metrics(
+    rows: list[dict[str, Any]], laws: list[str], n_starts: int, window: list[float], swept: str, title: str
+) -> Figure:
+    """Plot each metric's mean over the start postures (and its range) against ``swept``: "omega" or "damping".
 
     Each law takes two rows of panels. The demonstrator, which has no gains, is a
-    dashed level.
+    dashed level. The settling time is the mean over the runs that settle.
     """
     effort = f"over {window[0]:g}-{window[1]:g} s"
     metrics = [
@@ -282,13 +354,16 @@ def plot_metrics(rows: list[dict[str, Any]], laws: list[str], n_starts: int, win
         ("reach_path_distance_m", "Path distance from the demonstrator\nduring the reach (m)"),
         ("arrival_delay_s", "Arrival delay (s)"),
         ("success", f"Successes: arrive and hold\n(of {n_starts} start postures)"),
+        ("settling_time_s", "Settling time: in the goal\nfrom then on (s)"),
+        ("final_distance_m", "Final distance to the target (m)"),
         ("peak_reference_speed_dps", "Peak reference joint speed (deg/s)"),
         ("peak_hand_speed_mps", "Peak hand speed (m/s)"),
         ("peak_torque_nm", f"Peak joint torque (N m)\n{effort}"),
         ("effort_n2m2s", f"Integral of squared torque (N² m² s)\n{effort}"),
     ]
-    per_row = 4
-    fig = Figure(figsize=(14, 6.2 * len(laws) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    per_row = 5
+    x_label = {"omega": "natural frequency ω (rad/s)", "damping": "damping ratio ζ"}[swept]
+    fig = Figure(figsize=(17, 6.2 * len(laws) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
     axes = np.asarray(fig.subplots(2 * len(laws), per_row)).reshape(len(laws), 2 * per_row)
     for law, law_axes in zip(laws, axes, strict=True):
@@ -296,18 +371,19 @@ def plot_metrics(rows: list[dict[str, Any]], laws: list[str], n_starts: int, win
             style(ax)
             for arm in ("esn", "replay"):
                 group = [r for r in rows if r["law"] == law and r["arm"] == arm]
-                omegas = sorted({r["omega"] for r in group})
-                values = [[float(r[key]) for r in group if r["omega"] == omega] for omega in omegas]
+                xs = sorted({r[swept] for r in group})
+                values = [[float(r[key]) for r in group if r[swept] == x] for x in xs]
                 if key == "success":
                     low = high = mean = [sum(v) for v in values]
                 else:
-                    low, high = [np.nanmin(v) for v in values], [np.nanmax(v) for v in values]
-                    mean = [np.nanmean(v) for v in values]
+                    low = [np.nanmin(v) if np.isfinite(v).any() else np.nan for v in values]
+                    high = [np.nanmax(v) if np.isfinite(v).any() else np.nan for v in values]
+                    mean = [np.nanmean(v) if np.isfinite(v).any() else np.nan for v in values]
                 color = ARM_COLORS[arm]
-                ax.fill_between(omegas, low, high, color=color, alpha=0.15, linewidth=0)
-                ax.plot(omegas, mean, marker="o", markersize=5, linewidth=2, color=color, label=ARM_LABELS[arm])
+                ax.fill_between(xs, low, high, color=color, alpha=0.15, linewidth=0)
+                ax.plot(xs, mean, marker="o", markersize=5, linewidth=2, color=color, label=ARM_LABELS[arm])
                 ax.set_xscale("log")
-                ax.set_xticks(omegas, [f"{omega:g}" for omega in omegas])
+                ax.set_xticks(xs, [f"{x:g}" for x in xs])
                 ax.minorticks_off()
             demonstrator = [float(r[key]) for r in rows if r["arm"] == "demonstrator"]
             if np.isfinite(demonstrator).any():
@@ -322,7 +398,7 @@ def plot_metrics(rows: list[dict[str, Any]], laws: list[str], n_starts: int, win
             if key == "success":
                 ax.set_ylim(-0.5, n_starts + 0.5)
             ax.set_title(label, color=TEXT_COLOR, fontsize=9)
-            ax.set_xlabel("natural frequency ω (rad/s)", color=TEXT_COLOR, fontsize=8)
+            ax.set_xlabel(x_label, color=TEXT_COLOR, fontsize=8)
         law_axes[0].set_ylabel(law.replace("_", " "), color="#0b0b0b", fontsize=11)
         law_axes[per_row].set_ylabel(law.replace("_", " "), color="#0b0b0b", fontsize=11)
     handles, labels = axes[0, 0].get_legend_handles_labels()
@@ -336,14 +412,22 @@ def load_hand(path: Path, setup: Setup) -> tuple[NDArray[np.float64], NDArray[np
     return log.times, endpoint_positions(setup.skeleton, log.channel("q").reshape(len(log.times), -1)), log
 
 
-def plot_paths(run_dir: Path, setup: Setup, laws: list[str], omegas: list[float], title: str) -> Figure:
+def by_law(settings: list[Setting]) -> list[list[Setting]]:
+    """The settings grouped by law: one row of the figures per law, one column per setting."""
+    laws = list(dict.fromkeys(setting.law for setting in settings))
+    return [[setting for setting in settings if setting.law == law] for law in laws]
+
+
+def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str) -> Figure:
     """Plot the hand paths of every run, over the demonstrator's undisturbed reaches, for every setting."""
-    fig = Figure(figsize=(3.2 * len(omegas), 3.3 * len(laws) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    rows = by_law(settings)
+    columns = len(rows[0])
+    fig = Figure(figsize=(3.2 * columns, 3.3 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
-    axes = np.atleast_2d(fig.subplots(len(laws), len(omegas), sharex=True, sharey=True))
+    axes = np.atleast_2d(fig.subplots(len(rows), columns, sharex=True, sharey=True))
     n_starts = len(setup.starts)
-    for law, ax_row in zip(laws, axes, strict=True):
-        for omega, ax in zip(omegas, ax_row, strict=True):
+    for row, ax_row in zip(rows, axes, strict=True):
+        for setting, ax in zip(row, ax_row, strict=True):
             style(ax)
             for i, hand_ref in enumerate(setup.hand_refs):
                 label = "demonstrator, undisturbed" if i == 0 else None
@@ -357,38 +441,37 @@ def plot_paths(run_dir: Path, setup: Setup, laws: list[str], omegas: list[float]
                 )
             for arm in ("replay", "esn"):
                 for i in range(n_starts):
-                    _, hand, _ = load_hand(run_dir / f"{law}_w{omega:g}" / f"{arm}_{i:02d}.sklog.npz", setup)
+                    _, hand, _ = load_hand(run_dir / setting.name / f"{arm}_{i:02d}.sklog.npz", setup)
                     ax.plot(*hand.T, color=ARM_COLORS[arm], linewidth=1.2, label=ARM_LABELS[arm] if i == 0 else None)
             ax.plot(*setup.target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
-            ax.set_title(f"{law.replace('_', ' ')}, ω = {omega:g} rad/s", color=TEXT_COLOR, fontsize=10)
+            ax.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
             ax.set_aspect("equal")
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    ncol = 3 if len(omegas) > 2 else 1  # a narrow figure stacks the legend
+    ncol = 3 if columns > 2 else 1  # a narrow figure stacks the legend
     fig.legend(handles, labels, loc="outside lower center", ncol=ncol, frameon=False, labelcolor=TEXT_COLOR)
     return fig
 
 
 def plot_timeline(
-    run_dir: Path, setup: Setup, laws: list[str], omegas: list[float], span: tuple[float, float] | None, title: str
+    run_dir: Path, setup: Setup, settings: list[Setting], span: tuple[float, float] | None, title: str
 ) -> Figure:
     """Plot the hand's distance to the target and the joint torque over time, from the first start posture.
 
     The shaded band is when the disturbance acts.
     """
-    fig = Figure(figsize=(3.4 * len(omegas), 5.0 * len(laws) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    rows = by_law(settings)
+    columns = len(rows[0])
+    fig = Figure(figsize=(3.4 * columns, 5.0 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(f"{title}, from {setup.starts[0].origin}", color="#0b0b0b")
-    axes = np.asarray(fig.subplots(2 * len(laws), len(omegas), sharex=True)).reshape(2 * len(laws), len(omegas))
+    axes = np.asarray(fig.subplots(2 * len(rows), columns, sharex=True)).reshape(2 * len(rows), columns)
     reference = setup.demonstrator_logs[0]
     ref_times = reference.times
     ref_hand = endpoint_positions(setup.skeleton, reference.channel("q").reshape(len(ref_times), -1))
     demonstrator = load_hand(run_dir / "demonstrator_00.sklog.npz", setup)
-    for row, law in enumerate(laws):
-        for col, omega in enumerate(omegas):
+    for row, law_settings in enumerate(rows):
+        for col, setting in enumerate(law_settings):
             ax_distance, ax_torque = axes[2 * row, col], axes[2 * row + 1, col]
-            runs = {
-                arm: load_hand(run_dir / f"{law}_w{omega:g}" / f"{arm}_00.sklog.npz", setup)
-                for arm in ("esn", "replay")
-            }
+            runs = {arm: load_hand(run_dir / setting.name / f"{arm}_00.sklog.npz", setup) for arm in ("esn", "replay")}
             runs["demonstrator"] = demonstrator
             for ax in (ax_distance, ax_torque):
                 style(ax)
@@ -414,14 +497,14 @@ def plot_timeline(
                 )
                 ax_torque.plot(times, np.linalg.norm(log.channel("tau"), axis=1), color=color, linewidth=1.3)
             ax_distance.axhline(1000 * setup.radius, color="#0b0b0b", linewidth=0.8, linestyle=":")
-            ax_distance.set(xlim=(-0.3, 3.0), ylim=(0, None))
-            ax_distance.set_title(f"{law.replace('_', ' ')}, ω = {omega:g} rad/s", color=TEXT_COLOR, fontsize=10)
+            ax_distance.set(xlim=(-0.3, float(setup.times[-1])), ylim=(0, None))
+            ax_distance.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
             ax_torque.set_xlabel("time (s)", color=TEXT_COLOR, fontsize=8)
             if col == 0:
                 ax_distance.set_ylabel("hand to target (mm)", color=TEXT_COLOR)
                 ax_torque.set_ylabel("joint torque norm (N m)", color=TEXT_COLOR)
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    ncol = 4 if len(omegas) > 2 else 2  # a narrow figure wraps the legend
+    ncol = 4 if columns > 2 else 2  # a narrow figure wraps the legend
     fig.legend(handles, labels, loc="outside lower center", ncol=ncol, frameon=False, labelcolor=TEXT_COLOR)
     return fig
 

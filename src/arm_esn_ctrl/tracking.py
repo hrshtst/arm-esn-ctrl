@@ -55,27 +55,30 @@ class TrackerConfig:
     """How the arm tracks its reference, read from the ``[tracker]`` table of a configuration file."""
 
     law: str  # "computed_torque" or "pd"
-    omega: float | None  # natural frequency of the tracking error (rad/s), critically damped; None if gains are given
+    omega: float | None  # natural frequency of the tracking error (rad/s); None if the gains are given directly
     acceleration_filter: float  # time constant of the low-pass filter on the reference acceleration (s)
+    damping: float = 1.0  # damping ratio of the tracking error: 1 is critically damped, less oscillates
 
 
 def tracking_gains(
     config: TrackerConfig, skeleton: Skeleton, posture: NDArray[np.float64]
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """The gains ``(kp, kd)`` that give the tracking error the natural frequency ``config.omega``.
+    """The gains ``(kp, kd)`` that give the tracking error the natural frequency ω and damping ratio ζ.
 
     Computed torque cancels the arm's dynamics, so the error obeys
-    ``ë + kd ė + kp e = 0``: ``kp = ω²`` and ``kd = 2ω`` make it critically damped.
-    Joint PD does not, so each joint's gains are scaled by its inertia, the diagonal
-    ``M_ii`` of the mass matrix at ``posture`` (such as the target posture):
-    ``kp = M_ii ω²`` and ``kd = 2 M_ii ω``. That is only approximate, since the
-    inertia changes with the posture and couples the joints.
+    ``ë + kd ė + kp e = 0``, a second-order system ``ë + 2ζω ė + ω² e = 0`` with
+    ``kp = ω²`` and ``kd = 2ζω``; ζ = 1 (``config.damping``'s default) makes it
+    critically damped, and a smaller ζ makes it oscillate as it decays. Joint PD
+    does not cancel the dynamics, so each joint's gains are scaled by its inertia,
+    the diagonal ``M_ii`` of the mass matrix at ``posture`` (such as the target
+    posture): ``kp = M_ii ω²`` and ``kd = 2ζ M_ii ω``. That is only approximate,
+    since the inertia changes with the posture and couples the joints.
     """
     if config.omega is None:
         msg = "the tracker has no natural frequency omega; its gains must be given directly"
         raise ValueError(msg)
     scale = gain_scale(config.law, skeleton, posture)
-    return scale * config.omega**2, 2 * scale * config.omega
+    return scale * config.omega**2, 2 * config.damping * scale * config.omega
 
 
 def error_dynamics(

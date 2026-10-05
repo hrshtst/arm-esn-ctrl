@@ -167,6 +167,19 @@ def test_the_error_dynamics_of_gains_from_omega_are_critically_damped_at_omega(l
     assert omega == pytest.approx([10.0, 10.0]) and zeta == pytest.approx([1.0, 1.0])
 
 
+@pytest.mark.parametrize("law", ["computed_torque", "pd"])
+def test_a_damping_ratio_sets_the_derivative_gain(law):
+    skeleton = Skeleton.from_toml(CONFIG)
+    posture = np.radians([48.6, 97.2])
+
+    gains = tracking_gains(TrackerConfig(law, 10.0, 0.02, damping=0.3), skeleton, posture)
+    critical = tracking_gains(TrackerConfig(law, 10.0, 0.02), skeleton, posture)
+    omega, zeta = error_dynamics(law, gains, skeleton, posture)
+
+    assert gains[0] == pytest.approx(critical[0]) and gains[1] == pytest.approx(0.3 * critical[1])
+    assert omega == pytest.approx([10.0, 10.0]) and zeta == pytest.approx([0.3, 0.3])
+
+
 def test_a_smaller_derivative_gain_lowers_the_damping_ratio():
     skeleton = Skeleton.from_toml(CONFIG)
     gains = (np.array([100.0, 100.0]), np.array([4.0, 4.0]))
