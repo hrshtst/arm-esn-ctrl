@@ -6,7 +6,7 @@
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance, reach_metrics
+from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance, path_progress, reach_metrics
 
 START = np.array([0.5, 1.2])
 TARGET = np.array([0.0, 1.2])
@@ -71,6 +71,16 @@ def hand_path(distances):
     """A hand moving along the x axis toward the target at the origin, at the given distances (one per 0.1 s)."""
     times = np.asarray(0.1 * np.arange(len(distances)), dtype=np.float64)
     return times, np.column_stack([distances, np.zeros(len(distances))])
+
+
+def test_path_progress_is_the_fraction_of_the_path_up_to_the_nearest_point():
+    # An L-shaped path, 3 long, that rests at its start and at its end.
+    path = np.array([[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [2.0, 1.0]])
+    points = np.array([[0.0, 0.0], [0.5, 0.3], [2.4, 0.5], [2.0, 1.0], [5.0, 5.0], [-1.0, 0.0]])
+
+    progress = path_progress(points, path)
+
+    assert progress == pytest.approx([0.0, 0.5 / 3, 2.5 / 3, 1.0, 1.0, 0.0])
 
 
 def test_arrival_is_the_first_sample_within_the_radius():

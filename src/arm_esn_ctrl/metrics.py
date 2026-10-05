@@ -122,12 +122,40 @@ def distances_to_path(points: NDArray[np.float64], reference: NDArray[np.float64
     Both are sequences of points of any dimension, shaped ``(n, d)``, such as hand
     positions or joint angles.
     """
+    return _nearest_on_path(points, reference)[2]
+
+
+def path_progress(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Return how far along the ``reference`` path the nearest point to each of ``points`` lies.
+
+    The progress is the length of the polyline through ``reference`` up to that
+    nearest point, as a fraction of its whole length: 0 at its first point, 1 at its
+    last. Both are sequences of points of any dimension, shaped ``(n, d)``; where
+    the reference rests, it adds no length.
+    """
+    k, fraction, _ = _nearest_on_path(points, reference)
+    lengths = np.linalg.norm(np.diff(reference, axis=0), axis=1)
+    before = np.concatenate([[0.0], np.cumsum(lengths)])  # the length up to each reference point
+    return (before[k] + fraction * lengths[k]) / before[-1]
+
+
+def _nearest_on_path(
+    points: NDArray[np.float64], reference: NDArray[np.float64]
+) -> tuple[NDArray[np.intp], NDArray[np.float64], NDArray[np.float64]]:
+    """For each of ``points``, the nearest point on the polyline through ``reference``.
+
+    Returns the index of the segment it lies on, how far along that segment (0 to 1),
+    and the distance to it. Of several equally near points, the first is taken.
+    """
     start, segment = reference[:-1], np.diff(reference, axis=0)
     length2 = np.maximum(np.sum(segment**2, axis=1), np.finfo(float).tiny)
     offset = points[:, np.newaxis, :] - start[np.newaxis, :, :]
     fraction = np.clip(np.sum(offset * segment, axis=2) / length2, 0.0, 1.0)
     nearest = start + fraction[..., np.newaxis] * segment
-    return np.min(np.linalg.norm(points[:, np.newaxis, :] - nearest, axis=2), axis=1)
+    distance = np.linalg.norm(points[:, np.newaxis, :] - nearest, axis=2)
+    k = np.argmin(distance, axis=1)
+    rows = np.arange(len(points))
+    return k, fraction[rows, k], distance[rows, k]
 
 
 def arrival_index(hand: NDArray[np.float64], target: ArrayLike, radius: float) -> int | None:
