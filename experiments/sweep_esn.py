@@ -12,9 +12,10 @@ the same start postures as in ``autonomous_esn.py``. The run directory receives:
 
 - ``sweep.csv``: one row per combination, with its hyperparameters, the reach
   metrics of :func:`arm_esn_ctrl.autonomous.run_metrics` averaged over the
-  demonstrated start postures and over the other ones, and the hold over all runs:
-  how many runs fail (never arrive or leave the goal), and the median and largest
-  hold error of the runs that arrive;
+  demonstrated start postures and over the other ones, the median training path
+  ratio of the other ones, and the hold over all runs: how many runs fail (never
+  arrive or leave the goal), and the median and largest hold error of the runs
+  that arrive;
 - ``sweep.png``: heatmaps of the main metrics over the swept values.
 
 To look at one combination in detail, copy its values into a configuration for
@@ -48,6 +49,8 @@ HEATMAPS = [
     ("other_reach_path_distance_m", "Reach path distance, other starts (mm)", 1000.0, True),
     ("other_reach_joint_error_deg", "Reach joint error, other starts (deg RMS)", 1.0, True),
     ("demonstrated_reach_joint_error_deg", "Reach joint error, demonstrated starts (deg RMS)", 1.0, True),
+    ("other_first_step_m", "First step, other starts (mm)", 1000.0, True),
+    ("other_median_training_path_ratio", "Training path ratio, other starts (median)", 1.0, False),
     ("failures", "Failed runs: never arrive or leave the goal", 1.0, False),
     ("max_hold_error_m", "Largest hold error of the runs that arrive (mm)", 1000.0, True),
 ]
@@ -90,13 +93,20 @@ def main() -> None:
 
 
 def summarize(runs: list[Run], setup: Setup) -> dict[str, float]:
-    """Average the reach metrics by kind of start posture, and count and measure the holds of all runs."""
+    """Average the reach metrics by kind of start posture, and count and measure the holds of all runs.
+
+    The training path ratio of the other start postures is their median: near the
+    training path, a few ratios grow large. Those without a ratio are left out.
+    """
     metrics = [run_metrics(run, setup) for run in runs]
     summary: dict[str, float] = {}
     for kind, demonstrated in (("demonstrated", True), ("other", False)):
         group = [m for m, run in zip(metrics, runs, strict=True) if run.start.demonstrated == demonstrated]
         for name in ("first_step_m", "reach_path_distance_m", "reach_joint_error_deg"):
             summary[f"{kind}_{name}"] = float(np.mean([m[name] for m in group])) if group else float("nan")
+    ratios = [m["training_path_ratio"] for m, run in zip(metrics, runs, strict=True) if not run.start.demonstrated]
+    ratios = [r for r in ratios if np.isfinite(r)]
+    summary["other_median_training_path_ratio"] = float(np.median(ratios)) if ratios else float("nan")
     hold_errors = [m["hold_error_m"] for m in metrics if m["arrived"]]
     summary["runs"] = len(metrics)
     summary["failures"] = sum(not m["success"] for m in metrics)
@@ -119,6 +129,7 @@ def print_best(rows: list[dict[str, Any]], names: list[str], count: int = 5) -> 
             f" reach joint error {r['other_reach_joint_error_deg']:.2f} deg (other),"
             f" {r['demonstrated_reach_joint_error_deg']:.2f} deg (demonstrated);"
             f" first step {1000 * r['other_first_step_m']:.1f} mm (other);"
+            f" training path ratio {r['other_median_training_path_ratio']:.2f} (other, median);"
             f" hold error median {1000 * r['median_hold_error_m']:.1f} mm,"
             f" largest {1000 * r['max_hold_error_m']:.1f} mm"
         )
