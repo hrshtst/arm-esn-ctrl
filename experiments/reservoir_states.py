@@ -26,7 +26,9 @@ mean), and compare each run with the demonstration whose start is nearest:
   state at t;
 - the **phase**: the time of the demonstration's state nearest to the run's state
   at t. A run that keeps the demonstration's timing has a phase equal to t; the
-  **phase lead** is the phase minus t.
+  **phase lead** is the phase minus t. The phase locates a run along the
+  demonstration only while the run is close to the demonstration's states: a run
+  that lies before the demonstration's start has phase 0 and a lead of -t.
 
 The run directory receives:
 
@@ -38,9 +40,10 @@ The run directory receives:
   principal components, for the demonstrations and the runs, with the explained
   variance of all components;
 - ``pca.png``: the projections onto the first three components;
-- ``convergence.png``: the distances and the phase lead over time, the distance at
-  the end of the warm-up against the start offset, and the join time over the grid
-  of start offsets (with an ``[evaluation.start_grid]``).
+- ``convergence.png``: the distances and the phase lead over time, and, with an
+  ``[evaluation.start_grid]``, maps over the start offsets of the distance at the
+  end of the warm-up, the join time, and the phase lead, with an arrow along the
+  demonstration's change of joint angles from start to end.
 """
 
 from __future__ import annotations
@@ -136,7 +139,8 @@ def main() -> None:
     plot_pca(taught_projections, np.array(runs), rows, shown, explained, warmup_steps, title).savefig(
         run_dir / "pca.png", dpi=150
     )
-    plot_convergence(times, distances_array, phases_array, rows, shown, warmup_steps, options, title).savefig(
+    motion = np.degrees(np.mean([q[-1] - q[0] for q in demos.values()], axis=0))
+    plot_convergence(times, distances_array, phases_array, rows, shown, warmup_steps, motion, options, title).savefig(
         run_dir / "convergence.png", dpi=150
     )
     print(f"\nWrote the results to {run_dir}")
@@ -311,15 +315,23 @@ def plot_convergence(
     rows: list[dict[str, Any]],
     shown: list[int],
     warmup_steps: int,
+    motion: NDArray[np.float64],
     options: dict[str, Any],
     title: str,
 ) -> Figure:
-    """Distances and phase lead over time, the warm-up distance against the offset, and the join time map."""
+    """Distances and phase lead over time, and maps over the start offsets.
+
+    The maps, drawn with an ``[evaluation.start_grid]``, show the distance at the end
+    of the warm-up, the join time, and the phase lead; their arrow points along
+    ``motion``, the demonstration's change of joint angles from start to end (deg).
+    """
     dt = float(times[1] - times[0])
-    fig = Figure(figsize=(13, 9.5), facecolor=SURFACE_COLOR, layout="constrained")
+    fig = Figure(figsize=(17, 10), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
-    ax_distance, ax_phase, ax_warmup, ax_join = fig.subplots(2, 2).flat
-    for ax in (ax_distance, ax_phase, ax_warmup):
+    # D: distance, L: phase lead over time; maps of W: the warm-up distance, J: the join time, P: the phase lead.
+    panels = fig.subplot_mosaic("DDDLLL;WWJJPP")
+    ax_distance, ax_phase = panels["D"], panels["L"]
+    for ax in (ax_distance, ax_phase):
         style(ax)
     offset = np.array([r["offset_deg"] > 1e-9 for r in rows])
     for d in distances[offset]:
@@ -328,7 +340,11 @@ def plot_convergence(
     ax_distance.axhline(options["join_threshold"], color=TEXT_COLOR, linestyle=":", label="join threshold")
     ax_distance.axvline(0.0, color=TEXT_COLOR, linewidth=0.8)
     ax_distance.set(yscale="log", xlabel="time (s)", ylabel="relative to the spread of the demonstration's states")
-    ax_distance.set_title("Time-matched distance from the demonstration's states", color=TEXT_COLOR, fontsize=10)
+    ax_distance.set_title(
+        "Time-matched distance from the demonstration's states (blue: every offset start)",
+        color=TEXT_COLOR,
+        fontsize=10,
+    )
     ax_distance.legend(fontsize=8)
 
     lead = (phases - (np.arange(len(times)) - warmup_steps)) * dt  # in steps, so that 0 is exactly 0
@@ -338,6 +354,8 @@ def plot_convergence(
     median_lead = np.median(lead[offset][:, task], axis=0)
     ax_phase.plot(times[task], median_lead, color="#0b0b0b", linewidth=2, label="median, all offsets")
     ax_phase.axhline(0.0, color=TEXT_COLOR, linewidth=0.8)
+    begin, end = options["phase_window"]
+    ax_phase.axvspan(begin, end, color=GRID_COLOR, alpha=0.6, label="phase window")
     ax_phase.set(xlim=(0.0, float(times[-1])), xlabel="time (s)", ylabel="phase lead (s)")
     ax_phase.set_title(
         "Phase lead: the time of the nearest demonstration state, minus t\n(blue: runs from shown start offsets)",
@@ -346,27 +364,56 @@ def plot_convergence(
     )
     ax_phase.legend(fontsize=8)
 
-    ax_warmup.scatter([r["offset_deg"] for r in rows], [r["warmup_distance"] for r in rows], color=ESN_COLOR, s=12)
-    ax_warmup.set(xlabel="start offset (deg)", ylabel="relative distance at t = 0")
-    ax_warmup.set_title(
-        "Distance from the demonstration's state at the end of the warm-up", color=TEXT_COLOR, fontsize=10
-    )
+    if len({r["offset_q1_deg"] for r in rows}) < 2 or len({r["offset_q2_deg"] for r in rows}) < 2:
+        for name in "WJP":
+            panels[name].set_axis_off()
+        return fig
+    leads = np.array([r["phase_lead_s"] for r in rows])
+    # A range of a few steps is the quantization of the phase: the scale spans at least 10 steps.
+    reach = max(float(np.max(np.abs(leads))), 10.0 * dt)
+    maps = [
+        ("W", "warmup_distance", "Blues", None, "relative distance", "Distance at the end of the warm-up"),
+        ("J", "join_time_s", "Blues", None, "s", "Join time (blank: never joins)"),
+        (
+            "P",
+            "phase_lead_s",
+            "RdBu_r",
+            Normalize(vmin=-reach, vmax=reach),
+            "s",
+            f"Median phase lead over {begin:g}-{end:g} s",
+        ),
+    ]
+    for name, key, cmap, norm, label, map_title in maps:
+        draw_map(fig, panels[name], rows, key, cmap, norm, label, motion)
+        panels[name].set_title(map_title, color=TEXT_COLOR, fontsize=10)
+    return fig
 
+
+def draw_map(
+    fig: Figure,
+    ax: Axes,
+    rows: list[dict[str, Any]],
+    key: str,
+    cmap: str,
+    norm: Normalize | None,
+    label: str,
+    motion: NDArray[np.float64],
+) -> None:
+    """Draw ``key`` of ``rows`` over the grid of start offsets, with an arrow along ``motion``."""
     xs = np.unique([r["offset_q1_deg"] for r in rows])
     ys = np.unique([r["offset_q2_deg"] for r in rows])
-    if len(xs) > 1 and len(ys) > 1:
-        cell = {(r["offset_q1_deg"], r["offset_q2_deg"]): r["join_time_s"] for r in rows}
-        data = np.array([[cell.get((x, y), np.nan) for x in xs] for y in ys])
-        step_x, step_y = xs[1] - xs[0], ys[1] - ys[0]
-        extent = (xs[0] - step_x / 2, xs[-1] + step_x / 2, ys[0] - step_y / 2, ys[-1] + step_y / 2)
-        image = ax_join.imshow(data, origin="lower", extent=extent, cmap="Blues")
-        fig.colorbar(image, ax=ax_join, shrink=0.85, label="s")
-        ax_join.plot(0.0, 0.0, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
-        ax_join.set(xlabel="joint 1 offset (deg)", ylabel="joint 2 offset (deg)")
-        ax_join.set_title("Join time over the start offsets (blank: never joins)", color=TEXT_COLOR, fontsize=10)
-    else:
-        ax_join.set_axis_off()
-    return fig
+    cell = {(r["offset_q1_deg"], r["offset_q2_deg"]): r[key] for r in rows}
+    data = np.array([[cell.get((x, y), np.nan) for x in xs] for y in ys])
+    step_x, step_y = xs[1] - xs[0], ys[1] - ys[0]
+    extent = (xs[0] - step_x / 2, xs[-1] + step_x / 2, ys[0] - step_y / 2, ys[-1] + step_y / 2)
+    image = ax.imshow(data, origin="lower", extent=extent, cmap=cmap, norm=norm)
+    fig.colorbar(image, ax=ax, shrink=0.85, label=label)
+    arrow = 0.4 * min(xs[-1], ys[-1]) * motion / np.linalg.norm(motion)
+    ax.annotate(
+        "", xy=(float(arrow[0]), float(arrow[1])), xytext=(0.0, 0.0), arrowprops={"arrowstyle": "->", "linewidth": 1.5}
+    )
+    ax.plot(0.0, 0.0, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
+    ax.set(xlabel="joint 1 offset (deg)", ylabel="joint 2 offset (deg)")
 
 
 if __name__ == "__main__":
