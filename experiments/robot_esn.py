@@ -60,7 +60,7 @@ from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_r
 from arm_esn_ctrl.disturbances import make_disturbance
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed
-from arm_esn_ctrl.storage import start_run, storage_root
+from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import (
     EsnSource,
     ReferenceSource,
@@ -91,12 +91,12 @@ def main() -> None:
     args = parser.parse_args()
 
     config, run_dir = start_run(args.config)
-    esn_path = storage_root() / config["esn"]["model"]
+    esn_path = resolve_run_path(config["esn"]["model"])
     esn = ReachingEsn.load(esn_path)
     # The demonstrations the ESN was trained on, which the replay replays.
     with (esn_path.parent / "config.toml").open("rb") as f:
         demonstrations = tomllib.load(f)["demonstrations"]
-    with (storage_root() / demonstrations["run"] / "config.toml").open("rb") as f:
+    with (resolve_run_path(demonstrations["run"]) / "config.toml").open("rb") as f:
         demo_config = tomllib.load(f)
     evaluation = config["evaluation"]
     setup = load_setup({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
@@ -168,8 +168,8 @@ def main() -> None:
                 )
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
-    with (run_dir / "metrics.csv").open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+    with (run_dir / "metrics.csv").open("w", newline="") as out:
+        writer = csv.DictWriter(out, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
     print_summary(rows, len(setup.starts), window)

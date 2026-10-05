@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from arm_esn_ctrl.storage import ENV_VAR, start_run, storage_root
+from arm_esn_ctrl.storage import ENV_VAR, resolve_run_path, start_run, storage_root
 
 
 def test_storage_root_defaults_to_storage_in_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -31,13 +31,14 @@ def test_environment_variable_overrides_storage_file(tmp_path: Path, monkeypatch
 def test_start_run_records_config_and_code_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(ENV_VAR, str(tmp_path / "store"))
     config_text = "# ESN settings\n[esn]\nseed = 7\nleak_rate = 0.3\n"
-    config_path = tmp_path / "example.toml"
+    config_path = tmp_path / "some_experiment" / "example.toml"
+    config_path.parent.mkdir()
     config_path.write_text(config_text)
 
     config, run_dir = start_run(config_path)
 
     assert config == {"esn": {"seed": 7, "leak_rate": 0.3}}
-    assert run_dir.parent == tmp_path / "store" / "results"
+    assert run_dir.parent == tmp_path / "store" / "results" / "some_experiment"  # named after the config's directory
     assert run_dir.name.endswith("-example")
     assert (run_dir / "config.toml").read_text() == config_text
     record = tomllib.loads((run_dir / "run.toml").read_text())
@@ -53,3 +54,38 @@ def test_start_run_never_reuses_a_run_directory(tmp_path: Path, monkeypatch: pyt
     run_dirs = {start_run(config_path)[1] for _ in range(3)}
 
     assert len(run_dirs) == 3
+
+
+def stored_run(tmp_path: Path, experiment: str, name: str) -> Path:
+    run = tmp_path / "store" / "results" / experiment / name
+    run.mkdir(parents=True)
+    (run / "esn.toml").write_text("")
+    return run
+
+
+def test_a_run_is_found_by_its_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_VAR, str(tmp_path / "store"))
+    run = stored_run(tmp_path, "robot", "20261005-120454-nominal")
+
+    assert resolve_run_path("results/robot/20261005-120454-nominal") == run
+    assert resolve_run_path("results/robot/20261005-120454-nominal/esn.toml") == run / "esn.toml"
+
+
+def test_a_run_is_found_by_its_name_alone_in_any_experiment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_VAR, str(tmp_path / "store"))
+    run = stored_run(tmp_path, "robot", "20261005-120454-nominal")
+
+    # As recorded before the runs were filed by experiment
+    assert resolve_run_path("results/20261005-120454-nominal") == run
+    assert resolve_run_path("results/20261005-120454-nominal/esn.toml") == run / "esn.toml"
+
+
+def test_a_missing_or_ambiguous_run_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_VAR, str(tmp_path / "store"))
+    stored_run(tmp_path, "one", "20261005-120454-nominal")
+    stored_run(tmp_path, "two", "20261005-120454-nominal")
+
+    with pytest.raises(FileNotFoundError, match="no run"):
+        resolve_run_path("results/20261005-999999-missing")
+    with pytest.raises(FileNotFoundError, match="several runs"):
+        resolve_run_path("results/20261005-120454-nominal")

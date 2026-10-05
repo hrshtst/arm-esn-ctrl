@@ -312,15 +312,15 @@ def run_logs(scenario: str, setting: str, start: int, runs: dict[str, str] = SCE
     demonstrator's undisturbed reach from the same start posture: the nominal run's
     for the push and the block, the run's own otherwise.
     """
-    from arm_esn_ctrl.storage import storage_root
+    from arm_esn_ctrl.storage import resolve_run_path
 
-    run = storage_root() / "results" / runs[scenario]
+    run = resolve_run_path(f"results/{runs[scenario]}")
     logs = {
         "esn": StateLog.load(run / setting / f"esn_{start:02d}.sklog.npz"),
         "replay": StateLog.load(run / setting / f"replay_{start:02d}.sklog.npz"),
         "demonstrator": StateLog.load(run / f"demonstrator_{start:02d}.sklog.npz"),
     }
-    undisturbed = run if scenario not in ("push", "block") else storage_root() / "results" / runs["nominal"]
+    undisturbed = run if scenario not in ("push", "block") else resolve_run_path(f"results/{runs['nominal']}")
     logs["demonstration"] = StateLog.load(undisturbed / f"demonstrator_{start:02d}.sklog.npz")
     return logs
 
@@ -532,11 +532,11 @@ def print_departure_tables() -> None:
 
 def export_animations() -> None:
     """Export GIFs of a few runs with skelarm's player, from the logs under the storage root."""
-    from arm_esn_ctrl.storage import REPO_ROOT, storage_root
+    from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path
 
     player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
     for name, run_name, setting, arm, start in ANIMATIONS:
-        run = storage_root() / "results" / run_name
+        run = resolve_run_path(f"results/{run_name}")
         log = (
             run / f"{arm}_{start:02d}.sklog.npz" if setting is None else run / setting / f"{arm}_{start:02d}.sklog.npz"
         )

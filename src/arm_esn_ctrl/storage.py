@@ -13,7 +13,12 @@ The storage root holds two directories: ``data/`` for demonstrations and
 A relative path is resolved against the repository root.
 
 Every experiment starts with :func:`start_run`, which loads the configuration
-file and creates a run directory that records how the result was produced.
+file and creates a run directory that records how the result was produced. Run
+directories are filed by experiment: ``results/<experiment>/<run>/``, where the
+experiment is the directory that holds the configuration file, such as
+``experiments/multi_demonstration_robot_tracking/``. A configuration names
+another run, such as its demonstrations, by its path under the storage root;
+:func:`resolve_run_path` finds it.
 """
 
 from __future__ import annotations
@@ -50,7 +55,8 @@ def storage_root(repo_root: Path = REPO_ROOT) -> Path:
 def start_run(config_path: str | Path) -> tuple[dict[str, Any], Path]:
     """Load a configuration file and create a run directory that records it.
 
-    The run directory is ``<storage root>/results/<date>-<time>-<config name>/``.
+    The run directory is ``<storage root>/results/<experiment>/<date>-<time>-<config name>/``,
+    where the experiment is the name of the directory that holds the configuration file.
     It receives two files:
 
     - ``config.toml``: an exact copy of the configuration file, as loaded;
@@ -64,7 +70,7 @@ def start_run(config_path: str | Path) -> tuple[dict[str, Any], Path]:
     config = tomllib.loads(text)
 
     started = datetime.now().astimezone().replace(microsecond=0)
-    run_dir = _new_run_dir(started, config_path.stem)
+    run_dir = _new_run_dir(started, config_path.parent.resolve().name, config_path.stem)
     (run_dir / "config.toml").write_text(text, encoding="utf-8")
 
     commit, uncommitted_changes = _git_state()
@@ -80,9 +86,41 @@ def start_run(config_path: str | Path) -> tuple[dict[str, Any], Path]:
     return config, run_dir
 
 
-def _new_run_dir(started: datetime, name: str) -> Path:
-    """Create a new, empty run directory, adding a suffix if the name is taken."""
-    results = storage_root() / "results"
+def resolve_run_path(reference: str | Path) -> Path:
+    """The path under the storage root that ``reference`` names, such as a run directory or a file in one.
+
+    ``reference`` is relative to the storage root:
+    ``results/<experiment>/<run>[/<file>]``, or ``results/<run>[/<file>]`` as
+    recorded before runs were filed by experiment. Run names are unique, since they
+    begin with the time the run started, so a run is also found by its name alone,
+    in whichever experiment directory it is.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no run, or more than one, has that name.
+    """
+    root = storage_root()
+    path = root / reference
+    if path.exists():
+        return path
+    parts = Path(reference).parts
+    if len(parts) < 2 or parts[0] != "results":
+        return path  # not a run: whatever the caller makes of a missing path
+    name, rest = parts[1], parts[2:]
+    matches = sorted(run for run in (root / "results").glob(f"*/{name}") if run.is_dir())
+    if not matches:
+        msg = f"no run named {name!r} under {root / 'results'}"
+        raise FileNotFoundError(msg)
+    if len(matches) > 1:
+        msg = f"several runs named {name!r}: {', '.join(str(match) for match in matches)}"
+        raise FileNotFoundError(msg)
+    return matches[0].joinpath(*rest)
+
+
+def _new_run_dir(started: datetime, experiment: str, name: str) -> Path:
+    """Create a new, empty run directory of ``experiment``, adding a suffix if the name is taken."""
+    results = storage_root() / "results" / experiment
     base = f"{started:%Y%m%d-%H%M%S}-{name}"
     suffix = 1
     while True:

@@ -25,7 +25,7 @@ from skelarm import Skeleton, StateLog, Task
 from arm_esn_ctrl.demonstrations import endpoint_positions, resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance
-from arm_esn_ctrl.storage import storage_root
+from arm_esn_ctrl.storage import resolve_run_path
 
 # The keys allowed in an [evaluation] table.
 EVALUATION_KEYS = {"duration", "hold", "start_offsets_deg", "extra_starts", "effort_window"}
@@ -80,7 +80,7 @@ def load_setup(config: dict[str, Any]) -> Setup:
     """Load the demonstrations and simulate the demonstrator from every start posture."""
     dt = config["esn"]["dt"]
     evaluation = config["evaluation"]
-    demo_dir = storage_root() / config["demonstrations"]["run"]
+    demo_dir = resolve_run_path(config["demonstrations"]["run"])
     with (demo_dir / "config.toml").open("rb") as f:
         demo_config = tomllib.load(f)
     logs = {name.split(".")[0]: StateLog.load(demo_dir / name) for name in config["demonstrations"]["train"]}
