@@ -16,12 +16,20 @@ Both kinds replay in skelarm's ``tools/player.py`` and load with
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from skelarm import Skeleton, StateLog, compute_forward_kinematics, run_scenario, scenario_from_config
+from skelarm import (
+    Skeleton,
+    StateLog,
+    compute_forward_kinematics,
+    run_scenario,
+    scenario_from_config,
+    simulate_controlled,
+)
 
 # The configuration tables that make up a skelarm scenario (see skelarm's
 # "Run Controlled Scenarios" guide). [initial] is set per start posture.
@@ -41,6 +49,31 @@ def simulate_reaches(config: dict[str, Any]) -> list[StateLog]:
         scenario_config["initial"] = {"q": start_q}
         logs.append(run_scenario(scenario_from_config(scenario_config)))
     return logs
+
+
+def simulate_disturbed_reach(
+    config: dict[str, Any],
+    start_q: NDArray[np.float64],
+    duration: float,
+    external_force: Callable[[float, Skeleton], NDArray[np.float64]],
+) -> StateLog:
+    """Run the configured reaching controller from ``start_q`` (radians) under a tip force.
+
+    Like :func:`simulate_reaches` for one start posture, but ``external_force`` (see
+    :mod:`arm_esn_ctrl.disturbances`) acts on the arm's tip, recorded as ``ext_force``.
+    """
+    scenario_config = {name: config[name] for name in SCENARIO_TABLES}
+    scenario_config["initial"] = {"q": np.degrees(start_q).tolist()}
+    scenario = scenario_from_config(scenario_config)
+    return simulate_controlled(
+        scenario.skeleton,
+        scenario.controller,
+        duration=duration,
+        dt=scenario.simulator.dt,
+        enforce_limits=scenario.simulator.enforce_limits,
+        extra={"playback": {"task": config["task"]}},
+        external_force=external_force,
+    )
 
 
 def load_joint_angles(path: str | Path, dt: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:

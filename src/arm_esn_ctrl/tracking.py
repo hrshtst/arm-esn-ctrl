@@ -27,6 +27,7 @@ the warm-up is at negative times.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -236,19 +237,36 @@ def track(
     dt: float,
     enforce_limits: bool = True,
     extra: dict[str, Any] | None = None,
+    external_force: Callable[[float, Skeleton], NDArray[np.float64]] | None = None,
 ) -> StateLog:
     """Simulate the arm tracking ``source`` from its current posture: the warm-up, then ``duration`` of the task.
 
     Returns the log on the task clock: the warm-up at negative times, the task from 0.
     Besides skelarm's ``q``, ``dq``, and ``tau``, it records the reference ``q_ref``
     and the tracking error ``error`` at every simulation step of ``dt`` seconds.
+    An ``external_force`` at the tip (see :mod:`arm_esn_ctrl.disturbances`) is
+    called with the time on the task clock and recorded as ``ext_force``.
     """
     tracker = ReferenceTracker(source, config, *gains, period=period, warmup_steps=warmup_steps)
     warmup = warmup_steps * period
+    force = None if external_force is None else _delayed(external_force, warmup)
     log = simulate_controlled(
-        skeleton, tracker, duration=warmup + duration, dt=dt, enforce_limits=enforce_limits, extra=extra
+        skeleton,
+        tracker,
+        duration=warmup + duration,
+        dt=dt,
+        enforce_limits=enforce_limits,
+        extra=extra,
+        external_force=force,
     )
     return shift_times(log, -warmup)
+
+
+def _delayed(
+    external_force: Callable[[float, Skeleton], NDArray[np.float64]], delay: float
+) -> Callable[[float, Skeleton], NDArray[np.float64]]:
+    """``external_force`` on skelarm's clock, which starts ``delay`` seconds before the task."""
+    return lambda t, state: external_force(t - delay, state)
 
 
 def shift_times(log: StateLog, offset: float) -> StateLog:
