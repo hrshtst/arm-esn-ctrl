@@ -57,4 +57,19 @@ Two outputs answer the questions here:
 
 ## Runs
 
-None yet.
+Under `results/single_demonstration_robot_tracking/` in the storage:
+
+| Run | Configuration |
+| --- | --- |
+| `20261005-231058-nominal_tuned` | `nominal_tuned.toml` |
+| `20261005-231107-nominal_multi_demo_settings` | `nominal_multi_demo_settings.toml` |
+| `20261005-231058-offsets_tuned` | `offsets_tuned.toml` |
+| `20261005-231058-offsets_multi_demo_settings` | `offsets_multi_demo_settings.toml` |
+| `20261005-231114-push_across_tuned` | `push_across_tuned.toml` |
+| `20261005-231123-push_across_multi_demo_settings` | `push_across_multi_demo_settings.toml` |
+| `20261005-231131-push_forward_tuned` | `push_forward_tuned.toml` |
+| `20261005-231139-push_forward_multi_demo_settings` | `push_forward_multi_demo_settings.toml` |
+| `20261005-231148-push_backward_tuned` | `push_backward_tuned.toml` |
+| `20261005-231156-push_backward_multi_demo_settings` | `push_backward_multi_demo_settings.toml` |
+| `20261005-231204-block_tuned` | `block_tuned.toml` |
+| `20261005-231213-block_multi_demo_settings` | `block_multi_demo_settings.toml` |
