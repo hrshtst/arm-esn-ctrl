@@ -3,6 +3,8 @@
 
 """Tests for the ESN trained on one trajectory and run autonomously."""
 
+import dataclasses
+
 import numpy as np
 import pytest
 from numpy.typing import NDArray
@@ -150,3 +152,29 @@ def test_the_reservoir_state_is_readable_at_every_step():
     assert reset.shape == (CONFIG.n_neurons,) and np.all(reset == 0.0)
     assert np.linalg.norm(first) > 0.0
     assert not np.allclose(esn.state(), first)  # a copy: it does not change with later steps
+
+
+def test_scaling_the_normalization_is_scaling_the_input():
+    """Normalizing the training data to [-s, s] instead of [-1, 1] gives the runs of an s times larger input scaling.
+
+    The input weights are linear, the reservoir's bias depends on neither, and the
+    ridge readout scales with its target, so the normalization's scale is no
+    hyperparameter of its own.
+    """
+    q = joint_reach()
+    span = 0.3
+    scaled = ReachingEsn(CONFIG)
+    scaled.fit([q])
+    # Refit with the training data normalized to [-span, span].
+    scaled.half_range = scaled.half_range / span
+    sequences = [scaled._with_warmup(scaled._normalize(q))]
+    scaled.model.fit_sequences(
+        [sequence[:-1] for sequence in sequences],
+        [sequence[1:] for sequence in sequences],
+        washout_len=CONFIG.warmup_steps,
+    )
+    plain = ReachingEsn(dataclasses.replace(CONFIG, input_scaling=CONFIG.input_scaling * span))
+    plain.fit([q])
+
+    start = q[0] + np.radians([5.0, -5.0])
+    assert np.abs(scaled.generate(start, 100) - plain.generate(start, 100)).max() < 1e-9
