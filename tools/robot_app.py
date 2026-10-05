@@ -14,8 +14,8 @@ posture of the last run, ready to be posed again.
 The mode is fixed at launch:
 
 - **ESN** (``--model``): a trained ESN, driven by the arm's measured joint angles,
-  generates the reference every period, and the tracker (``--law``, ``--omega``)
-  tracks it, as in ``experiments/robot_esn.py``. The ESN's warm-up, with the arm
+  generates the reference every period, and the tracker (``--law``, and ``--omega``
+  or ``--kp`` and ``--kd``) tracks it, as in ``experiments/robot_esn.py``. The ESN's warm-up, with the arm
   holding its start posture, is consumed at once when a run starts, so the run is
   shown from t = 0.
 - **Replay from the start posture** (neither a model, a given posture, nor
@@ -83,7 +83,15 @@ from skelarm.simulator import SimulatorCanvas
 
 from arm_esn_ctrl.demonstrations import SCENARIO_TABLES, resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import ReachingEsn
-from arm_esn_ctrl.tracking import LAWS, EsnSource, ReferenceTracker, ReplaySource, TrackerConfig, tracking_gains
+from arm_esn_ctrl.tracking import (
+    LAWS,
+    EsnSource,
+    ReferenceTracker,
+    ReplaySource,
+    TrackerConfig,
+    error_dynamics,
+    tracking_gains,
+)
 
 _PANEL_WIDTH_PX = 360
 _STEP_SECONDS = 0.01  # how far one press of Step advances a paused run (s)
@@ -234,6 +242,9 @@ class RobotApp(QMainWindow):
         ``[simulator]``, and ``[controller]`` tables (the demonstrator).
     tracker : TrackerConfig, optional
         The tracking law and natural frequency; required unless ``demonstrator``.
+    gains : tuple of NDArray[np.float64], optional
+        The tracker's per-joint gains ``(kp, kd)``, given directly instead of by the
+        tracker's natural frequency.
     esn : ReachingEsn, optional
         A trained ESN to generate the reference (the ESN mode).
     given_q : NDArray[np.float64], optional
@@ -259,6 +270,7 @@ class RobotApp(QMainWindow):
         config: dict[str, Any],
         *,
         tracker: TrackerConfig | None = None,
+        gains: tuple[NDArray[np.float64], NDArray[np.float64]] | None = None,
         esn: ReachingEsn | None = None,
         given_q: NDArray[np.float64] | None = None,
         demonstrator: bool = False,
@@ -306,7 +318,16 @@ class RobotApp(QMainWindow):
             self.mode = "replay_from_given"
         else:
             self.mode = "replay_from_start"
-        self.gains = None if tracker is None else tracking_gains(tracker, skeleton, self._end_posture())
+        self.gains = None
+        if tracker is not None:
+            self.gains = tracking_gains(tracker, skeleton, self._end_posture()) if gains is None else gains
+            kp, kd = self.gains
+            if kp.shape != (skeleton.num_joints,) or kd.shape != (skeleton.num_joints,):
+                msg = f"the tracker needs one kp and one kd per joint ({skeleton.num_joints})"
+                raise ValueError(msg)
+            if np.any(kp <= 0.0) or np.any(kd < 0.0):
+                msg = "the tracker's kp must be positive and its kd not negative"
+                raise ValueError(msg)
         # The given posture's reach is simulated once; replays from the start posture, at every run.
         self._given_reference: NDArray[np.float64] | None = None
         if self.mode == "replay_from_given":
@@ -583,7 +604,14 @@ class RobotApp(QMainWindow):
             law = {"computed_torque": "computed torque", "pd": "joint PD"}[self.tracker_config.law]
             kp = ", ".join(f"{value:.4g}" for value in self.gains[0])
             kd = ", ".join(f"{value:.4g}" for value in self.gains[1])
-            controller = f"{law}, ω = {self.tracker_config.omega:g} rad/s (kp = {kp}; kd = {kd})"
+            omega = self.tracker_config.omega
+            controller = f"{law}, " + ("" if omega is None else f"ω = {omega:g} rad/s, ") + f"kp = {kp}; kd = {kd}"
+            natural, damping = error_dynamics(self.tracker_config.law, self.gains, self.skeleton, self._end_posture())
+            controller += (
+                f"\nTracking error: natural frequency {', '.join(f'{value:.3g}' for value in natural)} rad/s,"
+                f" damping ratio {', '.join(f'{value:.2f}' for value in damping)}"
+                + (" (at the target posture)" if self.tracker_config.law == "pd" else "")
+            )
         return f"Reference: {reference}\nController: {controller}"
 
     def _refresh(self) -> None:
@@ -703,7 +731,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="tracking law, or ct for computed_torque (required unless --demonstrator)",
     )
     parser.add_argument(
-        "--omega", type=float, help="natural frequency of the tracking error (rad/s; required unless --demonstrator)"
+        "--omega",
+        type=float,
+        help="natural frequency of the tracking error (rad/s), critically damped; or give --kp and --kd",
+    )
+    parser.add_argument(
+        "--kp", help="the tracker's proportional gain instead of --omega: one value, or one per joint (comma-separated)"
+    )
+    parser.add_argument(
+        "--kd", help="the tracker's derivative gain instead of --omega: one value, or one per joint (comma-separated)"
     )
     parser.add_argument("--model", type=Path, help="a trained ESN (esn.toml) to generate the reference")
     parser.add_argument(
@@ -736,14 +772,36 @@ def check_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -
     """Reject combinations of arguments that contradict each other."""
     if args.model is not None and args.demonstrator:
         parser.error("--model and --demonstrator exclude each other: either the ESN or the demonstrator drives the arm")
-    if args.demonstrator and (args.law is not None or args.omega is not None):
-        parser.error("--law and --omega set the tracker, which the demonstrator's own controller does not use")
-    if not args.demonstrator and (args.law is None or args.omega is None):
-        parser.error("--law and --omega are required unless --demonstrator")
+    gains = (args.omega, args.kp, args.kd)
+    if args.demonstrator and (args.law is not None or any(value is not None for value in gains)):
+        parser.error(
+            "--law, --omega, --kp, and --kd set the tracker, which the demonstrator's own controller does not use"
+        )
+    if args.demonstrator:
+        return
+    if args.law is None:
+        parser.error("--law is required unless --demonstrator")
+    if (args.kp is None) != (args.kd is None):
+        parser.error("--kp and --kd go together")
+    if (args.omega is None) == (args.kp is None):
+        parser.error("give the tracker either --omega or --kp and --kd (required unless --demonstrator)")
     if args.period is not None and (args.model is not None or args.demonstrator):
         parser.error(
             "--period sets the replayed reference's period, which is used only without --model or --demonstrator"
         )
+
+
+def joint_values(parser: argparse.ArgumentParser, name: str, text: str, n_joints: int) -> NDArray[np.float64]:
+    """One value per joint from ``text``: a single value for every joint, or one per joint, comma-separated."""
+    try:
+        values = np.array([float(value) for value in text.split(",")])
+    except ValueError:
+        parser.error(f"{name} takes numbers, such as 100 or 100,20")
+    if len(values) == 1:
+        return np.full(n_joints, values[0])
+    if len(values) != n_joints:
+        parser.error(f"{name} has {len(values)} values but the arm has {n_joints} joints")
+    return values
 
 
 def main() -> None:
@@ -764,8 +822,14 @@ def main() -> None:
         skeleton.q = np.radians(config["demonstrations"]["start_q"][0])  # a reachable, non-singular posture
     esn = None if args.model is None else ReachingEsn.load(args.model)
     tracker = None
+    gains = None
     if not args.demonstrator:
         tracker = TrackerConfig(args.law, args.omega, args.acceleration_filter)
+    if args.kp is not None:
+        gains = (
+            joint_values(parser, "--kp", args.kp, skeleton.num_joints),
+            joint_values(parser, "--kd", args.kd, skeleton.num_joints),
+        )
 
     app = QApplication(sys.argv)
     try:
@@ -773,6 +837,7 @@ def main() -> None:
             skeleton,
             config,
             tracker=tracker,
+            gains=gains,
             esn=esn,
             given_q=given_q,
             demonstrator=args.demonstrator,

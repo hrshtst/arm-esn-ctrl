@@ -554,8 +554,11 @@ uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --demonst
 ```
 
 `$STORAGE` stands for the storage root, and `--law ct` is short for
-`--law computed_torque`. The reference generator, the tracking law, and ω are fixed
-at launch and shown in the side panel. Before Play, dragging the tip
+`--law computed_torque`. Instead of ω, which makes the tracking error critically
+damped, `--kp` and `--kd` set the gains directly (one value, or one per joint, such
+as `--kp 30,5 --kd 1,0.2`); a small `--kd` makes the tracking error oscillate. The
+reference generator and the tracker are fixed at launch, and the side panel shows
+them, with the tracking error's natural frequency and damping ratio for each joint. Before Play, dragging the tip
 poses the arm. During a run, running or paused, dragging pulls the tip toward the
 cursor with a spring force (the drag stiffness in the panel), which acts on top of
 the controller's torque. External forces never act during the ESN's warm-up, which

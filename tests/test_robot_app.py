@@ -22,7 +22,7 @@ from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import EsnSource, TrackerConfig, track
-from tools.robot_app import RobotApp, build_parser, check_arguments
+from tools.robot_app import RobotApp, build_parser, check_arguments, joint_values
 
 CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(
@@ -245,6 +245,45 @@ def test_the_demonstrator_mode_reaches_as_the_demonstrations(qapp, demo_config):
     assert app.skeleton.q == pytest.approx(demonstration.channel("q")[500], abs=1e-12)  # at 1.0 s
 
 
+def test_the_gains_can_be_given_directly(qapp, demo_config):
+    gains = (np.array([100.0, 20.0]), np.array([5.0, 1.0]))
+    app = make_app(demo_config, tracker=TrackerConfig("pd", None, 0.02), gains=gains)
+
+    app.step()
+
+    assert app.run is not None and app.run.tracker is not None
+    assert app.run.tracker.law.kp == pytest.approx(gains[0]) and app.run.tracker.law.kd == pytest.approx(gains[1])
+    text = app.mode_label.text()
+    assert "joint PD, kp = 100, 20; kd = 5, 1" in text and "damping ratio" in text
+
+
+def test_the_panel_shows_how_damped_the_tracking_error_is(qapp, demo_config):
+    underdamped = (np.array([100.0, 100.0]), np.array([4.0, 4.0]))  # computed torque: omega 10 rad/s, zeta 0.2
+
+    app = make_app(demo_config, tracker=TrackerConfig("computed_torque", None, 0.02), gains=underdamped)
+
+    assert "natural frequency 10, 10 rad/s, damping ratio 0.20, 0.20" in app.mode_label.text()
+    assert "damping ratio 1.00, 1.00" in make_app(demo_config).mode_label.text()  # from omega: critically damped
+
+
+def test_gains_must_be_positive_and_one_per_joint(qapp, demo_config):
+    tracker = TrackerConfig("pd", None, 0.02)
+
+    with pytest.raises(ValueError, match="positive"):
+        make_app(demo_config, tracker=tracker, gains=(np.array([0.0, 1.0]), np.array([1.0, 1.0])))
+    with pytest.raises(ValueError, match="per joint"):
+        make_app(demo_config, tracker=tracker, gains=(np.array([1.0]), np.array([1.0])))
+
+
+def test_one_gain_applies_to_every_joint():
+    parser = build_parser()
+
+    assert joint_values(parser, "--kp", "50", 2) == pytest.approx([50.0, 50.0])
+    assert joint_values(parser, "--kp", "50,7", 2) == pytest.approx([50.0, 7.0])
+    with pytest.raises(SystemExit):
+        joint_values(parser, "--kp", "1,2,3", 2)
+
+
 @pytest.mark.parametrize("box", ["speed_spin", "stiffness_spin"])
 def test_space_plays_while_a_number_box_has_the_focus(qapp, demo_config, box):
     app = make_app(demo_config)
@@ -267,6 +306,9 @@ def test_space_plays_while_a_number_box_has_the_focus(qapp, demo_config, box):
         (["--demonstrator", "--law", "pd", "--omega", "10"], "does not use"),
         (["--law", "pd"], "required unless --demonstrator"),
         (["--law", "pd", "--omega", "10", "--model", "esn.toml", "--period", "0.02"], "only without"),
+        (["--law", "pd", "--omega", "10", "--kp", "100", "--kd", "10"], "either --omega or --kp and --kd"),
+        (["--law", "pd", "--kp", "100"], "go together"),
+        (["--demonstrator", "--kp", "100", "--kd", "10"], "does not use"),
     ],
 )
 def test_the_command_line_rejects_contradictions(arguments, complaint, capsys):
@@ -292,5 +334,6 @@ def test_the_command_line_accepts_each_mode():
         ["--law", "pd", "--omega", "20"],
         ["--law", "pd", "--omega", "20", "--pose", "29.4,88.2"],
         ["--demonstrator", "--pose", "29.4,88.2"],
+        ["--law", "pd", "--kp", "100,20", "--kd", "5,1"],
     ):
         check_arguments(parser, parser.parse_args([str(CONFIG), *arguments]))

@@ -55,7 +55,7 @@ class TrackerConfig:
     """How the arm tracks its reference, read from the ``[tracker]`` table of a configuration file."""
 
     law: str  # "computed_torque" or "pd"
-    omega: float  # natural frequency of the tracking error (rad/s), critically damped
+    omega: float | None  # natural frequency of the tracking error (rad/s), critically damped; None if gains are given
     acceleration_filter: float  # time constant of the low-pass filter on the reference acceleration (s)
 
 
@@ -71,18 +71,39 @@ def tracking_gains(
     ``kp = M_ii ω²`` and ``kd = 2 M_ii ω``. That is only approximate, since the
     inertia changes with the posture and couples the joints.
     """
-    omega = config.omega
-    if config.law == "computed_torque":
-        n = skeleton.num_joints
-        return np.full(n, omega**2), np.full(n, 2 * omega)
-    if config.law == "pd":
+    if config.omega is None:
+        msg = "the tracker has no natural frequency omega; its gains must be given directly"
+        raise ValueError(msg)
+    scale = gain_scale(config.law, skeleton, posture)
+    return scale * config.omega**2, 2 * scale * config.omega
+
+
+def error_dynamics(
+    law: str, gains: tuple[NDArray[np.float64], NDArray[np.float64]], skeleton: Skeleton, posture: NDArray[np.float64]
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """The natural frequency (rad/s) and damping ratio of each joint's tracking error under ``gains``.
+
+    The inverse of :func:`tracking_gains`: with ``s`` the joint's scale (1 for
+    computed torque, ``M_ii`` at ``posture`` for joint PD), the error obeys
+    ``s ë + kd ė + kp e = 0``, so ``ω = sqrt(kp / s)`` and ``ζ = kd / (2 sqrt(kp s))``.
+    A damping ratio below 1 makes the error oscillate as it decays.
+    """
+    kp, kd = gains
+    scale = gain_scale(law, skeleton, posture)
+    return np.sqrt(kp / scale), kd / (2 * np.sqrt(kp * scale))
+
+
+def gain_scale(law: str, skeleton: Skeleton, posture: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Each joint's gain scale: 1 for computed torque, its inertia ``M_ii`` at ``posture`` for joint PD."""
+    if law == "computed_torque":
+        return np.ones(skeleton.num_joints)
+    if law == "pd":
         model = skeleton.clone()
         for link, angle in zip(model.links[1:], posture, strict=True):
             link.q = float(angle)
         compute_forward_kinematics(model)
-        inertia = np.diag(compute_mass_matrix(model)).copy()
-        return inertia * omega**2, 2 * inertia * omega
-    msg = f"unknown tracking law {config.law!r}; choose from {', '.join(LAWS)}"
+        return np.diag(compute_mass_matrix(model)).copy()
+    msg = f"unknown tracking law {law!r}; choose from {', '.join(LAWS)}"
     raise ValueError(msg)
 
 

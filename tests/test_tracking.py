@@ -16,6 +16,7 @@ from arm_esn_ctrl.tracking import (
     EsnSource,
     ReplaySource,
     TrackerConfig,
+    error_dynamics,
     nearest_demonstration,
     task_joint_angles,
     track,
@@ -153,6 +154,31 @@ def test_gains_set_the_natural_frequency_of_the_tracking_error():
     assert kp == pytest.approx([100.0, 100.0]) and kd == pytest.approx([20.0, 20.0])
     assert kd_pd / kp_pd == pytest.approx(kd / kp)  # critically damped, joint by joint
     assert kp_pd[0] > kp_pd[1]  # the shoulder moves the whole arm
+
+
+@pytest.mark.parametrize("law", ["computed_torque", "pd"])
+def test_the_error_dynamics_of_gains_from_omega_are_critically_damped_at_omega(law):
+    skeleton = Skeleton.from_toml(CONFIG)
+    posture = np.radians([48.6, 97.2])
+
+    gains = tracking_gains(TrackerConfig(law, 10.0, 0.02), skeleton, posture)
+    omega, zeta = error_dynamics(law, gains, skeleton, posture)
+
+    assert omega == pytest.approx([10.0, 10.0]) and zeta == pytest.approx([1.0, 1.0])
+
+
+def test_a_smaller_derivative_gain_lowers_the_damping_ratio():
+    skeleton = Skeleton.from_toml(CONFIG)
+    gains = (np.array([100.0, 100.0]), np.array([4.0, 4.0]))
+
+    omega, zeta = error_dynamics("computed_torque", gains, skeleton, np.zeros(2))
+
+    assert omega == pytest.approx([10.0, 10.0]) and zeta == pytest.approx([0.2, 0.2])
+
+
+def test_gains_from_omega_need_an_omega():
+    with pytest.raises(ValueError, match="given directly"):
+        tracking_gains(TrackerConfig("pd", None, 0.02), Skeleton.from_toml(CONFIG), np.zeros(2))
 
 
 def test_an_unknown_tracking_law_is_rejected():
