@@ -12,6 +12,8 @@ experiments/
 ├── autonomous_esn.py
 ├── sweep_esn.py
 ├── robot_esn.py
+├── reservoir_states.py
+├── warmup_esn.py
 ├── demonstrations/                            # one directory per experiment: README.md and configurations
 ├── single_demonstration_autonomous_reaching/
 ├── multi_demonstration_autonomous_reaching/
@@ -21,7 +23,7 @@ experiments/
 | Experiment | What it studies | Runners | Report |
 | --- | --- | --- | --- |
 | [demonstrations](demonstrations/README.md) | scripted reaching demonstrations of a two-link arm | `make_demonstrations.py` | |
-| [single_demonstration_autonomous_reaching](single_demonstration_autonomous_reaching/README.md) | an ESN trained on one demonstration, run on its own (Stage 1) | `autonomous_esn.py` | |
+| [single_demonstration_autonomous_reaching](single_demonstration_autonomous_reaching/README.md) | an ESN trained on one demonstration, run on its own (Stage 1) | `autonomous_esn.py`, `reservoir_states.py`, `sweep_esn.py`, `warmup_esn.py` | |
 | [multi_demonstration_autonomous_reaching](multi_demonstration_autonomous_reaching/README.md) | an ESN trained on eight demonstrations, run on its own (Stage 1) | `autonomous_esn.py`, `sweep_esn.py` | [001](../reports/001-autonomous-reaching/README.md) |
 | [multi_demonstration_robot_tracking](multi_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | `robot_esn.py` | [002](../reports/002-esn-reference-on-the-robot/README.md) |
 

@@ -69,6 +69,35 @@ demonstration's states, and its phase lead), `projections.npz` (every state on t
 first principal components), `pca.png`, and `convergence.png` (the distance and the
 phase lead over time, and maps of them over the start offsets).
 
+## Phase 3: hyperparameters, normalization, and warm-up
+
+`experiments/sweep_esn.py` trains and runs the ESN for every combination of the
+values in `[sweep]`, as for eight demonstrations
+([multi-demonstration autonomous reaching](../multi_demonstration_autonomous_reaching/README.md)),
+here over the grid of start postures of Phase 1. Its `sweep.csv` and `sweep.png`
+add the median training path ratio and the first step of the offset starts.
+
+| Configuration | Sweeps |
+| --- | --- |
+| `sweep_single_demo.toml` | ridge, leak rate, and input scaling, from the settings of `grid_single_demo_settings.toml` |
+
+The input scaling also stands for the scale of the joint-angle normalization:
+normalizing the training data to [−s, s] instead of [−1, 1] gives exactly the runs
+of an input scaling s times larger. The input weights are linear, the reservoir's
+bias depends on neither, and the ridge readout scales with its target. So the
+input scalings swept, 0.03 to 3, also cover normalizations from ±0.03 to ±3.
+
+`experiments/warmup_esn.py` runs a trained ESN with warm-ups other than the one it
+was trained with, from the same start postures, and tells whether the ESN times its
+reach from the reset of its reservoir, like a clock (a longer warm-up makes it
+arrive earlier by as much), or from the end of the warm-up (its arrival does not
+move). The run directory receives `warmup.csv` and `warmup.png`.
+
+| Configuration | ESN |
+| --- | --- |
+| `warmup_single_demo_settings.toml` | of `grid_single_demo_settings.toml` (trained with a 1 s warm-up) |
+| `warmup_multi_demo_settings.toml` | of `grid_multi_demo_settings.toml` (trained with a 0.25 s warm-up) |
+
 ## Runs
 
 Under `results/single_demonstration_autonomous_reaching/` in the storage, both on
