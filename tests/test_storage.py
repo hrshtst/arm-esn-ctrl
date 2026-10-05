@@ -80,6 +80,14 @@ def test_a_run_is_found_by_its_name_alone_in_any_experiment(tmp_path: Path, monk
     assert resolve_run_path("results/20261005-120454-nominal/esn.toml") == run / "esn.toml"
 
 
+def test_a_run_filed_by_experiment_is_found_in_storage_that_is_not(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_VAR, str(tmp_path / "store"))
+    run = tmp_path / "store" / "results" / "20261005-120454-nominal"
+    run.mkdir(parents=True)
+
+    assert resolve_run_path("results/robot/20261005-120454-nominal/esn.toml") == run / "esn.toml"
+
+
 def test_a_missing_or_ambiguous_run_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(ENV_VAR, str(tmp_path / "store"))
     stored_run(tmp_path, "one", "20261005-120454-nominal")

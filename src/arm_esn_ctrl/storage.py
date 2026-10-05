@@ -24,6 +24,7 @@ another run, such as its demonstrations, by its path under the storage root;
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import socket
 import subprocess
@@ -36,6 +37,7 @@ from typing import Any
 import tomli_w
 
 ENV_VAR = "ARM_ESN_CTRL_STORAGE_ROOT"
+_RUN_NAME = re.compile(r"\d{8}-\d{6}-")  # a run directory's name begins with when the run started
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -92,8 +94,9 @@ def resolve_run_path(reference: str | Path) -> Path:
     ``reference`` is relative to the storage root:
     ``results/<experiment>/<run>[/<file>]``, or ``results/<run>[/<file>]`` as
     recorded before runs were filed by experiment. Run names are unique, since they
-    begin with the time the run started, so a run is also found by its name alone,
-    in whichever experiment directory it is.
+    begin with the time the run started, so a run is found by its name alone if it
+    is not where the reference says: directly under ``results/``, or in any
+    experiment directory.
 
     Raises
     ------
@@ -102,15 +105,15 @@ def resolve_run_path(reference: str | Path) -> Path:
     """
     root = storage_root()
     path = root / reference
-    if path.exists():
-        return path
     parts = Path(reference).parts
-    if len(parts) < 2 or parts[0] != "results":
-        return path  # not a run: whatever the caller makes of a missing path
-    name, rest = parts[1], parts[2:]
-    matches = sorted(run for run in (root / "results").glob(f"*/{name}") if run.is_dir())
+    index = next((i for i, part in enumerate(parts) if _RUN_NAME.match(part)), None)
+    if path.exists() or parts[:1] != ("results",) or index is None:
+        return path
+    name, rest = parts[index], parts[index + 1 :]
+    results = root / "results"
+    matches = sorted(run for run in [results / name, *results.glob(f"*/{name}")] if run.is_dir())
     if not matches:
-        msg = f"no run named {name!r} under {root / 'results'}"
+        msg = f"no run named {name!r} under {results}"
         raise FileNotFoundError(msg)
     if len(matches) > 1:
         msg = f"several runs named {name!r}: {', '.join(str(match) for match in matches)}"
