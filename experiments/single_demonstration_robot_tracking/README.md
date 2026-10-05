@@ -41,6 +41,10 @@ computed torque and joint PD, both critically damped with ω = 10 rad/s.
 uv run python experiments/robot_esn.py experiments/single_demonstration_robot_tracking/block_tuned.toml
 ```
 
+At ω = 10 rad/s, joint PD lets the hand drift out of the goal after it arrives
+with either ESN, though it settles. `<scenario>_<ESN>_pd_gains.toml` runs each
+scenario again with joint PD only, at ω = 10, 20, and 40 rad/s.
+
 The runner and its outputs are those of
 [multi-demonstration robot tracking](../multi_demonstration_robot_tracking/README.md).
 Two outputs answer the questions here:
