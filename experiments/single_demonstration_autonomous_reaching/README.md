@@ -45,4 +45,10 @@ the demonstrated path; near 1, it reaches as the demonstrator would from there.
 
 ## Runs
 
-None yet.
+Under `results/single_demonstration_autonomous_reaching/` in the storage, both on
+the demonstration `results/demonstrations/20261005-185525-reach_tvs_single`:
+
+| Run | Configuration |
+| --- | --- |
+| `20261005-190403-grid_single_demo_settings` | `grid_single_demo_settings.toml` |
+| `20261005-190405-grid_multi_demo_settings` | `grid_multi_demo_settings.toml` |
