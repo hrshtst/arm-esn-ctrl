@@ -1,0 +1,34 @@
+# Stage 2 with one demonstration: no disturbance, from the grid of start postures of
+# single-demonstration autonomous reaching: the demonstrated start offset by -15 to 15
+# deg in each joint.
+#
+#   uv run python experiments/robot_esn.py experiments/single_demonstration_robot_tracking/offsets_tuned.toml
+#
+# The ESN is the tuned single-demonstration ESN (grid_tuned_settings.toml of
+# single-demonstration autonomous reaching): ridge 10, leak rate 0.2, input scaling 3,
+# 400 neurons, spectral radius 0.3, warm-up 1 s. It follows the demonstrated path, the
+# posture setting how far along it the run is. offsets_multi_demo_settings.toml runs
+# the other ESN in the same scenario.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/single_demonstration_autonomous_reaching/20261005-212407-grid_tuned_settings/esn.toml"
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["computed_torque", "pd"]
+# Natural frequency of the tracking error (rad/s), critically damped. Computed
+# torque: kp = omega^2, kd = 2 omega. Joint PD: the same, scaled by each joint's
+# inertia at the posture where the reach ends.
+omegas = [10.0]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+
+[evaluation]
+duration = 5.0         # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start first; then the grid below
+[evaluation.start_grid]
+span_deg = 15.0        # offsets from -15 to 15 deg, in every combination (169 start postures)
+step_deg = 2.5

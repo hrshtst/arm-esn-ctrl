@@ -34,8 +34,12 @@ start posture, and the run directory receives:
 - ``metrics.png``: those metrics against the natural frequency (or the damping
   ratio, if that is what varies), for each law;
 - ``paths.png``: the hand paths of every run;
-- ``timeline.png``: the hand's distance to the target and the joint torque over
-  time, from the first start posture.
+- ``timeline.png``: the hand's distance to the target, the progress along the
+  demonstrated path of the arm and of its reference, and the joint torque over
+  time, from the first start posture;
+- ``grid.png``, with an ``[evaluation.start_grid]``: maps over the start offsets
+  of the outcome, the path distance, the training path ratio, the peak reference
+  speed, the peak torque, and the tracking error, for each tracker setting.
 
 Replay a run with ``uv run python third_party/skelarm/tools/player.py <file>``.
 """
@@ -51,7 +55,10 @@ from typing import Any
 
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import ListedColormap, LogNorm, Normalize
 from matplotlib.figure import Figure
+from matplotlib.patches import Patch
 from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog
 
@@ -59,7 +66,7 @@ from arm_esn_ctrl.autonomous import Run, Setup, load_setup, rms_degrees, run_met
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach
 from arm_esn_ctrl.disturbances import make_disturbance
 from arm_esn_ctrl.esn import ReachingEsn
-from arm_esn_ctrl.metrics import hand_speed
+from arm_esn_ctrl.metrics import hand_speed, path_progress
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import (
     EsnSource,
@@ -101,6 +108,7 @@ def main() -> None:
     evaluation = config["evaluation"]
     setup = load_setup({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
     disturbance = config.get("disturbance")
+    span = disturbance_span(disturbance)
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
     print(f"ESN {config['esn']['model']}, trained on {len(setup.demos)} demonstrations")
     print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
@@ -118,7 +126,7 @@ def main() -> None:
         rows.append(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
-            | arm_metrics(log, i, setup, esn.config.dt, window)
+            | arm_metrics(log, i, setup, esn.config.dt, window, span)
         )
 
     tracker = config["tracker"]
@@ -164,7 +172,7 @@ def main() -> None:
                     {"law": law, "omega": omega, "damping": setting.damping, "arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm == "replay" else ""}
-                    | arm_metrics(log, i, setup, esn.config.dt, window)
+                    | arm_metrics(log, i, setup, esn.config.dt, window, span)
                 )
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
@@ -180,8 +188,9 @@ def main() -> None:
         run_dir / "metrics.png", dpi=150
     )
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
-    span = disturbance_span(disturbance)
     plot_timeline(run_dir, setup, settings, span, title).savefig(run_dir / "timeline.png", dpi=150)
+    if "start_grid" in evaluation:
+        plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
     first = run_dir / settings[0].name / "esn_00.sklog.npz"
     print(f"Replay with:\n  uv run python third_party/skelarm/tools/player.py {first}")
@@ -233,7 +242,9 @@ def posed(skeleton: Skeleton, q: NDArray[np.float64]) -> Skeleton:
     return arm
 
 
-def arm_metrics(log: StateLog, i: int, setup: Setup, period: float, window: list[float]) -> dict[str, Any]:
+def arm_metrics(
+    log: StateLog, i: int, setup: Setup, period: float, window: list[float], span: tuple[float, float] | None
+) -> dict[str, Any]:
     """The metrics of one arm's run from start posture ``i``, compared with the demonstrator's undisturbed reach.
 
     Besides the reach and hold metrics of Stage 1 (see
@@ -252,7 +263,13 @@ def arm_metrics(log: StateLog, i: int, setup: Setup, period: float, window: list
     - ``peak_torque_nm``: the largest joint torque;
     - ``effort_n2m2s``: the integral of the squared joint torques, summed over the joints;
     - ``peak_external_force_n``: the largest disturbance force at the tip (a
-      block's holding force shows how hard the arm pushes against it).
+      block's holding force shows how hard the arm pushes against it);
+
+    and at the end of the disturbance (``span``, on the task clock):
+
+    - ``reference_lead``: how far the reference is ahead of the arm along the
+      demonstrated path, as a fraction of the path (see :func:`progress`); NaN
+      without a disturbance.
 
     The demonstrator tracks no reference, so its tracking metrics are NaN.
     """
@@ -274,9 +291,14 @@ def arm_metrics(log: StateLog, i: int, setup: Setup, period: float, window: list
     elif outside[-1] < len(distance) - 1:
         settling_time = float(setup.times[outside[-1] + 1])
     reference_speed = nan
+    lead = nan
     if tracked:
         q_ref = log.channel("q_ref")[task]
         reference_speed = float(np.degrees(np.abs(np.diff(q_ref, axis=0)).max() / np.diff(times[task]).min()))
+        if span is not None:
+            k = int(np.argmin(np.abs(times - span[1])))
+            ahead = progress(log.channel("q_ref")[k : k + 1], setup.starts[i].q, setup)
+            lead = float(ahead[0] - progress(log.channel("q")[k : k + 1], setup.starts[i].q, setup)[0])
     return run_metrics(run, setup) | {
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
         "peak_reference_speed_dps": reference_speed,
@@ -286,7 +308,19 @@ def arm_metrics(log: StateLog, i: int, setup: Setup, period: float, window: list
         "peak_torque_nm": float(np.abs(tau[in_window]).max()),
         "effort_n2m2s": float(np.sum(tau[in_window] ** 2) * np.diff(times).mean()),
         "peak_external_force_n": float(np.linalg.norm(force[in_window], axis=1).max()),
+        "reference_lead": lead,
     }
+
+
+def progress(q: NDArray[np.float64], start_q: NDArray[np.float64], setup: Setup) -> NDArray[np.float64]:
+    """How far along the demonstrated joint path the joint angles ``q`` are, from 0 at its start to 1 at its end.
+
+    The path is that of the training demonstration that starts nearest to
+    ``start_q``. A reference generator that keeps the demonstration's timing, as the
+    replay does, advances along it whatever the arm does; one that adapts to the
+    arm stays with the arm's progress.
+    """
+    return path_progress(q, setup.demos[nearest_demonstration(start_q, setup.demos)])
 
 
 def disturbance_span(disturbance: dict[str, Any] | None) -> tuple[float, float] | None:
@@ -424,7 +458,7 @@ def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str)
     columns = len(rows[0])
     fig = Figure(figsize=(3.2 * columns, 3.3 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
-    axes = np.atleast_2d(fig.subplots(len(rows), columns, sharex=True, sharey=True))
+    axes = fig.subplots(len(rows), columns, sharex=True, sharey=True, squeeze=False)
     n_starts = len(setup.starts)
     for row, ax_row in zip(rows, axes, strict=True):
         for setting, ax in zip(row, ax_row, strict=True):
@@ -455,25 +489,28 @@ def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str)
 def plot_timeline(
     run_dir: Path, setup: Setup, settings: list[Setting], span: tuple[float, float] | None, title: str
 ) -> Figure:
-    """Plot the hand's distance to the target and the joint torque over time, from the first start posture.
+    """Plot the hand's distance to the target, the progress, and the joint torque over time, from the first start.
 
-    The shaded band is when the disturbance acts.
+    The progress along the demonstrated path (see :func:`progress`) is drawn for the
+    arms (solid) and for their references (dashed). The shaded band is when the
+    disturbance acts.
     """
     rows = by_law(settings)
     columns = len(rows[0])
-    fig = Figure(figsize=(3.4 * columns, 5.0 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    fig = Figure(figsize=(3.6 * columns + 1.0, 7.2 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(f"{title}, from {setup.starts[0].origin}", color="#0b0b0b")
-    axes = np.asarray(fig.subplots(2 * len(rows), columns, sharex=True)).reshape(2 * len(rows), columns)
+    axes = np.asarray(fig.subplots(3 * len(rows), columns, sharex=True)).reshape(3 * len(rows), columns)
+    start_q = setup.starts[0].q
     reference = setup.demonstrator_logs[0]
     ref_times = reference.times
     ref_hand = endpoint_positions(setup.skeleton, reference.channel("q").reshape(len(ref_times), -1))
     demonstrator = load_hand(run_dir / "demonstrator_00.sklog.npz", setup)
     for row, law_settings in enumerate(rows):
         for col, setting in enumerate(law_settings):
-            ax_distance, ax_torque = axes[2 * row, col], axes[2 * row + 1, col]
+            ax_distance, ax_progress, ax_torque = axes[3 * row : 3 * row + 3, col]
             runs = {arm: load_hand(run_dir / setting.name / f"{arm}_00.sklog.npz", setup) for arm in ("esn", "replay")}
             runs["demonstrator"] = demonstrator
-            for ax in (ax_distance, ax_torque):
+            for ax in (ax_distance, ax_progress, ax_torque):
                 style(ax)
                 if span is not None:
                     ax.axvspan(*span, color=DISTURBANCE_COLOR, zorder=0)
@@ -485,6 +522,8 @@ def plot_timeline(
                 alpha=0.3,
                 label="demonstrator, undisturbed",
             )
+            undisturbed = progress(reference.channel("q").reshape(len(ref_times), -1), start_q, setup)
+            ax_progress.plot(ref_times, undisturbed, color=ARM_COLORS["demonstrator"], linewidth=4, alpha=0.3)
             for arm in ARMS:
                 times, hand, log = runs[arm]
                 color = ARM_COLORS[arm]
@@ -495,17 +534,104 @@ def plot_timeline(
                     linewidth=1.3,
                     label=ARM_LABELS[arm],
                 )
+                ax_progress.plot(times, progress(log.channel("q"), start_q, setup), color=color, linewidth=1.3)
+                if "q_ref" in log.channel_names:
+                    reference_progress = progress(log.channel("q_ref"), start_q, setup)
+                    ax_progress.plot(times, reference_progress, color=color, linewidth=1.3, linestyle="--")
                 ax_torque.plot(times, np.linalg.norm(log.channel("tau"), axis=1), color=color, linewidth=1.3)
             ax_distance.axhline(1000 * setup.radius, color="#0b0b0b", linewidth=0.8, linestyle=":")
             ax_distance.set(xlim=(-0.3, float(setup.times[-1])), ylim=(0, None))
             ax_distance.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
+            ax_progress.set_ylim(-0.05, 1.05)
             ax_torque.set_xlabel("time (s)", color=TEXT_COLOR, fontsize=8)
             if col == 0:
                 ax_distance.set_ylabel("hand to target (mm)", color=TEXT_COLOR)
+                ax_progress.set_ylabel("progress along the\ndemonstrated path", color=TEXT_COLOR)
                 ax_torque.set_ylabel("joint torque norm (N m)", color=TEXT_COLOR)
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    ncol = 4 if columns > 2 else 2  # a narrow figure wraps the legend
+    handles.append(axes[1, 0].plot([], [], color=TEXT_COLOR, linestyle="--", linewidth=1.3)[0])
+    labels.append("its reference (progress)")
+    ncol = 4 if columns > 2 else columns  # a narrow figure wraps the legend
     fig.legend(handles, labels, loc="outside lower center", ncol=ncol, frameon=False, labelcolor=TEXT_COLOR)
+    return fig
+
+
+OUTCOME_COLORS = ["#2a78d6", "#eb6834", "#52514e"]  # arrive and hold, leave the goal, never arrive
+OUTCOMES = ["arrive and hold", "leave the goal", "never arrive"]
+# The maps of grid.png: metric, title, factor to its display unit, and the top of a
+# linear color scale from 0, or None for a logarithmic scale over the values.
+GRID_MAPS: list[tuple[str, str, float, float | None]] = [
+    ("reach_path_distance_m", "Path distance from the\ndemonstrator's reach (mm)", 1000.0, None),
+    ("training_path_ratio", "Training path ratio: 0 returns onto\nthe demonstration, 1 as the demonstrator", 1.0, 1.5),
+    ("peak_reference_speed_dps", "Peak reference joint speed (deg/s)", 1.0, None),
+    ("peak_torque_nm", "Peak joint torque (N m)", 1.0, None),
+    ("tracking_error_deg", "Tracking error (deg RMS)", 1.0, None),
+]
+
+
+def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting], title: str) -> Figure:
+    """Map the outcome and the main metrics over the start offsets: one row per tracker setting and arm.
+
+    Each metric's colors are shared by its column, so the ESN and the replay compare.
+    """
+    offsets = {}
+    for i, start in enumerate(setup.starts):
+        demonstrated = setup.demos[nearest_demonstration(start.q, setup.demos)][0]
+        offsets[i] = tuple(np.round(np.degrees(start.q - demonstrated), 6))
+    xs = np.unique([offset[0] for offset in offsets.values()])
+    ys = np.unique([offset[1] for offset in offsets.values()])
+    step_x, step_y = xs[1] - xs[0], ys[1] - ys[0]
+    extent = (xs[0] - step_x / 2, xs[-1] + step_x / 2, ys[0] - step_y / 2, ys[-1] + step_y / 2)
+    panels = [(setting, arm) for setting in settings for arm in ("esn", "replay")]
+    columns = 1 + len(GRID_MAPS)
+    fig = Figure(figsize=(3.3 * columns, 3.0 * len(panels) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(f"{title}: start offsets", color="#0b0b0b")
+    axes = fig.subplots(len(panels), columns, squeeze=False)
+
+    def grid_of(group: list[dict[str, Any]], key: str, factor: float) -> NDArray[np.float64]:
+        cell = {offsets[r["start"]][:2]: float(r[key]) * factor for r in group}
+        return np.array([[cell.get((x, y), np.nan) for x in xs] for y in ys])
+
+    groups = [
+        [r for r in rows if (r["law"], r["omega"], r["damping"], r["arm"]) == (s.law, s.omega, s.damping, arm)]
+        for s, arm in panels
+    ]
+    for ax_row, (setting, arm), group in zip(axes, panels, groups, strict=True):
+        outcome = [{**r, "outcome": 0 if r["success"] else 1 if r["arrived"] else 2} for r in group]
+        ax_row[0].imshow(
+            grid_of(outcome, "outcome", 1.0),
+            origin="lower",
+            extent=extent,
+            cmap=ListedColormap(OUTCOME_COLORS),
+            vmin=-0.5,
+            vmax=2.5,
+        )
+        ax_row[0].set_ylabel(f"{setting.label}\n{ARM_LABELS[arm]}\njoint 2 offset (deg)", color=TEXT_COLOR, fontsize=8)
+        ax_row[0].set_title("Outcome", color=TEXT_COLOR, fontsize=9)
+    handles = [Patch(color=color, label=text) for color, text in zip(OUTCOME_COLORS, OUTCOMES, strict=True)]
+    axes[0, 0].legend(handles=handles, loc="upper left", fontsize=7, framealpha=0.8)
+
+    for column, (key, label, factor, top) in enumerate(GRID_MAPS, start=1):
+        data = [grid_of(group, key, factor) for group in groups]
+        finite = np.concatenate([d[np.isfinite(d)] for d in data])
+        if top is not None:
+            norm: Normalize = Normalize(vmin=0.0, vmax=top)
+        elif finite.size:
+            norm = LogNorm(vmin=max(float(finite.min()), 1e-3), vmax=max(float(finite.max()), 1e-3) * 1.0001)
+        else:
+            norm = Normalize(0.0, 1.0)
+        for ax, grid in zip(axes[:, column], data, strict=True):
+            ax.imshow(grid, origin="lower", extent=extent, cmap="Blues", norm=norm)
+            ax.set_title(label, color=TEXT_COLOR, fontsize=9)
+        extend = "max" if top is not None else "neither"
+        fig.colorbar(
+            ScalarMappable(norm=norm, cmap="Blues"), ax=axes[:, column].tolist(), location="bottom", extend=extend
+        )
+    for ax in axes.flat:
+        ax.plot(0.0, 0.0, marker="+", markersize=10, color="#0b0b0b", markeredgewidth=1.5)
+        ax.tick_params(labelsize=7)
+    for ax in axes[-1]:
+        ax.set_xlabel("joint 1 offset (deg)", color=TEXT_COLOR, fontsize=8)
     return fig
 
 
