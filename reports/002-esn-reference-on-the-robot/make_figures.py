@@ -18,10 +18,13 @@ Two options read the run logs, which are not kept in Git, from the runs under
 the storage root, where ``experiments/robot_esn.py`` wrote them:
 
 - ``--traces`` compares the ESN's output with the arm's joint angles and the
-  demonstrator's trajectory: it draws ``results/summary/traces.png`` and writes
-  how far the output departs from the demonstration in every run to
-  ``results/summary/departures.csv`` and ``results/summary/offset_references.csv``,
-  from which the tables of that comparison are printed (also without the option);
+  demonstrator's trajectory: it draws ``results/summary/traces.png`` (critically
+  damped tracker) and ``results/summary/traces_underdamped.png`` (damping ratio
+  0.1), and writes how far the output departs from the demonstration in every run
+  to ``departures.csv``, ``offset_references.csv``, and ``damping_departures.csv``,
+  and how the output rings with an underdamped arm to ``ringing.csv``, all in
+  ``results/summary``, from which the tables of that comparison are printed
+  (also without the option);
 - ``--animations`` exports animated GIFs of a few runs with skelarm's player.
 """
 
@@ -87,10 +90,14 @@ ANIMATION_FPS = 20.0  # a whole number of milliseconds per frame, so GIFs play i
 # The comparison of the ESN's output with the arm and the demonstrator.
 TRACE_SCENARIOS = ["nominal", "push", "block", "offset 10°"]
 TRACE_SETTING = "computed_torque_w10"  # the tracker setting of the trace figure, from the first start posture
+UNDERDAMPED_SETTING = "computed_torque_w10_z0.1"  # the same, with the damping ratio 0.1 (the damping runs)
 DEPARTURE_WINDOWS = {"nominal": (0.0, 1.5), "push": (0.4, 1.4), "block": (0.3, 1.3)}  # the reach, and 1 s from onset
 OFFSET_WINDOW = (0.0, 1.5)  # the reach from an offset start
 DEPARTURES = SUMMARY / "departures.csv"
 OFFSET_REFERENCES = SUMMARY / "offset_references.csv"
+DAMPING_DEPARTURES = SUMMARY / "damping_departures.csv"
+RINGING = SUMMARY / "ringing.csv"
+RINGING_WINDOW = (1.5, 5.0)  # after the reach, while an underdamped arm rings around the target (s)
 
 
 def main() -> None:
@@ -123,9 +130,14 @@ def main() -> None:
     print_damping_tables(stats)
     print(f"Wrote {SUMMARY / 'summary.png'} and {SUMMARY / 'damping.png'}")
     if args.traces:
-        plot_traces().savefig(SUMMARY / "traces.png", dpi=150)
+        title = "computed torque, ω = 10 rad/s"
+        plot_traces(SCENARIOS, TRACE_SCENARIOS, TRACE_SETTING, title, 3.0).savefig(SUMMARY / "traces.png", dpi=150)
+        underdamped = plot_traces(
+            DAMPING_SCENARIOS, list(DAMPING_SCENARIOS), UNDERDAMPED_SETTING, f"{title}, ζ = 0.1", 5.0
+        )
+        underdamped.savefig(SUMMARY / "traces_underdamped.png", dpi=150)
         write_departures()
-        print(f"Wrote {SUMMARY / 'traces.png'}, {DEPARTURES.name}, and {OFFSET_REFERENCES.name}")
+        print(f"Wrote the traces, {DEPARTURES.name}, {OFFSET_REFERENCES.name}, and {DAMPING_DEPARTURES.name}")
     print_departure_tables()
     if args.animations:
         export_animations()
@@ -293,41 +305,41 @@ def joint_angles_at(log: StateLog, times: NDArray[np.float64], channel: str = "q
     return np.degrees(np.column_stack([np.interp(times, log.times, values[:, j]) for j in range(values.shape[1])]))
 
 
-def run_logs(scenario: str, setting: str, start: int) -> dict[str, StateLog]:
+def run_logs(scenario: str, setting: str, start: int, runs: dict[str, str] = SCENARIOS) -> dict[str, StateLog]:
     """The logs of one start posture of a scenario: the ESN's and the replay's, and the demonstrator's.
 
-    ``demonstration`` is the demonstrator's undisturbed reach from the same start
-    posture: the nominal run's for the push and the block, the run's own otherwise.
+    ``runs`` maps the scenarios to their run directories. ``demonstration`` is the
+    demonstrator's undisturbed reach from the same start posture: the nominal run's
+    for the push and the block, the run's own otherwise.
     """
     from arm_esn_ctrl.storage import storage_root
 
-    run = storage_root() / "results" / SCENARIOS[scenario]
+    run = storage_root() / "results" / runs[scenario]
     logs = {
         "esn": StateLog.load(run / setting / f"esn_{start:02d}.sklog.npz"),
         "replay": StateLog.load(run / setting / f"replay_{start:02d}.sklog.npz"),
         "demonstrator": StateLog.load(run / f"demonstrator_{start:02d}.sklog.npz"),
     }
-    undisturbed = run if scenario not in ("push", "block") else storage_root() / "results" / SCENARIOS["nominal"]
+    undisturbed = run if scenario not in ("push", "block") else storage_root() / "results" / runs["nominal"]
     logs["demonstration"] = StateLog.load(undisturbed / f"demonstrator_{start:02d}.sklog.npz")
     return logs
 
 
-def plot_traces() -> Figure:
+def plot_traces(runs: dict[str, str], scenarios: list[str], setting: str, title: str, end: float) -> Figure:
     """The joint angles over time of the arms, the references, and the demonstrator, from the first start.
 
-    One column per scenario; the bottom row shows how far the ESN's output and its
-    arm are from the demonstration, and from each other.
+    One column per scenario, from 0 to ``end`` seconds; the bottom row shows how far
+    the ESN's output and its arm are from the demonstration, and from each other.
     """
-    fig = Figure(figsize=(16, 11), facecolor=SURFACE_COLOR, layout="constrained")
+    fig = Figure(figsize=(4 * len(scenarios), 11), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(
-        "The ESN's output against the arm and the demonstrator: computed torque, ω = 10 rad/s, from the first start",
-        color="#0b0b0b",
+        f"The ESN's output against the arm and the demonstrator: {title}, from the first start", color="#0b0b0b"
     )
-    axes = fig.subplots(3, len(TRACE_SCENARIOS), sharex=True)
-    for col, scenario in enumerate(TRACE_SCENARIOS):
-        logs = run_logs(scenario, TRACE_SETTING, 0)
+    axes = fig.subplots(3, len(scenarios), sharex=True)
+    for col, scenario in enumerate(scenarios):
+        logs = run_logs(scenario, setting, 0, runs)
         esn = logs["esn"]
-        times = esn.times[(esn.times > -1e-9) & (esn.times <= 3.0)]
+        times = esn.times[(esn.times > -1e-9) & (esn.times <= end)]
         demonstration = joint_angles_at(logs["demonstration"], times)
         output, arm = joint_angles_at(esn, times, "q_ref"), joint_angles_at(esn, times)
         lines = [
@@ -364,7 +376,7 @@ def plot_traces() -> Figure:
             if scenario in ("push", "block"):
                 span = (0.4, 0.5) if scenario == "push" else (0.3, 0.8)
                 ax.axvspan(*span, color="#f0efec", zorder=0)
-    handles, labels = axes[0, 2].get_legend_handles_labels()  # the block has every line
+    handles, labels = axes[0, scenarios.index("block")].get_legend_handles_labels()  # the block has every line
     fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
     distance_labels = ["ESN output from the demonstration", "ESN arm from the demonstration", "ESN output from its arm"]
     axes[2, 0].legend(distance_labels, fontsize=8, frameon=False, labelcolor=TEXT_COLOR)
@@ -386,14 +398,8 @@ def write_departures() -> None:
         for law, omega in SETTINGS:
             for start in range(8):
                 logs = run_logs(scenario, f"{law}_w{omega:g}", start)
-                esn = logs["esn"]
-                times = esn.times[(esn.times >= begin - 1e-9) & (esn.times <= end + 1e-9)]
-                demonstration = joint_angles_at(logs["demonstration"], times)
-                output = float(np.linalg.norm(joint_angles_at(esn, times, "q_ref") - demonstration, axis=1).max())
-                arm = float(np.linalg.norm(joint_angles_at(esn, times) - demonstration, axis=1).max())
                 rows.append(
-                    {"scenario": scenario, "law": law, "omega": omega, "start": start}
-                    | {"output_departure_deg": output, "arm_departure_deg": arm, "ratio": output / arm}
+                    {"scenario": scenario, "law": law, "omega": omega, "start": start} | departure(logs, begin, end)
                 )
     write_csv(DEPARTURES, rows)
     rows = []
@@ -412,6 +418,46 @@ def write_departures() -> None:
                     | {"from_replayed_deg": float(np.sqrt(np.mean(np.sum(from_replayed**2, axis=1))))}
                 )
     write_csv(OFFSET_REFERENCES, rows)
+    rows = []
+    for scenario, (begin, end) in DEPARTURE_WINDOWS.items():
+        for law in LAW_NAMES:
+            for damping in DAMPINGS:
+                for start in range(8):
+                    setting = f"{law}_w10" + ("" if damping == 1.0 else f"_z{damping:g}")
+                    logs = run_logs(scenario, setting, start, DAMPING_SCENARIOS)
+                    rows.append(
+                        {"scenario": scenario, "law": law, "omega": 10.0, "damping": damping, "start": start}
+                        | departure(logs, begin, end)
+                    )
+    write_csv(DAMPING_DEPARTURES, rows)
+    rows = []
+    for scenario in ("push", "block"):
+        for law in LAW_NAMES:
+            for start in range(8):
+                esn = run_logs(scenario, f"{law}_w10_z0.1", start, DAMPING_SCENARIOS)["esn"]
+                begin, end = RINGING_WINDOW
+                times = esn.times[(esn.times >= begin - 1e-9) & (esn.times <= end + 1e-9)]
+                arm, output = joint_angles_at(esn, times), joint_angles_at(esn, times, "q_ref")
+                for joint in range(arm.shape[1]):
+                    a, b = arm[:, joint] - arm[:, joint].mean(), output[:, joint] - output[:, joint].mean()
+                    if a.std() < 0.2:  # this joint has stopped ringing (deg)
+                        continue
+                    lag = (np.argmax(np.correlate(b, a, "full")) - (len(a) - 1)) * float(np.diff(times).mean())
+                    rows.append(
+                        {"scenario": scenario, "law": law, "omega": 10.0, "damping": 0.1, "start": start}
+                        | {"joint": joint + 1, "lag_s": lag, "amplitude_ratio": float(b.std() / a.std())}
+                    )
+    write_csv(RINGING, rows)
+
+
+def departure(logs: dict[str, StateLog], begin: float, end: float) -> dict[str, float]:
+    """The largest distance of the ESN's output and of its arm from the demonstration from ``begin`` to ``end``."""
+    esn = logs["esn"]
+    times = esn.times[(esn.times >= begin - 1e-9) & (esn.times <= end + 1e-9)]
+    demonstration = joint_angles_at(logs["demonstration"], times)
+    output = float(np.linalg.norm(joint_angles_at(esn, times, "q_ref") - demonstration, axis=1).max())
+    arm = float(np.linalg.norm(joint_angles_at(esn, times) - demonstration, axis=1).max())
+    return {"output_departure_deg": output, "arm_departure_deg": arm, "ratio": output / arm}
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -440,6 +486,37 @@ def print_departure_tables() -> None:
             setting = f"{LAW_NAMES[law]}, ω = {omega:g}"
             ratios = f"{np.mean(ratio):.2f} ({min(ratio):.2f} to {max(ratio):.2f})"
             print(f"| {scenario} | {setting} | {output:.2f} | {arm:.2f} | {ratios} |")
+    if DAMPING_DEPARTURES.exists():
+        with DAMPING_DEPARTURES.open(newline="") as f:
+            damping_rows = list(csv.DictReader(f))
+        print("\nThe ratio as the damping ratio falls, ω = 10 rad/s: means over the 8 starts (range)\n")
+        print("| Law | ζ | nominal | push | block |")
+        print("| --- | ---: | ---: | ---: | ---: |")
+        for law in LAW_NAMES:
+            for damping in DAMPINGS:
+                cells = []
+                for scenario in DEPARTURE_WINDOWS:
+                    values = [
+                        float(r["ratio"])
+                        for r in damping_rows
+                        if r["scenario"] == scenario and r["law"] == law and float(r["damping"]) == damping
+                    ]
+                    cells.append(f"{np.mean(values):.2f} ({min(values):.2f} to {max(values):.2f})")
+                print(f"| {LAW_NAMES[law]} | {damping:g} | " + " | ".join(cells) + " |")
+    if RINGING.exists():
+        with RINGING.open(newline="") as f:
+            ringing = list(csv.DictReader(f))
+        print(f"\nThe ESN's output against its ringing arm, ζ = 0.1, {RINGING_WINDOW[0]:g} to {RINGING_WINDOW[1]:g} s:")
+        for scenario in ("push", "block"):
+            for law in LAW_NAMES:
+                group = [r for r in ringing if r["scenario"] == scenario and r["law"] == law]
+                lag = 1000 * np.array([float(r["lag_s"]) for r in group])
+                amplitude = np.array([float(r["amplitude_ratio"]) for r in group])
+                print(
+                    f"  {scenario}, {LAW_NAMES[law]}: lag {np.median(lag):.0f} ms (median, {lag.min():.0f} to"
+                    f" {lag.max():.0f}), amplitude ratio {np.median(amplitude):.2f} (median, {amplitude.min():.2f} to"
+                    f" {amplitude.max():.2f}), {len(group)} ringing joints"
+                )
     with OFFSET_REFERENCES.open(newline="") as f:
         rows = list(csv.DictReader(f))
     print("\nThe ESN's output from offset starts: RMS distance over the reach (deg), means over the 32 starts\n")

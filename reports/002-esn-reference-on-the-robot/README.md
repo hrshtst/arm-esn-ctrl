@@ -148,9 +148,10 @@ The first five runs are from commit `2d5b567` and the damping runs from
 `88c731b` (recorded in each `run.toml`); all are deterministic. Each run directory holds its configuration, its run record, and its
 per-run metrics (`metrics.csv`). [`make_figures.py`](make_figures.py) draws the
 summary figures and prints the tables of Sections 3.1, 3.6, and 3.7 from those metrics. With
-`--traces`, it measures the comparison of Section 3.7 from the run logs under the
-storage root and saves it to `departures.csv` and `offset_references.csv` in
-[`results/summary`](results/summary), from which the tables are printed. With
+`--traces`, it draws Figures 8 and 9 from the run logs under the storage root and
+saves the comparison of Section 3.7 to `departures.csv`, `offset_references.csv`,
+`damping_departures.csv`, and `ringing.csv` in [`results/summary`](results/summary),
+from which the tables are printed. With
 `--animations`, it exports the animations of skelarm's player from the run logs
 under the storage root; the logs are not kept in Git.
 
@@ -340,7 +341,8 @@ Joint PD, ω = 10 rad/s (ESN / replay):
 ![The ESN's output against the arm and the demonstrator](results/summary/traces.png)
 
 **Figure 8.** Joint angles over time from the first start posture, computed torque
-at ω = 10 rad/s, one column per scenario (the shaded band is the disturbance). The
+at ω = 10 rad/s, critically damped (ζ = 1), one column per scenario (the shaded
+band is the disturbance). The
 thick gray line is the demonstrator's undisturbed reach from the same start: for
 the first three columns, the training demonstration itself, which the replay
 replays; for the offset, the demonstrator's reach from the offset start, while
@@ -397,6 +399,36 @@ From offset starts, the RMS distance of the ESN's output over the reach
   pulls toward the target, departs from its path by at most 1.4° and is back
   within a fifth of that about 0.45 s after the push ends. The ESN's output
   departs by up to 5.1°, dips below the path (Figure 8), and takes about 0.7 s.
+
+![The ESN's output against the arm with an underdamped tracker](results/summary/traces_underdamped.png)
+
+**Figure 9.** As Figure 8, with the tracker underdamped (ζ = 0.1), over the whole
+5 s run, from the damping runs of Section 3.6 (which have no offset scenario).
+
+The ratio as the damping ratio falls, ω = 10 rad/s, over the reach (nominal) or
+1 s from the disturbance, means over the 8 starts (range):
+
+| Law | ζ | nominal | push | block |
+| --- | ---: | ---: | ---: | ---: |
+| computed torque | 1 | 0.51 (0.46 to 0.59) | 0.58 (0.55 to 0.60) | 0.45 (0.40 to 0.55) |
+| computed torque | 0.5 | 0.52 (0.46 to 0.60) | 0.57 (0.54 to 0.59) | 0.45 (0.40 to 0.55) |
+| computed torque | 0.3 | 0.54 (0.48 to 0.64) | 0.56 (0.53 to 0.59) | 0.45 (0.41 to 0.55) |
+| computed torque | 0.1 | 0.55 (0.50 to 0.64) | 0.56 (0.54 to 0.59) | 0.53 (0.49 to 0.60) |
+| joint PD | 1 | 0.58 (0.54 to 0.61) | 0.56 (0.51 to 0.62) | 0.45 (0.40 to 0.55) |
+| joint PD | 0.5 | 0.57 (0.49 to 0.65) | 0.56 (0.51 to 0.62) | 0.45 (0.40 to 0.55) |
+| joint PD | 0.3 | 0.59 (0.54 to 0.62) | 0.56 (0.52 to 0.62) | 0.46 (0.42 to 0.55) |
+| joint PD | 0.1 | 0.58 (0.53 to 0.62) | 0.56 (0.52 to 0.62) | 0.49 (0.45 to 0.54) |
+
+- **With an underdamped tracker, the ESN still goes about halfway.** The ratio
+  hardly changes with the damping ratio (0.45–0.59 on average), so how far the
+  ESN gives way is a property of the ESN, not of the tracker.
+- **The output rings along with the arm.** When the underdamped arm rings around
+  the target, the replay's reference holds still and the ringing decays. The
+  ESN's output oscillates with its arm instead (Figure 9): from 1.5 s on, at
+  about 60% of the arm's amplitude (medians 0.57–0.63), 30–45 ms after the arm
+  with computed torque and in step with it with joint PD (medians). The ringing is fed back into
+  the reference, so it decays much more slowly; after the block, joint 2 keeps
+  oscillating at a nearly constant amplitude for the rest of the run.
 
 Why halfway? The ESN's input is scaled down (input scaling 0.1) and its
 reservoir leaks slowly (leak rate 0.05, a memory of about 0.2 s). The measured
