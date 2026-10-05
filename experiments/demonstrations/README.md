@@ -6,14 +6,15 @@ scripted with one of skelarm's reaching controllers or taught with the mouse.
 
 ## Scripted
 
-Each configuration here runs one controller from 8 start postures, each 0.5 m
-from a common target:
+Each configuration here runs one controller from its start postures (8, or 1 for
+`reach_tvs_single.toml`), each 0.5 m from a common target:
 
 | Configuration | Controller | Reaches |
 | --- | --- | --- |
 | `reach_tvs.toml` | virtual spring-damper with time-varying stiffness | human-like: smooth bell-shaped speed peaking a little early, gently curved paths |
 | `reach_pds.toml` | online reference shaping with a position-dependent ratio | human-like: nearly straight paths, speed peaking at mid-movement with a small shoulder early on |
 | `reach_vsd.toml` | constant virtual spring-damper | not human-like, kept for comparison: the speed peaks almost at once |
+| `reach_tvs_single.toml` | as `reach_tvs.toml`, from one start posture (hand 0.5 m from the target, toward the lower right) | the demonstration of the single-demonstration experiment |
 
 ```bash
 uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_tvs.toml

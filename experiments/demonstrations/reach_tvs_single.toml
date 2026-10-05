@@ -1,0 +1,52 @@
+# A scripted reaching demonstration from one start posture: virtual spring-damper
+# with a time-varying stiffness (Sekimoto and Arimoto, IROS 2006), as in
+# reach_tvs.toml.
+#
+#   uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_tvs_single.toml
+#
+# The single-demonstration experiment learns from this one reach. Its start
+# posture puts the hand 0.5 m from the target, toward the lower right. The
+# [skeleton], [task], [simulator], and [controller] tables follow skelarm's
+# scenario format, so skelarm's tools also read this file.
+
+[demonstrations]
+# Start posture: joint angles in degrees (elbow bent to the positive side).
+start_q = [
+  [18.2, 119.9],  # hand ( 0.35, 0.85) m, 315 deg from the target
+]
+
+# Two-link planar arm (the robot of skelarm's examples/reach.toml).
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 1.0
+mass = 1.0
+inertia = 0.1
+com = [0.5, 0.0]
+limits = [-180.0, 180.0]
+
+[[skeleton.link]]
+length = 0.8
+mass = 0.8
+inertia = 0.05
+com = [0.4, 0.0]
+limits = [-180.0, 180.0]
+
+[task]
+type = "reaching"
+target = { pos = [0.0, 1.2], tolerance = 0.02 }  # hand goal (m), 2 cm tolerance
+duration = 4.0  # simulated time per demonstration (s): about 1 s to reach, then about 3 s of holding
+
+[simulator]
+dt = 0.002  # control and integration step (s)
+
+[controller]
+# Tuned for human-like reaches on this arm: a bell-shaped hand speed profile
+# peaking a little before mid-movement, a nearly straight hand path, and about
+# 1.1 s per reach. The stiffness depends on the time since the start.
+type = "time_varying_stiffness"
+k0 = 300.0     # saturated task-space stiffness (N/m)
+alpha = 3.0    # rate at which the stiffness rises from zero (1/s)
+zeta1 = 0.1    # task-space damping gain as a fraction of k0 (s)
+c_joint = 0.0  # joint damping (N m s/rad)
