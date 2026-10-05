@@ -149,9 +149,13 @@ flowchart LR
 
 The ESN input is now the *measured* joint angles of the robot, never the
 ESN's own prediction. The reservoir warms up while the arm holds its
-initial posture, before the task starts. The tracker's desired velocity
-and acceleration are finite differences of $q^\mathrm{ref}$, smoothed by
-a causal low-pass filter.
+initial posture, before the task starts at t = 0. Every ESN period Δ,
+the ESN turns the measured posture $q(t_k)$ into the posture the arm
+should have next, $\hat q_{k+1}$; between those instants, the reference
+$q^\mathrm{ref}$ moves in a straight line from $\hat q_k$ to
+$\hat q_{k+1}$. The tracker's desired velocity is that line's slope, and
+its desired acceleration is the change of the slope, smoothed by a causal
+low-pass filter.
 
 The **baseline** replaces the ESN block with the demonstration replayed
 against time, $q^\mathrm{ref}(t) = q^\mathrm{demo}(t)$. Everything else
@@ -474,6 +478,41 @@ to be posed again.
 
 Keys, as in skelarm's player: `Space` play/pause, `→`/`F` one step while paused,
 `R` or `Home` reset, `Q` quit.
+
+## Running the ESN on the robot (Stage 2)
+
+`experiments/robot_esn.py` connects a trained ESN to the simulated arm
+(`src/arm_esn_ctrl/tracking.py`). Every 10 ms, the ESN's period, the ESN
+receives the arm's measured joint angles and gives the posture the arm
+should have 10 ms later. Between those instants the reference moves in a
+straight line, and skelarm's computed-torque or joint PD law tracks it. The
+time-indexed baseline replays the nearest demonstration through the same
+tracker, and the demonstrator's own controller reaches from the same posture
+for comparison. Both tracked arms hold their start posture during the ESN's
+warm-up, at negative times, and the task starts at t = 0.
+
+| Configuration | Scenario | Runs |
+| --- | --- | --- |
+| `configs/robot/nominal.toml` | no disturbance | the 8 demonstrated starts, with computed torque and joint PD at ω = 5, 10, 20, and 40 rad/s |
+
+```bash
+uv run python experiments/robot_esn.py configs/robot/nominal.toml
+```
+
+The configuration names the trained ESN (`model` in `[esn]`, an `esn.toml`
+saved by Stage 1, whose run directory names the demonstrations), the tracking
+laws and natural frequencies (`[tracker]`), and the start postures and the run
+and hold durations (`[evaluation]`, as in Stage 1). The gains come from the
+natural frequency ω of the tracking error, critically damped: kp = ω² and
+kd = 2ω for computed torque, scaled by each joint's inertia for joint PD.
+
+The run directory receives the arm's runs for each tracker setting
+(`computed_torque_w10/esn_00.sklog.npz`, `replay_00.sklog.npz`, ...), which
+also record the reference `q_ref` and the tracking error, and the
+demonstrator's reaches (`demonstrator_00.sklog.npz`, ...). It also receives
+`metrics.csv`, with the reach and hold metrics of Stage 1 plus the RMS
+tracking error and the peak joint torque; `metrics.png`, with those metrics
+against ω; and `paths.png`, with the hand paths.
 
 ## Development
 
