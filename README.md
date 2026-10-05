@@ -13,8 +13,7 @@ disturbances. We study whether this state-driven ESN reference generator
 makes the arm more robust than the standard approach of tracking a
 time-indexed reference trajectory.
 
-> **Status:** early stage. The software scaffold is being set up.
-> Sections marked *(planned)* describe the intended structure.
+> **Status:** Stages 1 and 2 have first results, in reports 001 and 002.
 
 ## Motivation
 
@@ -219,98 +218,39 @@ Typical examples are:
   simulation belongs to skelarm. Fix issues upstream first, then advance
   the submodule pin in a separate commit.
 
-## Configuration and reproducibility
-
-Every run is described by a human-readable TOML configuration file. It
-holds every parameter that affects the result: the robot, the
-demonstrations, the ESN hyperparameters, the tracker gains, the
-scenario, and the random seeds.
-
-Every experiment script starts with `start_run` from
-`arm_esn_ctrl.storage`. It loads the configuration file and creates a
-run directory, where the script then writes its outputs:
-
-```python
-config, run_dir = start_run("configs/example.toml")
-```
-
-The run directory records how the result was produced:
-
-- `config.toml`: an exact copy of the configuration file, including the
-  random seeds;
-- `run.toml`: the command, start time, host name, commit hash of this
-  repository, and whether the working tree had uncommitted changes.
-
-```toml
-# run.toml
-config = "configs/example.toml"
-command = "experiments/example.py configs/example.toml"
-started = 2026-09-30 17:16:42+09:00
-host = "workstation"
-commit = "494d8652eabf8a55fa3e0c9e63f34231b61a2458"
-uncommitted_changes = false
-```
-
-The goal is modest: running the same configuration again on the same
-machine reproduces the same result. Small numerical differences on
-other machines or CPUs are acceptable and are not chased. For this,
-`arm_esn_ctrl` limits rclib to one OpenMP thread (`OMP_NUM_THREADS=1`,
-unless you set the variable yourself): a parallel sum is rounded
-differently depending on how the work is split among threads. Reproducing a
-result does not require checking out its recorded commit. The commit
-hash is there to investigate why a reproduced result differs, by
-showing what the implementation looked like when the result was
-produced.
-
-## Data and results storage
-
-Demonstrations and run outputs can grow large, so they live in a
-storage root, usually outside the Git repository. The storage root is
-chosen in this order:
-
-1. the `ARM_ESN_CTRL_STORAGE_ROOT` environment variable, if it is set;
-2. otherwise, `storage_root` in `storage.toml` at the repository root,
-   if that file exists;
-3. otherwise, `storage/` in the repository.
-
-```toml
-# storage.toml
-storage_root = "/path/to/storage"
-```
-
-A relative path is resolved against the repository root. Both
-`storage.toml` and `storage/` are specific to one machine, so Git
-ignores them.
-
-```text
-<storage root>/
-├── data/                            # demonstrations taught by hand (*.sklog.npz)
-└── results/
-    └── 20260930-171642-example/     # one directory per run: <date>-<time>-<config name>
-        ├── config.toml
-        ├── run.toml
-        └── ...                      # outputs written by the experiment
-```
-
-`data/` holds what cannot be regenerated, such as demonstrations taught
-with the mouse. Everything a script produces, including scripted
-demonstrations, goes into a run directory under `results/`.
-
-Git tracks only the data and results behind a specific report. They are
-copied into that report's directory (see [Reports](#reports)).
-
-## Repository layout *(planned)*
+## Repository layout
 
 ```text
 arm-esn-ctrl/
-├── src/arm_esn_ctrl/   # small library: demonstrations, ESN, autonomous and robot runs, metrics, plots
-├── experiments/        # one self-contained script per experiment
-├── tools/              # interactive tools, such as the live ESN reference app
-├── configs/            # TOML configuration files
+├── src/arm_esn_ctrl/   # small library: demonstrations, ESN, autonomous and robot runs, tracking, metrics
+├── experiments/        # the runner scripts, and one directory per experiment: its README and configurations
+├── tools/              # interactive apps that run a trained ESN or the robot live
 ├── reports/            # one directory per study (see Reports)
 ├── tests/              # sanity tests of the core pieces
 └── third_party/        # rclib and skelarm (Git submodules)
 ```
+
+## Experiments
+
+Each experiment is a directory under [`experiments/`](experiments/README.md),
+with a README that describes it and its configuration files; the runner scripts
+that run them are shared:
+
+| Experiment | What it studies | Report |
+| --- | --- | --- |
+| [demonstrations](experiments/demonstrations/README.md) | scripted reaching demonstrations of a two-link arm | |
+| [single_demonstration_autonomous_reaching](experiments/single_demonstration_autonomous_reaching/README.md) | an ESN trained on one demonstration, run on its own (Stage 1) | |
+| [multi_demonstration_autonomous_reaching](experiments/multi_demonstration_autonomous_reaching/README.md) | an ESN trained on eight demonstrations, run on its own (Stage 1) | [001](reports/001-autonomous-reaching/README.md) |
+| [multi_demonstration_robot_tracking](experiments/multi_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | [002](reports/002-esn-reference-on-the-robot/README.md) |
+
+Every parameter that affects a result is in a TOML configuration file, and every
+run records its configuration, the command, and the commit that produced it, so
+that running the same configuration again on the same machine reproduces the same
+result. Runs go into a storage root outside the repository, filed by experiment:
+`<storage root>/results/<experiment>/<date>-<time>-<configuration name>/`.
+[`experiments/README.md`](experiments/README.md) describes the configurations, the
+run records, reproducibility, and the storage. The interactive apps that run a
+trained ESN or the robot live are described in [`tools/README.md`](tools/README.md).
 
 ## Getting started
 
@@ -354,225 +294,6 @@ uv installs the libraries from the submodules but does not notice when
 their source changes, so reinstall them with `--reinstall-package`. After
 committing the new pin, rerun the experiments whose results depend on
 the library.
-
-## Making demonstrations
-
-Demonstrations are skelarm state logs (`*.sklog.npz`) of reaches on a
-two-link planar arm. They are either scripted with one of skelarm's
-reaching controllers or taught with the mouse.
-
-**Scripted.** Each configuration in `experiments/demonstrations/` runs one
-controller from 8 start postures, each 0.5 m from a common target:
-
-| Configuration | Controller | Reaches |
-| --- | --- | --- |
-| `reach_tvs.toml` | virtual spring-damper with time-varying stiffness | human-like: smooth bell-shaped speed peaking a little early, gently curved paths |
-| `reach_pds.toml` | online reference shaping with a position-dependent ratio | human-like: nearly straight paths, speed peaking at mid-movement with a small shoulder early on |
-| `reach_vsd.toml` | constant virtual spring-damper | not human-like, kept for comparison: the speed peaks almost at once |
-
-```bash
-uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_tvs.toml
-```
-
-The run directory receives one log per start posture
-(`demo_00.sklog.npz`, ...), their reach metrics (`metrics.csv`, defined
-in `src/arm_esn_ctrl/metrics.py`), and a figure of the hand paths,
-joint-space paths, and speed profiles (`demonstrations.png`). Replay a
-demonstration with skelarm's player:
-
-```bash
-uv run python third_party/skelarm/tools/player.py <run directory>/demo_00.sklog.npz
-```
-
-**Taught.** skelarm's trajectory recorder reads the same configuration
-files: it shows the arm and the target, and you drag the arm tip with the
-mouse. `--pose` sets the start posture in degrees (take one from
-`start_q`), and `--multi-take` numbers the saved takes
-(`reach_001.sklog.npz`, ...). The recorder does not create the output
-directory. With the default storage root:
-
-```bash
-mkdir -p storage/data/taught_reach
-uv run python third_party/skelarm/tools/trajectory_recorder.py \
-    experiments/demonstrations/reach_tvs.toml --pose 29.4,88.2 \
-    --multi-take --output storage/data/taught_reach/reach.sklog.npz --show-past-trails
-```
-
-## Running the ESN autonomously (Stage 1)
-
-`experiments/autonomous_esn.py` trains an ESN on one or more demonstrations
-and runs it autonomously, feeding its output back as its next input. Each
-demonstration is learned from a reset reservoir with its own warm-up, and one
-readout is fitted on all of them. The ESN runs from each demonstration's start
-posture (plus optional offsets) and from start postures no demonstration starts
-from, and each run is compared with the demonstrator's own reach from the same
-posture:
-
-| Configuration | Trained on | Runs from |
-| --- | --- | --- |
-| `experiments/single_demonstration_autonomous_reaching/autonomous_tvs_demo07.toml` | demo 7 only | its start, and offsets of 3 and 10 deg around it |
-| `experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all.toml` | all 8 demonstrations | their 8 starts, and 8 new starts halfway between them |
-| `experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all_distances.toml` | all 8 demonstrations | as above, plus starts 0.25 m and 0.75 m from the target (the demonstrations start 0.5 m away) |
-
-```bash
-uv run python experiments/autonomous_esn.py experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all.toml
-```
-
-The configuration names the demonstration run and the training files
-(`[demonstrations]`), the ESN hyperparameters (`[esn]`), and the start
-postures, run duration, and hold duration (`[evaluation]`). Start postures
-that no demonstration starts from are listed in named groups under
-`[evaluation.extra_starts]`, such as `between`, `nearer`, and `farther`, and
-the script summarizes the metrics for each group. To explore a hyperparameter,
-copy the file, change the value, and run the copy. Each run is recorded in
-its own directory.
-
-The run directory receives the trained ESN (`esn.toml`, with the
-hyperparameters and the joint-angle normalization, and `esn.rclib`, rclib's
-model file), the ESN's trajectories (`esn_00.sklog.npz`, ...), and the
-demonstrator's (`demonstrator_00.sklog.npz`, ...), which both replay in
-skelarm's player. It also receives their reach and hold metrics
-(`metrics.csv`, with the origin of each start posture) and a figure of the
-hand paths, joint angles, and hand speeds (`autonomous.png`), in which
-filled markers show demonstrated start postures and hollow ones the others.
-
-### Sweeping hyperparameters
-
-`experiments/sweep_esn.py` trains and runs the ESN for every combination of
-values listed in a configuration's `[sweep]` table (two or three `[esn]`
-hyperparameters), all on the same demonstrations and start postures:
-
-```bash
-uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all.toml
-```
-
-The run directory receives `sweep.csv`, with one row per combination: its
-reach metrics averaged over the demonstrated and the other start postures,
-the number of failed runs (never arriving or leaving the goal), and the
-median and largest hold error. `sweep.png` shows heatmaps of the main
-metrics. To look at a combination in
-detail, copy its values into a configuration for `autonomous_esn.py`.
-
-### Watching a trained ESN live
-
-`tools/esn_reference_app.py` runs a trained ESN interactively. It loads the
-robot and the task from a skelarm TOML file and the ESN from the `esn.toml`
-that `autonomous_esn.py` saves in its run directory:
-
-```bash
-uv run python tools/esn_reference_app.py experiments/demonstrations/reach_tvs.toml \
-    --model <run directory>/esn.toml
-```
-
-Drag the arm tip to choose a start posture, then press Play: the ESN is reset,
-driven by the held start posture for its warm-up (consumed at once, or played at
-negative times with "Show the warm-up in real time" or `--show-warmup`), and
-then runs autonomously, and the arm shows every posture it generates until you
-pause it. The side panel shows the reach and hold metrics as the run goes. If the
-TOML file also has `[controller]` and `[simulator]` tables, as the demonstration
-configurations do, "Compare with the demonstrator" simulates the demonstrator's
-reach from the same start posture in the background, draws it under the ESN's
-path, and compares the two; with the checkbox off (`--no-demonstrator`), nothing
-is simulated. Reset returns the arm to the start posture of the last run, ready
-to be posed again.
-
-Keys, as in skelarm's player: `Space` play/pause, `→`/`F` one step while paused,
-`R` or `Home` reset, `Q` quit.
-
-## Running the ESN on the robot (Stage 2)
-
-`experiments/robot_esn.py` connects a trained ESN to the simulated arm
-(`src/arm_esn_ctrl/tracking.py`). Every 10 ms, the ESN's period, the ESN
-receives the arm's measured joint angles and gives the posture the arm
-should have 10 ms later. Between those instants the reference moves in a
-straight line, and skelarm's computed-torque or joint PD law tracks it. The
-time-indexed baseline replays the nearest demonstration through the same
-tracker, and the demonstrator's own controller reaches from the same posture
-for comparison. Both tracked arms hold their start posture during the ESN's
-warm-up, at negative times, and the task starts at t = 0.
-
-Every configuration runs the 8 demonstrated starts (or starts offset from
-them), with computed torque and joint PD at ω = 5, 10, 20, and 40 rad/s:
-
-| Configuration | Scenario |
-| --- | --- |
-| `experiments/multi_demonstration_robot_tracking/nominal.toml` | no disturbance |
-| `experiments/multi_demonstration_robot_tracking/push.toml` | a 5 N push at the tip, sideways to the reach, for 0.1 s from t = 0.4 s |
-| `experiments/multi_demonstration_robot_tracking/block.toml` | the tip held by a stiff spring-damper (20 kN/m) from t = 0.3 s to 0.8 s, then released |
-| `experiments/multi_demonstration_robot_tracking/offset_3deg.toml` | starts 3 deg away from the demonstrated ones, in the four diagonal directions |
-| `experiments/multi_demonstration_robot_tracking/offset_10deg.toml` | the same, 10 deg away |
-| `experiments/multi_demonstration_robot_tracking/nominal_damping.toml`, `push_damping.toml`, `block_damping.toml` | as `nominal`, `push`, and `block`, at ω = 10 rad/s with the damping ratio ζ lowered from 1 to 0.1 |
-
-```bash
-uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/nominal.toml
-```
-
-The configuration names the trained ESN (`model` in `[esn]`, an `esn.toml`
-saved by Stage 1, whose run directory names the demonstrations), the tracking
-laws and natural frequencies (`[tracker]`), and the start postures and the run
-and hold durations (`[evaluation]`, as in Stage 1). The gains come from the
-natural frequency ω and the damping ratio ζ of the tracking error (`omegas` and
-the optional `dampings`, whose default 1 is critically damped): kp = ω² and
-kd = 2ζω for computed torque, scaled by each joint's inertia for joint PD. A
-configuration sweeps either ω or ζ. An
-optional `[disturbance]` table pushes or blocks all three arms alike
-(`src/arm_esn_ctrl/disturbances.py`), and `effort_window` in `[evaluation]`
-sets when the torque is measured.
-
-The run directory receives the arm's runs for each tracker setting
-(`computed_torque_w10/esn_00.sklog.npz`, `replay_00.sklog.npz`, ...), which
-also record the reference `q_ref`, the tracking error, and the disturbance
-force `ext_force` (drawn as an arrow by the player), and the demonstrator's
-reaches under the same disturbance (`demonstrator_00.sklog.npz`, ...). Every
-run is compared with the demonstrator's undisturbed reach, and `metrics.csv`
-holds, besides the reach and hold metrics of Stage 1:
-
-- over the task: the RMS tracking error, the peak joint speed of the reference
-  (a jump of the reference shows as a high speed), the peak hand speed, the
-  settling time (from when the hand stays within the goal radius until the end)
-  and the final distance to the target;
-- over the effort window: the peak joint torque, the integral of the squared
-  joint torques, and the peak disturbance force (for a block, how hard the arm
-  pushes against it).
-
-`metrics.png` shows those metrics against ω (or ζ), `paths.png` the hand paths, and
-`timeline.png` the hand's distance to the target and the joint torque over time
-from the first start posture.
-
-### Simulating the robot interactively
-
-`tools/robot_app.py` simulates the arm in real time, so you can pose it, watch
-it reach, and push it by hand:
-
-```bash
-# The ESN generates the reference; the tracker follows it.
-uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml \
-    --law computed_torque --omega 10 \
-    --model "$STORAGE/results/20261002-213015-autonomous_tvs_all_distances/esn.toml"
-# The demonstrator's reach from each run's start posture, replayed by time.
-uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --law pd --omega 20
-# The demonstrator's reach from a given posture, replayed by time: pose the arm
-# elsewhere before Play to emulate an initial offset.
-uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --law pd --omega 20 --pose 29.4,88.2
-# The demonstrator's own controller, without a reference.
-uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --demonstrator
-```
-
-`$STORAGE` stands for the storage root, and `--law ct` is short for
-`--law computed_torque`. Instead of ω, which makes the tracking error critically
-damped, `--kp` and `--kd` set the gains directly (one value, or one per joint, such
-as `--kp 30,5 --kd 1,0.2`); a small `--kd` makes the tracking error oscillate. The
-reference generator and the tracker are fixed at launch, and the side panel shows
-them, with the tracking error's natural frequency and damping ratio for each joint. Before Play, dragging the tip
-poses the arm. During a run, running or paused, dragging pulls the tip toward the
-cursor with a spring force (the drag stiffness in the panel), which acts on top of
-the controller's torque. External forces never act during the ESN's warm-up, which
-is consumed at once when a run starts. Reset returns the arm to the start posture of
-the last run, ready to be posed again. A faint gray arm shows the initial posture
-(the given one, or else the last run's start), and a faint colored arm the reference
-posture. The side panel shows the arrival and the hold, the tracking error and the
-reference's joint speed, and the joint torque, its squared integral, and the external
-force, live.
 
 ## Development
 
