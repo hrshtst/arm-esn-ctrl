@@ -28,7 +28,7 @@ from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance
 from arm_esn_ctrl.storage import storage_root
 
 # The keys allowed in an [evaluation] table.
-EVALUATION_KEYS = {"duration", "hold", "start_offsets_deg", "extra_starts"}
+EVALUATION_KEYS = {"duration", "hold", "start_offsets_deg", "extra_starts", "effort_window"}
 
 
 @dataclass(frozen=True)
