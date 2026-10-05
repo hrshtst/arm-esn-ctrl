@@ -24,7 +24,7 @@ from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import EsnSource, TrackerConfig, track
 from tools.robot_app import RobotApp, build_parser, check_arguments, joint_values
 
-CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
+CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(
     dt=0.01,
     warmup=0.25,

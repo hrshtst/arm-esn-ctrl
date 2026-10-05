@@ -3,7 +3,7 @@
 
 """Sweep ESN hyperparameters and summarize the autonomous runs (Stage 1).
 
-    uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all.toml
+    uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all.toml
 
 The configuration is that of ``experiments/autonomous_esn.py`` plus a ``[sweep]``
 table, which lists values for two or three of the ``[esn]`` hyperparameters. Every

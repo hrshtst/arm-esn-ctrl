@@ -14,7 +14,7 @@ from arm_esn_ctrl.disturbances import Block, make_disturbance
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import ReplaySource, TrackerConfig, track, tracking_gains
 
-CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
+CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 TARGET = np.array([0.0, 1.2])
 PUSH = {"type": "push", "force": 5.0, "onset": 0.4, "duration": 0.1}
 BLOCK = {"type": "block", "onset": 0.1, "release": 0.4, "stiffness": 20000.0, "damping": 100.0}

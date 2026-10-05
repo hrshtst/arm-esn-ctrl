@@ -1,18 +1,16 @@
-# Stage 1: an ESN trained on all eight demonstrations, run autonomously.
+# Stage 1: sweep the reservoir size, spectral radius, and warm-up of the ESN
+# trained on all eight demonstrations.
 #
-#   uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
+#   uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all_reservoir.toml
 #
-# The ESN learns the eight time-varying-stiffness demonstrations, which reach
-# the target at (0, 1.2) m from 0.5 m away in eight directions, 45 deg apart.
-# It then runs from each demonstrated start posture, and from eight start
-# postures halfway between the demonstrated directions, which no demonstration
-# starts from. Each run is compared with the demonstrator's own reach from the
-# same posture. The ESN hyperparameters are those of the single-demonstration
-# experiment (autonomous_tvs_demo07.toml), so only the training data differ.
+# Ridge, leak rate, and input scaling are fixed at the best combination of the
+# ridge / leak rate / input scaling sweep (sweep_tvs_all.toml, run
+# 20261002-201614): ridge 1e-6, leak rate 0.05, input scaling 0.1. Everything
+# else is sweep_tvs_all.toml.
 
 [demonstrations]
 # A run directory of experiments/make_demonstrations.py, relative to the storage root.
-run = "results/20261002-194644-reach_tvs"
+run = "results/demonstrations/20261002-194644-reach_tvs"
 train = [
   "demo_00.sklog.npz",
   "demo_01.sklog.npz",
@@ -26,15 +24,21 @@ train = [
 
 [esn]
 dt = 0.01              # sampling period (s)
-warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
-n_neurons = 300
-spectral_radius = 0.5
+warmup = 1.0           # swept: the held start posture drives the ESN this long before it moves (s)
+n_neurons = 300        # swept
+spectral_radius = 0.5  # swept
 sparsity = 0.1         # fraction of nonzero reservoir connections
-leak_rate = 0.3
-input_scaling = 1.0
+leak_rate = 0.05
+input_scaling = 0.1
 bias = true
-ridge = 1.0            # strong regularization keeps the autonomous ESN stable
+ridge = 1e-6
 seed = 0
+
+[sweep]
+# The first two are the heatmap axes (x, then y); each value of the third gets its own column.
+n_neurons = [150, 200, 300, 400, 600, 800]
+spectral_radius = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
+warmup = [0.0, 0.25, 0.5, 1.0, 1.5, 2.5]
 
 [evaluation]
 duration = 5.0         # autonomous run (s); the demonstrations last 4 s

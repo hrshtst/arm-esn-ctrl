@@ -3,7 +3,7 @@
 
 """Run a trained ESN as the reference generator of the simulated robot arm (Stage 2).
 
-    uv run python experiments/robot_esn.py configs/robot/nominal.toml
+    uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/nominal.toml
 
 The arm tracks a reference generated every reference period (the ESN's 10 ms)
 from its measured joint angles (see :mod:`arm_esn_ctrl.tracking`). Three arms

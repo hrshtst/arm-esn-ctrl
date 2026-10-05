@@ -1,9 +1,9 @@
-# Stage 2: start postures 3 deg away from the demonstrated ones, in each of the
+# Stage 2: start postures 10 deg away from the demonstrated ones, in each of the
 # four diagonal directions of joint space. No force acts. The replay replays the
 # nearest demonstration from its own start posture, so its reference jumps from the
 # arm's posture to the demonstration at t = 0.
 #
-#   uv run python experiments/robot_esn.py configs/robot/offset_3deg.toml
+#   uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/offset_10deg.toml
 #
 # The ESN and the tracker settings are those of nominal.toml.
 
@@ -13,7 +13,7 @@
 # [demonstrations]) are the ones the time-indexed baseline replays. This one is
 # the best of Stage 1: all eight TVS demonstrations, 600 neurons, spectral radius
 # 1.3, leak rate 0.05, input scaling 0.1, ridge 1e-6, warm-up 0.25 s.
-model = "results/20261002-213015-autonomous_tvs_all_distances/esn.toml"
+model = "results/multi_demonstration_autonomous_reaching/20261002-213015-autonomous_tvs_all_distances/esn.toml"
 
 [tracker]
 # Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
@@ -27,5 +27,5 @@ acceleration_filter = 0.02  # time constant of the low-pass filter on the refere
 [evaluation]
 duration = 5.0         # task (s), after the warm-up
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
-start_offsets_deg = [[3.0, 3.0], [3.0, -3.0], [-3.0, 3.0], [-3.0, -3.0]]  # around each demonstrated start
+start_offsets_deg = [[10.0, 10.0], [10.0, -10.0], [-10.0, 10.0], [-10.0, -10.0]]  # around each demonstrated start
 effort_window = [0.0, 1.0]  # torque and effort are measured over the first second of the task (s)

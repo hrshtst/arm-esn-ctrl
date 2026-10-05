@@ -12,7 +12,7 @@ from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.metrics import path_distance
 from arm_esn_ctrl.storage import REPO_ROOT
 
-CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
+CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 
 
 def test_start_postures_are_offsets_around_each_demonstration_then_extra_groups():

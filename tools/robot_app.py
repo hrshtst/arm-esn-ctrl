@@ -4,7 +4,7 @@
 """Interactive dynamics simulation of the robot arm reaching under a reference generator (Stage 2).
 
 Load a robot, its reaching task, and its demonstrator from a demonstration
-configuration (such as ``configs/demonstrations/reach_tvs.toml``). Drag the arm
+configuration (such as ``experiments/demonstrations/reach_tvs.toml``). Drag the arm
 tip to choose a start posture (inverse kinematics), then press Play: the arm is
 simulated in real time with skelarm's dynamics. During a run, running or paused,
 dragging pulls the tip toward the cursor with a spring force (the red arrow),
@@ -37,7 +37,7 @@ Keys: ``Space`` play/pause, ``Right``/``F`` one step (10 ms) while paused, ``R``
 
 Usage::
 
-    uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml \\
+    uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml \\
         --law computed_torque --omega 10 --model <run directory>/esn.toml
 """
 
@@ -97,7 +97,7 @@ _PANEL_WIDTH_PX = 360
 _STEP_SECONDS = 0.01  # how far one press of Step advances a paused run (s)
 _MAX_STEPS_PER_TICK = 200  # simulation steps per clock tick at most, so a slow tick cannot snowball
 _DEFAULT_PERIOD = 0.01  # period of the replayed reference without a model (s): the ESN period of Stage 2
-_DEFAULT_ACCELERATION_FILTER = 0.02  # as in configs/robot/*.toml (s)
+_DEFAULT_ACCELERATION_FILTER = 0.02  # as in experiments/multi_demonstration_robot_tracking/*.toml (s)
 _DEFAULT_STIFFNESS = 20.0  # N/m for the mouse drag, as in skelarm's controlled simulators
 _LAW_ALIASES = {"ct": "computed_torque"}  # short names of the tracking laws on the command line
 _GHOST_WIDTH_PX = 9.0

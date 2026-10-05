@@ -23,7 +23,7 @@ from arm_esn_ctrl.tracking import (
     tracking_gains,
 )
 
-CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
+CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(
     dt=0.01,
     warmup=0.25,

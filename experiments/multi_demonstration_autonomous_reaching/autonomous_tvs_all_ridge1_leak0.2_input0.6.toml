@@ -1,16 +1,16 @@
-# Stage 1: sweep the reservoir size, spectral radius, and warm-up of the ESN
-# trained on all eight demonstrations.
+# Stage 1: the ESN trained on all eight demonstrations, run autonomously, with
+# ridge = 1.0, leak_rate = 0.2, and input_scaling = 0.6.
 #
-#   uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all_reservoir.toml
+#   uv run python experiments/autonomous_esn.py experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all_ridge1_leak0.2_input0.6.toml
 #
-# Ridge, leak rate, and input scaling are fixed at the best combination of the
-# ridge / leak rate / input scaling sweep (sweep_tvs_all.toml, run
-# 20261002-201614): ridge 1e-6, leak rate 0.05, input scaling 0.1. Everything
-# else is sweep_tvs_all.toml.
+# The combination that generalized best while reaching the target from every
+# start in sweep_tvs_all.toml (run 20260930-232924): path distance 38.8 mm from
+# the new starts and 15.2 mm from the demonstrated ones, worst final error 1.1 mm.
+# Everything else is autonomous_tvs_all.toml.
 
 [demonstrations]
 # A run directory of experiments/make_demonstrations.py, relative to the storage root.
-run = "results/20261002-194644-reach_tvs"
+run = "results/demonstrations/20261002-194644-reach_tvs"
 train = [
   "demo_00.sklog.npz",
   "demo_01.sklog.npz",
@@ -24,21 +24,15 @@ train = [
 
 [esn]
 dt = 0.01              # sampling period (s)
-warmup = 1.0           # swept: the held start posture drives the ESN this long before it moves (s)
-n_neurons = 300        # swept
-spectral_radius = 0.5  # swept
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 300
+spectral_radius = 0.5
 sparsity = 0.1         # fraction of nonzero reservoir connections
-leak_rate = 0.05
-input_scaling = 0.1
+leak_rate = 0.2
+input_scaling = 0.6
 bias = true
-ridge = 1e-6
+ridge = 1.0
 seed = 0
-
-[sweep]
-# The first two are the heatmap axes (x, then y); each value of the third gets its own column.
-n_neurons = [150, 200, 300, 400, 600, 800]
-spectral_radius = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
-warmup = [0.0, 0.25, 0.5, 1.0, 1.5, 2.5]
 
 [evaluation]
 duration = 5.0         # autonomous run (s); the demonstrations last 4 s

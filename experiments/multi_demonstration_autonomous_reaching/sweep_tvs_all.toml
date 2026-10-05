@@ -1,7 +1,7 @@
 # Stage 1: sweep ridge, leak rate, and input scaling of the ESN trained on all
 # eight demonstrations.
 #
-#   uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all.toml
+#   uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all.toml
 #
 # Everything except [sweep] is autonomous_tvs_all.toml. Every combination of the
 # [sweep] values replaces the matching [esn] values, is trained on the eight
@@ -10,7 +10,7 @@
 
 [demonstrations]
 # A run directory of experiments/make_demonstrations.py, relative to the storage root.
-run = "results/20261002-194644-reach_tvs"
+run = "results/demonstrations/20261002-194644-reach_tvs"
 train = [
   "demo_00.sklog.npz",
   "demo_01.sklog.npz",

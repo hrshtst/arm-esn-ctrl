@@ -1,7 +1,7 @@
 # Stage 1: the ESN trained on all eight demonstrations, run from start postures
 # at other distances from the target.
 #
-#   uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all_distances.toml
+#   uv run python experiments/autonomous_esn.py experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all_distances.toml
 #
 # The demonstrations start 0.5 m from the target. Besides their starts and the
 # starts halfway between them at the same distance, the ESN runs from starts
@@ -13,7 +13,7 @@
 
 [demonstrations]
 # A run directory of experiments/make_demonstrations.py, relative to the storage root.
-run = "results/20261002-194644-reach_tvs"
+run = "results/demonstrations/20261002-194644-reach_tvs"
 train = [
   "demo_00.sklog.npz",
   "demo_01.sklog.npz",

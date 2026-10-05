@@ -361,7 +361,7 @@ Demonstrations are skelarm state logs (`*.sklog.npz`) of reaches on a
 two-link planar arm. They are either scripted with one of skelarm's
 reaching controllers or taught with the mouse.
 
-**Scripted.** Each configuration in `configs/demonstrations/` runs one
+**Scripted.** Each configuration in `experiments/demonstrations/` runs one
 controller from 8 start postures, each 0.5 m from a common target:
 
 | Configuration | Controller | Reaches |
@@ -371,7 +371,7 @@ controller from 8 start postures, each 0.5 m from a common target:
 | `reach_vsd.toml` | constant virtual spring-damper | not human-like, kept for comparison: the speed peaks almost at once |
 
 ```bash
-uv run python experiments/make_demonstrations.py configs/demonstrations/reach_tvs.toml
+uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_tvs.toml
 ```
 
 The run directory receives one log per start posture
@@ -394,7 +394,7 @@ directory. With the default storage root:
 ```bash
 mkdir -p storage/data/taught_reach
 uv run python third_party/skelarm/tools/trajectory_recorder.py \
-    configs/demonstrations/reach_tvs.toml --pose 29.4,88.2 \
+    experiments/demonstrations/reach_tvs.toml --pose 29.4,88.2 \
     --multi-take --output storage/data/taught_reach/reach.sklog.npz --show-past-trails
 ```
 
@@ -410,12 +410,12 @@ posture:
 
 | Configuration | Trained on | Runs from |
 | --- | --- | --- |
-| `configs/esn/autonomous_tvs_demo07.toml` | demo 7 only | its start, and offsets of 3 and 10 deg around it |
-| `configs/esn/autonomous_tvs_all.toml` | all 8 demonstrations | their 8 starts, and 8 new starts halfway between them |
-| `configs/esn/autonomous_tvs_all_distances.toml` | all 8 demonstrations | as above, plus starts 0.25 m and 0.75 m from the target (the demonstrations start 0.5 m away) |
+| `experiments/single_demonstration_autonomous_reaching/autonomous_tvs_demo07.toml` | demo 7 only | its start, and offsets of 3 and 10 deg around it |
+| `experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all.toml` | all 8 demonstrations | their 8 starts, and 8 new starts halfway between them |
+| `experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all_distances.toml` | all 8 demonstrations | as above, plus starts 0.25 m and 0.75 m from the target (the demonstrations start 0.5 m away) |
 
 ```bash
-uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
+uv run python experiments/autonomous_esn.py experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all.toml
 ```
 
 The configuration names the demonstration run and the training files
@@ -443,7 +443,7 @@ values listed in a configuration's `[sweep]` table (two or three `[esn]`
 hyperparameters), all on the same demonstrations and start postures:
 
 ```bash
-uv run python experiments/sweep_esn.py configs/esn/sweep_tvs_all.toml
+uv run python experiments/sweep_esn.py experiments/multi_demonstration_autonomous_reaching/sweep_tvs_all.toml
 ```
 
 The run directory receives `sweep.csv`, with one row per combination: its
@@ -460,7 +460,7 @@ robot and the task from a skelarm TOML file and the ESN from the `esn.toml`
 that `autonomous_esn.py` saves in its run directory:
 
 ```bash
-uv run python tools/esn_reference_app.py configs/demonstrations/reach_tvs.toml \
+uv run python tools/esn_reference_app.py experiments/demonstrations/reach_tvs.toml \
     --model <run directory>/esn.toml
 ```
 
@@ -496,15 +496,15 @@ them), with computed torque and joint PD at ω = 5, 10, 20, and 40 rad/s:
 
 | Configuration | Scenario |
 | --- | --- |
-| `configs/robot/nominal.toml` | no disturbance |
-| `configs/robot/push.toml` | a 5 N push at the tip, sideways to the reach, for 0.1 s from t = 0.4 s |
-| `configs/robot/block.toml` | the tip held by a stiff spring-damper (20 kN/m) from t = 0.3 s to 0.8 s, then released |
-| `configs/robot/offset_3deg.toml` | starts 3 deg away from the demonstrated ones, in the four diagonal directions |
-| `configs/robot/offset_10deg.toml` | the same, 10 deg away |
-| `configs/robot/nominal_damping.toml`, `push_damping.toml`, `block_damping.toml` | as `nominal`, `push`, and `block`, at ω = 10 rad/s with the damping ratio ζ lowered from 1 to 0.1 |
+| `experiments/multi_demonstration_robot_tracking/nominal.toml` | no disturbance |
+| `experiments/multi_demonstration_robot_tracking/push.toml` | a 5 N push at the tip, sideways to the reach, for 0.1 s from t = 0.4 s |
+| `experiments/multi_demonstration_robot_tracking/block.toml` | the tip held by a stiff spring-damper (20 kN/m) from t = 0.3 s to 0.8 s, then released |
+| `experiments/multi_demonstration_robot_tracking/offset_3deg.toml` | starts 3 deg away from the demonstrated ones, in the four diagonal directions |
+| `experiments/multi_demonstration_robot_tracking/offset_10deg.toml` | the same, 10 deg away |
+| `experiments/multi_demonstration_robot_tracking/nominal_damping.toml`, `push_damping.toml`, `block_damping.toml` | as `nominal`, `push`, and `block`, at ω = 10 rad/s with the damping ratio ζ lowered from 1 to 0.1 |
 
 ```bash
-uv run python experiments/robot_esn.py configs/robot/nominal.toml
+uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/nominal.toml
 ```
 
 The configuration names the trained ESN (`model` in `[esn]`, an `esn.toml`
@@ -546,16 +546,16 @@ it reach, and push it by hand:
 
 ```bash
 # The ESN generates the reference; the tracker follows it.
-uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml \
+uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml \
     --law computed_torque --omega 10 \
     --model "$STORAGE/results/20261002-213015-autonomous_tvs_all_distances/esn.toml"
 # The demonstrator's reach from each run's start posture, replayed by time.
-uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --law pd --omega 20
+uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --law pd --omega 20
 # The demonstrator's reach from a given posture, replayed by time: pose the arm
 # elsewhere before Play to emulate an initial offset.
-uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --law pd --omega 20 --pose 29.4,88.2
+uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --law pd --omega 20 --pose 29.4,88.2
 # The demonstrator's own controller, without a reference.
-uv run python tools/robot_app.py configs/demonstrations/reach_tvs.toml --demonstrator
+uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --demonstrator
 ```
 
 `$STORAGE` stands for the storage root, and `--law ct` is short for

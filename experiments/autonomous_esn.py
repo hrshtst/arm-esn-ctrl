@@ -3,7 +3,8 @@
 
 """Train an ESN on demonstrations and run it autonomously (Stage 1).
 
-    uv run python experiments/autonomous_esn.py configs/esn/autonomous_tvs_all.toml
+    uv run python experiments/autonomous_esn.py \
+        experiments/multi_demonstration_autonomous_reaching/autonomous_tvs_all.toml
 
 The ESN is trained by teacher forcing on one or more demonstrations. It then
 runs autonomously, its output fed back as its next input, from start postures

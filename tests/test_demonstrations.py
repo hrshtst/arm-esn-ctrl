@@ -13,7 +13,7 @@ from skelarm import Skeleton, StateLog
 from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log, load_joint_angles, simulate_reaches
 from arm_esn_ctrl.storage import REPO_ROOT
 
-CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
+CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 
 
 def short_config():

@@ -3,7 +3,7 @@
 
 """Generate scripted reaching demonstrations and check how human-like they are.
 
-    uv run python experiments/make_demonstrations.py configs/demonstrations/reach_pds.toml
+    uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_pds.toml
 
 Runs the configured skelarm reaching controller once from every start posture
 and writes into a new run directory:

@@ -5,7 +5,7 @@
 Interactive demonstration of a trained ESN generating joint-angle references.
 
 Load a robot and its reaching task (a skelarm TOML file with ``[skeleton]`` and
-``[task]``, such as ``configs/demonstrations/reach_tvs.toml``) and an ESN saved by
+``[task]``, such as ``experiments/demonstrations/reach_tvs.toml``) and an ESN saved by
 ``experiments/autonomous_esn.py`` (``esn.toml`` in a run directory). Drag the arm tip
 with the mouse to choose a start posture (inverse kinematics), then press Play: the
 ESN is reset, driven by the held start posture for its warm-up, and then runs
@@ -30,7 +30,7 @@ paused, ``R`` or ``Home`` reset, ``Q`` quit.
 
 Usage::
 
-    uv run python tools/esn_reference_app.py configs/demonstrations/reach_tvs.toml \\
+    uv run python tools/esn_reference_app.py experiments/demonstrations/reach_tvs.toml \\
         --model <run directory>/esn.toml
 """
 

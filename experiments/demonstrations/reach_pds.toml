@@ -1,10 +1,7 @@
-# Scripted reaching demonstrations: constant virtual spring-damper
-# (Arimoto and Sekimoto, ICRA 2006).
+# Scripted reaching demonstrations: online reference shaping with a
+# position-dependent shaping ratio (Seto and Sugihara, Humanoids 2009).
 #
-#   uv run python experiments/make_demonstrations.py configs/demonstrations/reach_vsd.toml
-#
-# Kept for comparison: no constant gains make these reaches human-like. The
-# spring pulls hardest at the start, so the hand speed peaks almost at once.
+#   uv run python experiments/make_demonstrations.py experiments/demonstrations/reach_pds.toml
 #
 # The [skeleton], [task], [simulator], and [controller] tables follow skelarm's
 # scenario format, so skelarm's tools also read this file.
@@ -50,8 +47,12 @@ duration = 4.0  # simulated time per demonstration (s): about 1 s to reach, then
 dt = 0.002  # control and integration step (s)
 
 [controller]
-# The best-scoring constant gains found for this arm (heavily damped).
-type = "virtual_spring_damper"
-k_task = 150.0  # task-space stiffness (N/m)
+# Tuned for human-like reaches on this arm: a bell-shaped hand speed profile
+# peaking near mid-movement, a nearly straight hand path, and about 1 s per reach.
+type = "position_dependent_shaping"
+k_task = 800.0  # task-space stiffness (N/m)
 d_task = 50.0   # task-space damping (N s/m)
 c_joint = 0.0   # joint damping (N m s/rad)
+a = 0.01        # shaping constant: the shaping ratio starts near sqrt(a) = 0.1
+t1 = 0.05       # time constants of the second-order lag filter (s)
+t2 = 0.05

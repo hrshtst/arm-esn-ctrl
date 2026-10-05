@@ -24,7 +24,7 @@ from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from tools.esn_reference_app import EsnReferenceApp, build_parser
 
-CONFIG = REPO_ROOT / "configs/demonstrations/reach_tvs.toml"
+CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(
     dt=0.01,
     warmup=0.25,
