@@ -14,6 +14,7 @@ hold at the target (see :mod:`arm_esn_ctrl.metrics` for the two phases).
 from __future__ import annotations
 
 import copy
+import itertools
 import tomllib
 from dataclasses import dataclass
 from typing import Any
@@ -24,11 +25,14 @@ from skelarm import Skeleton, StateLog, Task
 
 from arm_esn_ctrl.demonstrations import endpoint_positions, resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import ReachingEsn
-from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance
+from arm_esn_ctrl.metrics import arrival_index, distances_to_path, hold_metrics, path_distance
 from arm_esn_ctrl.storage import resolve_run_path
 
 # The keys allowed in an [evaluation] table.
-EVALUATION_KEYS = {"duration", "hold", "start_offsets_deg", "extra_starts", "effort_window"}
+EVALUATION_KEYS = {"duration", "hold", "start_offsets_deg", "start_grid", "extra_starts", "effort_window"}
+# A demonstrator's reach this close to the training path, on average, has no course of its own to
+# compare with: from a start along the demonstrated path, the ratio would divide by almost nothing (rad).
+_ON_TRAINING_PATH = float(np.radians(0.25))
 
 
 @dataclass(frozen=True)
@@ -114,17 +118,27 @@ def start_postures(evaluation: dict[str, Any], demos: dict[str, NDArray[np.float
     """The start postures of the autonomous runs.
 
     First, each demonstration's start plus every offset in ``start_offsets_deg``
-    (a zero offset is the demonstrated start itself). Then the extra start postures
-    in the ``extra_starts`` table, which maps a group name to a list of joint angles
-    in degrees, such as ``between = [[40.5, 71.4], ...]``.
+    and in the ``start_grid`` table (a zero offset is the demonstrated start
+    itself). The grid offsets each joint from ``-span_deg`` to ``span_deg`` in steps
+    of ``step_deg``, in every combination. Then the extra start postures in the
+    ``extra_starts`` table, which maps a group name to a list of joint angles in
+    degrees, such as ``between = [[40.5, 71.4], ...]``.
     """
     unknown = sorted(set(evaluation) - EVALUATION_KEYS)
     if unknown:
         msg = f"unknown keys in [evaluation]: {', '.join(unknown)}"
         raise ValueError(msg)
+    offsets = [tuple(offset) for offset in evaluation.get("start_offsets_deg", [])]
+    if "start_grid" in evaluation:
+        grid = evaluation["start_grid"]
+        span, step = grid["span_deg"], grid["step_deg"]
+        values = [round(value, 9) for value in np.arange(-span, span + step / 2, step)]
+        n_joints = len(next(iter(demos.values()))[0])
+        offsets += list(itertools.product(values, repeat=n_joints))
+    offsets = list(dict.fromkeys(offsets))  # each offset once, in the order given
     starts = []
     for name, q in demos.items():
-        for offset in evaluation["start_offsets_deg"]:
+        for offset in offsets:
             if any(offset):
                 starts.append(Start(f"{name} {offset[0]:+g},{offset[1]:+g} deg", q[0] + np.radians(offset), "offset"))
             else:
@@ -134,6 +148,9 @@ def start_postures(evaluation: dict[str, Any], demos: dict[str, NDArray[np.float
             msg = f"[evaluation.extra_starts] cannot use the reserved group name {group!r}"
             raise ValueError(msg)
         starts.extend(Start(f"{group} {i}", np.radians(q_deg), group) for i, q_deg in enumerate(postures))
+    if not starts:
+        msg = "[evaluation] lists no start postures: give start_offsets_deg, [evaluation.start_grid], or extra_starts"
+        raise ValueError(msg)
     return starts
 
 
@@ -178,6 +195,17 @@ def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
         Hold, which needs no reference: ``arrived``, ``arrival_time_s``,
         ``left_goal``, ``hold_error_m``, ``hold_observed_s``, and ``success``
         (see :func:`arm_esn_ctrl.metrics.hold_metrics`).
+
+        And whether the reach is of its own or returns to what was learned, in joint space:
+
+        - ``training_path_distance_deg``: the mean distance of the run's joint
+          angles from the nearest training demonstration's path, during the reach;
+        - ``demonstrator_training_path_distance_deg``: the same for the
+          demonstrator's reach from the start posture, until it arrives;
+        - ``training_path_ratio``: the first over the second. Near 0, the run
+          returns onto the training path; near 1, it keeps as far from it as the
+          demonstrator's own reach. NaN if the demonstrator's reach keeps within
+          0.25 deg of the training path on average, as from a start along it.
     """
     hold = hold_metrics(setup.times, run.hand, setup.target, setup.radius, setup.hold)
     arrival = arrival_index(run.hand, setup.target, setup.radius)
@@ -187,12 +215,31 @@ def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
     delay = float("nan")
     if arrival is not None and arrival_ref is not None:
         delay = float(setup.times[arrival] - setup.times[arrival_ref])
-    return {
-        "first_step_m": float(np.linalg.norm(run.hand[1] - run.hand[0])),
-        "reach_path_distance_m": path_distance(run.hand[:reach_end], run.hand_ref),
-        "reach_joint_error_deg": rms_degrees(run.q[:reach_end_ref] - run.q_ref[:reach_end_ref]),
-        "arrival_delay_s": delay,
-    } | hold
+    training = list(setup.demos.values())
+    from_training = training_path_distance(run.q[:reach_end], training)
+    demonstrator_from_training = training_path_distance(run.q_ref[:reach_end_ref], training)
+    ratio = float("nan")
+    if demonstrator_from_training >= _ON_TRAINING_PATH:
+        ratio = from_training / demonstrator_from_training
+    return (
+        {
+            "first_step_m": float(np.linalg.norm(run.hand[1] - run.hand[0])),
+            "reach_path_distance_m": path_distance(run.hand[:reach_end], run.hand_ref),
+            "reach_joint_error_deg": rms_degrees(run.q[:reach_end_ref] - run.q_ref[:reach_end_ref]),
+            "arrival_delay_s": delay,
+        }
+        | hold
+        | {
+            "training_path_distance_deg": float(np.degrees(from_training)),
+            "demonstrator_training_path_distance_deg": float(np.degrees(demonstrator_from_training)),
+            "training_path_ratio": ratio,
+        }
+    )
+
+
+def training_path_distance(q: NDArray[np.float64], training: list[NDArray[np.float64]]) -> float:
+    """The mean distance (rad) of the joint angles ``q`` from the nearest path among the ``training`` demonstrations."""
+    return float(np.mean(np.min([distances_to_path(q, demo) for demo in training], axis=0)))
 
 
 def rms_degrees(error: NDArray[np.float64]) -> float:

@@ -71,14 +71,17 @@ def test_extra_start_postures_are_optional():
     assert [s.origin for s in starts] == ["demo_07"]
 
 
-def reach_setup(q_ref):
-    """A setup whose single demonstrator reach is ``q_ref``, sampled every 0.01 s, ending at its target."""
+def reach_setup(q_ref, training=None):
+    """A setup whose single demonstrator reach is ``q_ref``, sampled every 0.01 s, ending at its target.
+
+    ``training`` is the training demonstration (by default, ``q_ref`` itself).
+    """
     skeleton = Skeleton.from_toml(CONFIG)
     times = np.asarray(0.01 * np.arange(len(q_ref)), dtype=np.float64)
     hand_ref = endpoint_positions(skeleton, q_ref)
     start = Start("demo_00", q_ref[0], "demonstrated")
     return Setup(
-        demos={"demo_00": q_ref},
+        demos={"demo_00": q_ref if training is None else training},
         starts=[start],
         demonstrator_logs=[],
         q_refs=[q_ref],
@@ -123,3 +126,40 @@ def test_a_run_that_never_arrives_fails_and_is_measured_over_the_whole_run():
     assert not m["arrived"] and not m["success"]
     assert np.isnan(m["arrival_delay_s"])
     assert m["reach_path_distance_m"] == pytest.approx(path_distance(hand_run, setup.hand_refs[0]))
+
+
+def test_a_start_grid_surrounds_each_demonstrated_start():
+    demos = {"demo_00": np.radians([[10.0, 20.0], [30.0, 40.0]])}
+    evaluation = {"start_offsets_deg": [[0.0, 0.0], [2.5, 0.0]], "start_grid": {"span_deg": 5.0, "step_deg": 2.5}}
+
+    starts = start_postures(evaluation, demos)
+
+    assert len(starts) == 25  # 5 x 5 offsets, the two listed ones included once
+    assert [s.group for s in starts].count("demonstrated") == 1
+    offsets = {tuple(np.round(np.degrees(s.q) - [10.0, 20.0], 6)) for s in starts}
+    assert offsets == {(a, b) for a in (-5.0, -2.5, 0.0, 2.5, 5.0) for b in (-5.0, -2.5, 0.0, 2.5, 5.0)}
+    assert "demo_00 -5,+2.5 deg" in [s.origin for s in starts]
+
+
+def test_an_evaluation_needs_start_postures():
+    with pytest.raises(ValueError, match="start postures"):
+        start_postures({}, {"demo_07": np.radians([[18.2, 119.9]])})
+
+
+def test_the_training_path_ratio_tells_a_reach_of_its_own_from_a_jump_back():
+    training = joint_reach([18.2, 119.9], [48.6, 97.2])
+    from_offset = joint_reach([28.2, 129.9], [48.6, 97.2])  # the demonstrator, 10 deg away in both joints
+    setup = reach_setup(from_offset, training=training)
+    jump_back = np.vstack([from_offset[:1], training[1:]])  # back onto the demonstration in one step
+    hand = {name: endpoint_positions(setup.skeleton, q) for name, q in (("own", from_offset), ("back", jump_back))}
+
+    like_demonstrator = run_metrics(Run(setup.starts[0], from_offset, from_offset, hand["own"], hand["own"]), setup)
+    jumping_back = run_metrics(Run(setup.starts[0], jump_back, from_offset, hand["back"], hand["own"]), setup)
+    on_training = run_metrics(
+        Run(setup.starts[0], training, training, hand["back"], hand["back"]), reach_setup(training)
+    )
+
+    assert like_demonstrator["training_path_ratio"] == pytest.approx(1.0)
+    assert like_demonstrator["demonstrator_training_path_distance_deg"] > 1.0
+    assert jumping_back["training_path_ratio"] < 0.05
+    assert np.isnan(on_training["training_path_ratio"])  # nothing to compare: the start is on the training path

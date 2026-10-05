@@ -113,12 +113,21 @@ def path_distance(path: NDArray[np.float64], reference: NDArray[np.float64]) -> 
     distance from a point of ``path`` to the nearest point on the polyline through
     ``reference``.
     """
+    return float(np.max(distances_to_path(path, reference)))
+
+
+def distances_to_path(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Return the distance from each of ``points`` to the nearest point on the polyline through ``reference``.
+
+    Both are sequences of points of any dimension, shaped ``(n, d)``, such as hand
+    positions or joint angles.
+    """
     start, segment = reference[:-1], np.diff(reference, axis=0)
     length2 = np.maximum(np.sum(segment**2, axis=1), np.finfo(float).tiny)
-    offset = path[:, np.newaxis, :] - start[np.newaxis, :, :]
+    offset = points[:, np.newaxis, :] - start[np.newaxis, :, :]
     fraction = np.clip(np.sum(offset * segment, axis=2) / length2, 0.0, 1.0)
     nearest = start + fraction[..., np.newaxis] * segment
-    return float(np.max(np.min(np.linalg.norm(path[:, np.newaxis, :] - nearest, axis=2), axis=1)))
+    return np.min(np.linalg.norm(points[:, np.newaxis, :] - nearest, axis=2), axis=1)
 
 
 def arrival_index(hand: NDArray[np.float64], target: ArrayLike, radius: float) -> int | None:

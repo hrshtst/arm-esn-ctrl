@@ -1,26 +1,48 @@
 # Single-demonstration autonomous reaching (Stage 1)
 
-An ESN trained on one demonstration, the last of the eight time-varying-stiffness
-demonstrations (demo 7), runs on its own, its output fed back as its next input,
-from that demonstration's start posture and from postures offset around it. Each
-run is compared with the demonstrator's own reach from the same posture.
+An ESN trained on one demonstration runs on its own, its output fed back as its
+next input, from a grid of start postures around the demonstrated one. Each run is
+compared with the demonstrator's own reach from the same posture. The questions:
 
-This experiment is being taken up again for a deeper analysis; its plan and
-configurations will be added here.
+1. **Replication:** does the ESN reproduce the demonstration?
+2. **Generalization:** from which start postures does it still arrive and hold,
+   and is its reach then like the demonstrator's from there?
+3. **What it learned:** a trajectory or a flow? From an offset start, does it
+   return onto the demonstrated path, or reach as the demonstrator would from
+   there? How do its reservoir states from offset starts relate to the
+   demonstration's?
+4. **What shapes it:** the hyperparameters, and the scale of the joint-angle
+   normalization, which from one demonstration covers only that reach's range.
 
-| Configuration | Trained on | Runs from |
-| --- | --- | --- |
-| `autonomous_tvs_demo07.toml` | demo 7 only | its start, and offsets of 3 and 10 deg around it |
+The demonstration is the time-varying-stiffness reach from one start posture, the
+hand 0.5 m from the target toward the lower right
+([`reach_tvs_single.toml`](../demonstrations/reach_tvs_single.toml)).
+
+## Phase 1: two settings over a grid of start postures
+
+| Configuration | ESN settings |
+| --- | --- |
+| `grid_single_demo_settings.toml` | those first used for a single demonstration: ridge 1, leak rate 0.3, input scaling 1, 300 neurons, spectral radius 0.5, warm-up 1 s |
+| `grid_multi_demo_settings.toml` | those found best for eight demonstrations: ridge 10⁻⁶, leak rate 0.05, input scaling 0.1, 600 neurons, spectral radius 1.3, warm-up 0.25 s |
+
+Both run from the demonstrated start offset by −15° to 15° in steps of 2.5° in
+each joint (`[evaluation.start_grid]`, 169 start postures):
 
 ```bash
 uv run python experiments/autonomous_esn.py \
-    experiments/single_demonstration_autonomous_reaching/autonomous_tvs_demo07.toml
+    experiments/single_demonstration_autonomous_reaching/grid_multi_demo_settings.toml
 ```
 
 The runner and its outputs are those of
-[multi-demonstration autonomous reaching](../multi_demonstration_autonomous_reaching/README.md).
+[multi-demonstration autonomous reaching](../multi_demonstration_autonomous_reaching/README.md),
+plus `grid.png`: maps over the grid of the outcome (arrive and hold, leave the
+goal, or never arrive), the path distance from the demonstrator's reach from each
+start, the training path ratio, the first step, and the hold error, and where the
+start postures put the hand. The **training path ratio** compares how far, in joint
+space, the ESN's reach stays from the demonstrated path with how far the
+demonstrator's own reach from the same start does: near 0, the ESN returns onto
+the demonstrated path; near 1, it reaches as the demonstrator would from there.
 
 ## Runs
 
-None yet on the current demonstrations: the runs of this configuration predated
-them and were removed.
+None yet.

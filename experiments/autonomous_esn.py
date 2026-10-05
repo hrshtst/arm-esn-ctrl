@@ -27,7 +27,10 @@ directory receives:
 - ``metrics.csv``: for each start posture, the reach compared with the demonstrator's
   and the hold at the target (see :func:`arm_esn_ctrl.autonomous.run_metrics`);
 - ``autonomous.png``: hand paths, joint angles, and hand speeds of both, over the
-  training demonstrations.
+  training demonstrations;
+- ``grid.png``, with an ``[evaluation.start_grid]``: maps of the outcome and the
+  main metrics over the grid of start offsets around the first demonstration, and
+  where those starts put the hand.
 
 Replay a trajectory with ``uv run python third_party/skelarm/tools/player.py <file>``.
 """
@@ -40,9 +43,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from matplotlib.colors import ListedColormap, LogNorm, Normalize
 from matplotlib.figure import Figure
+from matplotlib.patches import Patch
+from numpy.typing import NDArray
 
-from arm_esn_ctrl.autonomous import Run, Start, load_setup, rms_degrees, run_autonomously, run_metrics
+from arm_esn_ctrl.autonomous import Run, Setup, Start, load_setup, rms_degrees, run_autonomously, run_metrics
 from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed
@@ -54,6 +60,10 @@ DEMONSTRATOR_COLOR = "#52514e"
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
+OUTCOME_COLORS = ["#2a78d6", "#eb6834", "#52514e"]  # arrive and hold, leave the goal, never arrive
+OUTCOMES = ["arrive and hold", "leave the goal", "never arrive"]
+_MAX_TABLE_ROWS = 40
+_MAX_RATIO_SHOWN = 1.5  # the training path ratio's color scale ends here
 
 
 def main() -> None:
@@ -100,12 +110,40 @@ def main() -> None:
     title = f"Autonomous ESN: {args.config.stem}"
     training = [(q, endpoint_positions(setup.skeleton, q)) for q in setup.demos.values()]
     plot_runs(setup.times, runs, training, setup.target, title).savefig(run_dir / "autonomous.png", dpi=150)
+    if "start_grid" in config["evaluation"]:
+        plot_grid(rows, setup, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
     print("Replay with:\n  uv run python third_party/skelarm/tools/player.py " + str(run_dir / "esn_00.sklog.npz"))
 
 
 def print_metrics(rows: list[dict[str, Any]], starts: list[Start]) -> None:
-    """Print the metrics as a table, one start posture per line, then a summary by kind of start."""
+    """Print the metrics as a table, one start posture per line, then a summary by kind of start.
+
+    The table is left out when there are many start postures (see ``metrics.csv``).
+    """
+    if len(rows) > _MAX_TABLE_ROWS:
+        print(f"{len(rows)} start postures: see metrics.csv for each")
+    else:
+        print_table(rows)
+    for name in dict.fromkeys(s.group for s in starts):  # the groups, in the order of the table
+        group = [r for r, s in zip(rows, starts, strict=True) if s.group == name]
+        first_step = 1000 * np.mean([r["first_step_m"] for r in group])
+        distance = 1000 * np.mean([r["reach_path_distance_m"] for r in group])
+        joint_error = np.mean([r["reach_joint_error_deg"] for r in group])
+        successes = sum(r["success"] for r in group)
+        hold_error = 1000 * np.nanmedian([r["hold_error_m"] for r in group])
+        ratio = [r["training_path_ratio"] for r in group if np.isfinite(r["training_path_ratio"])]
+        ratio_text = f", median training path ratio {np.median(ratio):.2f}" if ratio else ""
+        print(
+            f"{len(group)} {name} starts: mean first step {first_step:.1f} mm,"
+            f" mean reach path distance {distance:.1f} mm,"
+            f" mean reach joint error {joint_error:.2f} deg; {successes} of {len(group)} arrive and stay,"
+            f" median hold error {hold_error:.1f} mm{ratio_text}"
+        )
+
+
+def print_table(rows: list[dict[str, Any]]) -> None:
+    """Print the metrics of each start posture."""
     print("                             ------------------ reach ------------------   ----------- hold -----------")
     print("start  origin                first step  path dist.  joint error  arrival   left  hold error  observed")
     print("                             (mm)        (mm)        (deg RMS)    delay (s) goal  (mm)        (s)")
@@ -116,19 +154,6 @@ def print_metrics(rows: list[dict[str, Any]], starts: list[Start]) -> None:
             f"  {1000 * r['reach_path_distance_m']:10.1f}  {r['reach_joint_error_deg']:11.2f}"
             f"  {r['arrival_delay_s']:+9.2f}"
             f"  {left:>4}  {1000 * r['hold_error_m']:10.1f}  {r['hold_observed_s']:8.2f}"
-        )
-    for name in dict.fromkeys(s.group for s in starts):  # the groups, in the order of the table
-        group = [r for r, s in zip(rows, starts, strict=True) if s.group == name]
-        first_step = 1000 * np.mean([r["first_step_m"] for r in group])
-        distance = 1000 * np.mean([r["reach_path_distance_m"] for r in group])
-        joint_error = np.mean([r["reach_joint_error_deg"] for r in group])
-        successes = sum(r["success"] for r in group)
-        hold_error = 1000 * np.nanmedian([r["hold_error_m"] for r in group])
-        print(
-            f"{len(group)} {name} starts: mean first step {first_step:.1f} mm,"
-            f" mean reach path distance {distance:.1f} mm,"
-            f" mean reach joint error {joint_error:.2f} deg; {successes} of {len(group)} arrive and stay,"
-            f" median hold error {hold_error:.1f} mm"
         )
 
 
@@ -200,6 +225,98 @@ def plot_runs(
         )
     ax_q1.set(title="Joint 1", xlabel="time (s)", ylabel="angle (deg)")
     ax_q2.set(title="Joint 2", xlabel="time (s)", ylabel="angle (deg)")
+    return fig
+
+
+def plot_grid(rows: list[dict[str, Any]], setup: Setup, title: str) -> Figure:
+    """Map the outcome and the main metrics over the grid of start offsets around the first demonstration.
+
+    Each cell is one start posture, placed by its offset in each joint; the cross
+    marks the demonstrated start. A blank cell has no value: a training path ratio
+    for a start along the demonstrated path, or a hold error for a run that never
+    arrives. The last panel shows where the start postures put
+    the hand, colored by outcome, with the training demonstration's hand path.
+    """
+    name, demo = next(iter(setup.demos.items()))
+    grid = [r for r in rows if r["origin"] == name or r["origin"].startswith(f"{name} ")]
+    offsets = np.array([[r["start_q1_deg"], r["start_q2_deg"]] for r in grid]) - np.degrees(demo[0])
+    offsets = np.round(offsets, 6)
+    xs, ys = np.unique(offsets[:, 0]), np.unique(offsets[:, 1])
+    cell = {(x, y): r for (x, y), r in zip(map(tuple, offsets), grid, strict=True)}
+
+    def values(key: str, factor: float = 1.0) -> NDArray[np.float64]:
+        return np.array([[factor * float(cell[(x, y)][key]) if (x, y) in cell else np.nan for x in xs] for y in ys])
+
+    outcome = np.array(
+        [
+            [
+                np.nan
+                if (x, y) not in cell
+                else 0.0
+                if cell[(x, y)]["success"]
+                else 1.0
+                if cell[(x, y)]["arrived"]
+                else 2.0
+                for x in xs
+            ]
+            for y in ys
+        ]
+    )
+    maps = [
+        (
+            "Path distance from the demonstrator's reach\nfrom each start (mm)",
+            values("reach_path_distance_m", 1000.0),
+            True,
+        ),
+        (
+            "Training path ratio: 0 returns onto the\ndemonstration, 1 reaches as the demonstrator",
+            values("training_path_ratio"),
+            False,
+        ),
+        ("First step (mm)", values("first_step_m", 1000.0), True),
+        ("Hold error at the end of the hold window (mm)", values("hold_error_m", 1000.0), True),
+    ]
+    fig = Figure(figsize=(15, 9.5), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(f"{title}: start offsets around {name}", color="#0b0b0b")
+    axes = list(fig.subplots(2, 3).flat)
+    extent = (
+        xs[0] - (xs[1] - xs[0]) / 2,
+        xs[-1] + (xs[1] - xs[0]) / 2,
+        ys[0] - (ys[1] - ys[0]) / 2,
+        ys[-1] + (ys[1] - ys[0]) / 2,
+    )
+    panels = [("Outcome", outcome, None), *maps]
+    for ax, (label, data, log) in zip(axes, panels, strict=False):
+        if log is None:
+            image = ax.imshow(
+                data, origin="lower", extent=extent, cmap=ListedColormap(OUTCOME_COLORS), vmin=-0.5, vmax=2.5
+            )
+            handles = [Patch(color=color, label=text) for color, text in zip(OUTCOME_COLORS, OUTCOMES, strict=True)]
+            ax.legend(handles=handles, loc="upper left", fontsize=7, framealpha=0.8)
+        else:
+            finite = data[np.isfinite(data)]
+            norm: Normalize | None
+            if log:
+                norm = LogNorm(vmin=max(finite.min(), 1e-3), vmax=max(finite.max(), 1e-2)) if finite.size else None
+            else:
+                norm = Normalize(vmin=0.0, vmax=_MAX_RATIO_SHOWN)
+            image = ax.imshow(data, origin="lower", extent=extent, cmap="Blues", norm=norm)
+            fig.colorbar(image, ax=ax, shrink=0.85, extend="neither" if log else "max")
+        ax.plot(0.0, 0.0, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
+        ax.set_title(label, color=TEXT_COLOR, fontsize=10)
+        ax.set_xlabel("joint 1 offset (deg)", color=TEXT_COLOR)
+        ax.set_ylabel("joint 2 offset (deg)", color=TEXT_COLOR)
+    ax = axes[5]
+    ax.set_facecolor(SURFACE_COLOR)
+    ax.grid(color=GRID_COLOR, linewidth=0.8)
+    hand_demo = endpoint_positions(setup.skeleton, demo)
+    ax.plot(hand_demo[:, 0], hand_demo[:, 1], color=TRAINING_COLOR, linewidth=4, label="training demonstration")
+    starts = endpoint_positions(setup.skeleton, np.radians([[r["start_q1_deg"], r["start_q2_deg"]] for r in grid]))
+    colors = [OUTCOME_COLORS[0 if r["success"] else 1 if r["arrived"] else 2] for r in grid]
+    ax.scatter(starts[:, 0], starts[:, 1], c=colors, s=18, zorder=3)
+    ax.plot(*setup.target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
+    ax.set(aspect="equal", title="Where the start postures put the hand", xlabel="x (m)", ylabel="y (m)")
+    ax.legend(loc="upper left", fontsize=7, framealpha=0.8)
     return fig
 
 
