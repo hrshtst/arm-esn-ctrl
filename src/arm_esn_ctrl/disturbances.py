@@ -6,8 +6,10 @@
 A disturbance is configured by a ``[disturbance]`` table:
 
 - ``type = "push"``: a constant force of ``force`` newtons from ``onset`` for
-  ``duration`` seconds, perpendicular to the reach (the straight line from the
-  start hand position to the target), turned counterclockwise.
+  ``duration`` seconds, in a ``direction`` relative to the reach (the straight
+  line from the start hand position to the target): ``"across"`` it, turned
+  counterclockwise (the default), ``"forward"`` along it toward the target, or
+  ``"backward"`` along it away from the target.
 - ``type = "block"``: from ``onset`` until ``release``, a stiff spring-damper
   (``stiffness`` in N/m, ``damping`` in N s/m) holds the tip where it was at
   ``onset``, like a hand gripping the arm; then it lets go.
@@ -27,11 +29,13 @@ import numpy as np
 from numpy.typing import NDArray
 from skelarm import Skeleton, compute_jacobian
 
-# The keys of each type of [disturbance] table.
+# The keys each type of [disturbance] table needs, and those it may have.
 DISTURBANCE_KEYS = {
     "push": {"type", "force", "onset", "duration"},
     "block": {"type", "onset", "release", "stiffness", "damping"},
 }
+OPTIONAL_KEYS = {"push": {"direction"}, "block": set()}
+PUSH_DIRECTIONS = ("across", "forward", "backward")
 
 
 @dataclass
@@ -81,11 +85,21 @@ def make_disturbance(
     if kind not in DISTURBANCE_KEYS:
         msg = f"unknown disturbance type {kind!r}; choose from {', '.join(DISTURBANCE_KEYS)}"
         raise ValueError(msg)
-    if set(config) != DISTURBANCE_KEYS[kind]:
-        msg = f"a {kind} [disturbance] needs exactly the keys {', '.join(sorted(DISTURBANCE_KEYS[kind]))}"
+    keys = set(config)
+    if not DISTURBANCE_KEYS[kind] <= keys <= DISTURBANCE_KEYS[kind] | OPTIONAL_KEYS[kind]:
+        optional = f", and may have {', '.join(sorted(OPTIONAL_KEYS[kind]))}" if OPTIONAL_KEYS[kind] else ""
+        msg = f"a {kind} [disturbance] needs the keys {', '.join(sorted(DISTURBANCE_KEYS[kind]))}{optional}"
         raise ValueError(msg)
     if kind == "push":
-        reach = target - start_hand
-        sideways = np.array([-reach[1], reach[0]]) / np.linalg.norm(reach)  # counterclockwise
-        return Push(config["force"] * sideways, config["onset"], config["duration"])
+        direction = config.get("direction", "across")
+        if direction not in PUSH_DIRECTIONS:
+            msg = f"unknown push direction {direction!r}; choose from {', '.join(PUSH_DIRECTIONS)}"
+            raise ValueError(msg)
+        forward = (target - start_hand) / np.linalg.norm(target - start_hand)
+        unit = {
+            "across": np.array([-forward[1], forward[0]]),  # counterclockwise
+            "forward": forward,
+            "backward": -forward,
+        }[direction]
+        return Push(config["force"] * unit, config["onset"], config["duration"])
     return Block(config["onset"], config["release"], config["stiffness"], config["damping"])

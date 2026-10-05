@@ -60,6 +60,20 @@ def test_a_push_acts_sideways_to_the_reach_for_its_duration():
     assert push(0.5, arm) == pytest.approx([0.0, 0.0])
 
 
+def test_a_push_acts_along_the_reach_forward_or_backward():
+    start_hand = np.array([0.5, 1.2])
+    arm = Skeleton.from_toml(CONFIG)
+    forward = make_disturbance(PUSH | {"direction": "forward"}, start_hand, TARGET)
+    backward = make_disturbance(PUSH | {"direction": "backward"}, start_hand, TARGET)
+    across = make_disturbance(PUSH | {"direction": "across"}, start_hand, TARGET)
+    default = make_disturbance(PUSH, start_hand, TARGET)
+
+    assert forward is not None and backward is not None and across is not None and default is not None
+    assert forward(0.45, arm) == pytest.approx([-5.0, 0.0])  # toward the target
+    assert backward(0.45, arm) == pytest.approx([5.0, 0.0])
+    assert across(0.45, arm) == pytest.approx(default(0.45, arm))
+
+
 def test_forces_act_on_the_task_clock():
     times = []
 
@@ -90,8 +104,14 @@ def test_a_block_holds_the_tip_where_it_was_and_then_lets_go():
 def test_unknown_disturbances_and_keys_are_rejected():
     with pytest.raises(ValueError, match="unknown disturbance type"):
         make_disturbance({"type": "shake"}, np.zeros(2), TARGET)
-    with pytest.raises(ValueError, match="exactly the keys"):
+    with pytest.raises(ValueError, match="needs the keys"):
+        make_disturbance(PUSH | {"angle": 90.0}, np.zeros(2), TARGET)
+    with pytest.raises(ValueError, match="needs the keys"):
+        make_disturbance({"type": "push", "force": 5.0, "onset": 0.4}, np.zeros(2), TARGET)
+    with pytest.raises(ValueError, match="unknown push direction"):
         make_disturbance(PUSH | {"direction": "up"}, np.zeros(2), TARGET)
+    with pytest.raises(ValueError, match="needs the keys"):
+        make_disturbance(BLOCK | {"direction": "forward"}, np.zeros(2), TARGET)
 
 
 def test_without_a_force_the_disturbed_demonstrator_reaches_as_the_demonstrations():
