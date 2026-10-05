@@ -80,6 +80,10 @@ add the median training path ratio and the first step of the offset starts.
 | Configuration | Sweeps |
 | --- | --- |
 | `sweep_single_demo.toml` | ridge, leak rate, and input scaling, from the settings of `grid_single_demo_settings.toml` |
+| `sweep_single_demo_reservoir.toml` | reservoir size, spectral radius, and warm-up, from the best of `sweep_single_demo.toml` |
+
+`grid_tuned_settings.toml` runs the best settings of the two sweeps over the grid,
+with `experiments/autonomous_esn.py` as in Phase 1.
 
 The input scaling also stands for the scale of the joint-angle normalization:
 normalizing the training data to [−s, s] instead of [−1, 1] gives exactly the runs

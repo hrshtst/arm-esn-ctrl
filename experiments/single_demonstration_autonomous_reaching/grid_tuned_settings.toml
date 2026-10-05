@@ -1,0 +1,39 @@
+# Stage 1, Phase 3: the ESN trained on one demonstration, run autonomously from the
+# grid of start postures of Phase 1, with the settings the two single-demonstration
+# sweeps found best.
+#
+#   uv run python experiments/autonomous_esn.py experiments/single_demonstration_autonomous_reaching/grid_tuned_settings.toml
+#
+# Ridge 10, leak rate 0.2, and input scaling 3 come from sweep_single_demo.toml
+# (run 20261005-210423); 400 neurons and spectral radius 0.3 from
+# sweep_single_demo_reservoir.toml (run 20261005-210421), where every warm-up from
+# 0.5 s on gives the same runs, so the warm-up stays at 1 s. Of the combinations
+# that arrive and hold from every start, these have the smallest reach path
+# distance from the demonstrator's reach from the other starts.
+
+[demonstrations]
+# A run directory of experiments/make_demonstrations.py, relative to the storage root:
+# the time-varying-stiffness reach from one start posture (reach_tvs_single.toml).
+run = "results/demonstrations/20261005-185525-reach_tvs_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 0.3
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.2
+input_scaling = 3.0
+bias = true
+ridge = 10.0
+seed = 0
+
+[evaluation]
+duration = 5.0         # autonomous run (s); the demonstration lasts 4 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+# Start postures: the demonstrated start offset by every combination of these
+# offsets in each joint (deg), 13 x 13 = 169 starts, as in Phase 1.
+[evaluation.start_grid]
+span_deg = 15.0        # offsets from -15 to 15 deg
+step_deg = 2.5

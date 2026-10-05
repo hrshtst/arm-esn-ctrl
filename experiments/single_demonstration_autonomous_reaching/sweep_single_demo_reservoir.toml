@@ -6,7 +6,7 @@
 #
 # Ridge, leak rate, and input scaling are fixed at the best combination of the
 # ridge / leak rate / input scaling sweep (sweep_single_demo.toml, run
-# 20261005-204413): ridge 10, leak rate 0.2, input scaling 3, the combination that
+# 20261005-210423): ridge 10, leak rate 0.2, input scaling 3, the combination that
 # arrives and holds from every start with the smallest reach path distance from the
 # other starts. Everything else is sweep_single_demo.toml.
 
