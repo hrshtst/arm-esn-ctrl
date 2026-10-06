@@ -131,3 +131,13 @@ demonstration `results/demonstrations/20261006-152823-reach_manual_single`:
 | `20261006-161946-warmup_multi_demo_settings_raw` | `warmup_multi_demo_settings_raw.toml` |
 | `20261006-162318-warmup_single_demo_settings_filtered` | `warmup_single_demo_settings_filtered.toml` |
 | `20261006-162355-warmup_single_demo_settings_raw` | `warmup_single_demo_settings_raw.toml` |
+| `20261006-175503-sweep_main_ridge_1_filtered` | `sweep_main_ridge_1_filtered.toml` |
+| `20261006-175503-sweep_main_ridge_1_raw` | `sweep_main_ridge_1_raw.toml` |
+| `20261006-175503-sweep_main_ridge_1e-6_filtered` | `sweep_main_ridge_1e-6_filtered.toml` |
+| `20261006-175503-sweep_main_ridge_1e-6_raw` | `sweep_main_ridge_1e-6_raw.toml` |
+| `20261006-192518-sweep_ridge_warmup_filtered_lr0.2_sr0.6_is1` | `sweep_ridge_warmup_filtered_lr0.2_sr0.6_is1.toml` |
+| `20261006-192518-sweep_ridge_warmup_filtered_lr0.5_sr0.6_is1` | `sweep_ridge_warmup_filtered_lr0.5_sr0.6_is1.toml` |
+| `20261006-192518-sweep_ridge_warmup_filtered_lr0.5_sr1.2_is0.03` | `sweep_ridge_warmup_filtered_lr0.5_sr1.2_is0.03.toml` |
+| `20261006-192518-sweep_ridge_warmup_raw_lr0.2_sr0.6_is1` | `sweep_ridge_warmup_raw_lr0.2_sr0.6_is1.toml` |
+| `20261006-192518-sweep_ridge_warmup_raw_lr0.5_sr0.6_is1` | `sweep_ridge_warmup_raw_lr0.5_sr0.6_is1.toml` |
+| `20261006-192518-sweep_ridge_warmup_raw_lr0.5_sr1.2_is0.03` | `sweep_ridge_warmup_raw_lr0.5_sr1.2_is0.03.toml` |
