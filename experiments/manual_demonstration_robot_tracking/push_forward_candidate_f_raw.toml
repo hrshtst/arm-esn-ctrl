@@ -1,4 +1,4 @@
-# Stage 2 with a demonstration taught by hand: a 5 N push at the tip for 0.1 s at
+# Stage 2 with a demonstration taught by hand: a 10 N push at the tip for 0.1 s at
 # 4.32 s, along the reach toward the target.
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/push_forward_candidate_f_raw.toml
@@ -38,7 +38,7 @@ effort_window = [4.32, 5.32]  # torque, effort, and force are measured from the 
 
 [disturbance]
 type = "push"
-force = 5.0            # N
+force = 10.0           # N
 onset = 4.32           # task time when the push starts (s)
 duration = 0.1         # s
 direction = "forward"  # along the reach (start hand position to target), toward the target

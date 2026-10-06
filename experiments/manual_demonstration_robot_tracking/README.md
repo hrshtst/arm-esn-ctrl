@@ -67,7 +67,8 @@ the take as recorded), which returns mildly onto the taught path from every star
 of the grid, without swinging or jumping.
 
 `<scenario>_candidate_f{,_pd_gains,_damping}_raw.toml` run it through the same
-scenarios and tracker settings as above; the replay replays the take as recorded.
+scenarios and tracker settings as above, with the forward and backward pushes at 10 N
+instead of 5 N; the replay replays the take as recorded.
 The disturbances strike at the same times, when the take's hand starts toward the
 target; candidate F, on its own, reaches about 2 s earlier, so they strike it
 mid-reach.

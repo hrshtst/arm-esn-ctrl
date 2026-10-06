@@ -1,4 +1,4 @@
-# Stage 2 with a demonstration taught by hand, joint PD at higher gains: a 5 N push
+# Stage 2 with a demonstration taught by hand, joint PD at higher gains: a 10 N push
 # at the tip for 0.1 s at 4.32 s, along the reach away from the target.
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/push_backward_candidate_f_pd_gains_raw.toml
@@ -41,7 +41,7 @@ effort_window = [4.32, 5.32]  # torque, effort, and force are measured from the 
 
 [disturbance]
 type = "push"
-force = 5.0            # N
+force = 10.0           # N
 onset = 4.32           # task time when the push starts (s)
 duration = 0.1         # s
 direction = "backward" # along the reach (start hand position to target), away from the target
