@@ -143,6 +143,13 @@ keeps every run's detour and first step for other thresholds.
 | `sweep_noise_a_raw.toml` | noisy teacher forcing for candidate A: the noise on the input, 0 to 8°, with four noisy copies of the take, against the ridge, 1e-6 to 1e-3 (24 combinations) |
 | `sweep_noise_raw_lr{0.7,0.5,0.4}_sr1.05_is0.1.toml` | the same for the three most robust reservoirs of `sweep_around_a_*`, against the ridge 1e-4 to 1e-1 |
 
+Candidates C and D lie at the largest input scaling and ridge of
+`sweep_around_a_*`, so the sweep goes on past that edge:
+
+| Configurations | Sweep |
+| --- | --- |
+| `sweep_past_edge_ridge_{1e-3,3e-3,1e-2,3e-2}_raw.toml` | input scaling 0.07 to 0.3, spectral radius 0.75 to 1.2, and leak rate 0.5 to 1 (60 combinations); ridge 1e-3 repeats the edge |
+
 The two best of `sweep_around_a_*`, with input scaling 0.1, spectral radius 1.05,
 and ridge 1e-3, run from the 169 start postures as candidates C (leak rate 0.7) and
 D (leak rate 0.5): `grid_candidate_{c,d}_raw.toml`.
