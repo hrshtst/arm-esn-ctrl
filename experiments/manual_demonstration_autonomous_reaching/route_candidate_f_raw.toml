@@ -1,0 +1,12 @@
+# Stage 1, Phase 4, with a demonstration taught by hand: how the runs of candidate F
+# (grid_candidate_f_raw.toml) gather onto a common route, regardless of timing.
+#
+#   uv run python experiments/route_convergence.py experiments/manual_demonstration_autonomous_reaching/route_candidate_f_raw.toml
+
+[runs]
+# A run directory of experiments/autonomous_esn.py, relative to the storage root.
+grid = "results/manual_demonstration_autonomous_reaching/20261006-223223-grid_candidate_f_raw"
+
+[convergence]
+step = 0.1             # s: the hand paths are compared at this period
+join_distance = 0.02   # m: a run has joined the common route once its spread stays below this
