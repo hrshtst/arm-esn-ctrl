@@ -1,0 +1,40 @@
+# Stage 1 with a demonstration taught by hand: an ESN trained on the take as
+# recorded, run autonomously from a grid of start postures around the demonstrated
+# one, with the settings first used for a single demonstration (report 003's
+# grid_single_demo_settings.toml).
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_autonomous_reaching/grid_single_demo_settings_raw.toml
+#
+# grid_single_demo_settings_filtered.toml trains the same ESN on the filtered take.
+# There is no demonstrator: each run is compared with the taught motion and the
+# target.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the reach taught by hand from one start posture (reach_manual_single.toml),
+# as recorded (demo_00) and filtered by a first-order low-pass at 8 Hz (demo_00_filtered).
+run = "results/demonstrations/20261006-152823-reach_manual_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 300
+spectral_radius = 0.5
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.3
+input_scaling = 1.0
+bias = true
+ridge = 1.0            # strong regularization kept the first single-demonstration ESN stable
+seed = 0
+
+[evaluation]
+duration = 16.0        # autonomous run (s); the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+# Start postures: the demonstrated start offset by every combination of these
+# offsets in each joint (deg), 13 x 13 = 169 starts, as in report 003. The
+# demonstration covers only 32.4 deg of joint 1 and 22.9 deg of joint 2, so the
+# outer offsets ask the ESN for joint angles well outside what it was trained on.
+[evaluation.start_grid]
+span_deg = 15.0        # offsets from -15 to 15 deg
+step_deg = 2.5
