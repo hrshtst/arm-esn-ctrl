@@ -56,3 +56,83 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tr
 tracker underdamped: computed torque at ω = 10 rad/s and joint PD at ω = 20 rad/s,
 each with the damping ratios 1, 0.5, 0.3, and 0.1, its `offsets` scenario from
 (+10°, −10°) and (−10°, −10°) only, as in report 003.
+
+## Runs
+
+Under `results/manual_demonstration_robot_tracking/` in the storage, with the ESNs of
+the grid runs of manual-demonstration autonomous reaching:
+
+| Run | Configuration |
+| --- | --- |
+| `20261006-153505-offsets_multi_demo_settings_damping_filtered` | `offsets_multi_demo_settings_damping_filtered.toml` |
+| `20261006-153505-offsets_multi_demo_settings_damping_raw` | `offsets_multi_demo_settings_damping_raw.toml` |
+| `20261006-153505-offsets_multi_demo_settings_filtered` | `offsets_multi_demo_settings_filtered.toml` |
+| `20261006-153505-offsets_multi_demo_settings_pd_gains_filtered` | `offsets_multi_demo_settings_pd_gains_filtered.toml` |
+| `20261006-153505-offsets_multi_demo_settings_pd_gains_raw` | `offsets_multi_demo_settings_pd_gains_raw.toml` |
+| `20261006-153505-offsets_multi_demo_settings_raw` | `offsets_multi_demo_settings_raw.toml` |
+| `20261006-153505-offsets_tuned_damping_filtered` | `offsets_tuned_damping_filtered.toml` |
+| `20261006-153505-offsets_tuned_damping_raw` | `offsets_tuned_damping_raw.toml` |
+| `20261006-153734-offsets_tuned_filtered` | `offsets_tuned_filtered.toml` |
+| `20261006-153735-offsets_tuned_pd_gains_filtered` | `offsets_tuned_pd_gains_filtered.toml` |
+| `20261006-153736-offsets_tuned_pd_gains_raw` | `offsets_tuned_pd_gains_raw.toml` |
+| `20261006-153738-offsets_tuned_raw` | `offsets_tuned_raw.toml` |
+| `20261006-162519-block_multi_demo_settings_damping_filtered` | `block_multi_demo_settings_damping_filtered.toml` |
+| `20261006-162522-block_multi_demo_settings_damping_raw` | `block_multi_demo_settings_damping_raw.toml` |
+| `20261006-162558-block_multi_demo_settings_filtered` | `block_multi_demo_settings_filtered.toml` |
+| `20261006-162621-block_multi_demo_settings_pd_gains_filtered` | `block_multi_demo_settings_pd_gains_filtered.toml` |
+| `20261006-162621-block_multi_demo_settings_pd_gains_raw` | `block_multi_demo_settings_pd_gains_raw.toml` |
+| `20261006-162649-block_multi_demo_settings_raw` | `block_multi_demo_settings_raw.toml` |
+| `20261006-162650-block_tuned_damping_filtered` | `block_tuned_damping_filtered.toml` |
+| `20261006-162651-block_tuned_damping_raw` | `block_tuned_damping_raw.toml` |
+| `20261006-162651-block_tuned_filtered` | `block_tuned_filtered.toml` |
+| `20261006-162712-block_tuned_pd_gains_filtered` | `block_tuned_pd_gains_filtered.toml` |
+| `20261006-162713-block_tuned_pd_gains_raw` | `block_tuned_pd_gains_raw.toml` |
+| `20261006-162716-block_tuned_raw` | `block_tuned_raw.toml` |
+| `20261006-162740-nominal_multi_demo_settings_damping_filtered` | `nominal_multi_demo_settings_damping_filtered.toml` |
+| `20261006-162742-nominal_multi_demo_settings_damping_raw` | `nominal_multi_demo_settings_damping_raw.toml` |
+| `20261006-162743-nominal_multi_demo_settings_filtered` | `nominal_multi_demo_settings_filtered.toml` |
+| `20261006-162744-nominal_multi_demo_settings_pd_gains_filtered` | `nominal_multi_demo_settings_pd_gains_filtered.toml` |
+| `20261006-162806-nominal_multi_demo_settings_pd_gains_raw` | `nominal_multi_demo_settings_pd_gains_raw.toml` |
+| `20261006-162813-nominal_multi_demo_settings_raw` | `nominal_multi_demo_settings_raw.toml` |
+| `20261006-162823-nominal_tuned_damping_filtered` | `nominal_tuned_damping_filtered.toml` |
+| `20261006-162824-nominal_tuned_damping_raw` | `nominal_tuned_damping_raw.toml` |
+| `20261006-162834-nominal_tuned_filtered` | `nominal_tuned_filtered.toml` |
+| `20261006-162836-nominal_tuned_pd_gains_filtered` | `nominal_tuned_pd_gains_filtered.toml` |
+| `20261006-162859-nominal_tuned_pd_gains_raw` | `nominal_tuned_pd_gains_raw.toml` |
+| `20261006-162906-nominal_tuned_raw` | `nominal_tuned_raw.toml` |
+| `20261006-162909-push_across_multi_demo_settings_damping_filtered` | `push_across_multi_demo_settings_damping_filtered.toml` |
+| `20261006-162911-push_across_multi_demo_settings_damping_raw` | `push_across_multi_demo_settings_damping_raw.toml` |
+| `20261006-162928-push_across_multi_demo_settings_filtered` | `push_across_multi_demo_settings_filtered.toml` |
+| `20261006-162930-push_across_multi_demo_settings_pd_gains_filtered` | `push_across_multi_demo_settings_pd_gains_filtered.toml` |
+| `20261006-162952-push_across_multi_demo_settings_pd_gains_raw` | `push_across_multi_demo_settings_pd_gains_raw.toml` |
+| `20261006-162956-push_across_multi_demo_settings_raw` | `push_across_multi_demo_settings_raw.toml` |
+| `20261006-162957-push_across_tuned_damping_filtered` | `push_across_tuned_damping_filtered.toml` |
+| `20261006-162959-push_across_tuned_damping_raw` | `push_across_tuned_damping_raw.toml` |
+| `20261006-163019-push_across_tuned_filtered` | `push_across_tuned_filtered.toml` |
+| `20261006-163021-push_across_tuned_pd_gains_filtered` | `push_across_tuned_pd_gains_filtered.toml` |
+| `20261006-163040-push_across_tuned_pd_gains_raw` | `push_across_tuned_pd_gains_raw.toml` |
+| `20261006-163040-push_across_tuned_raw` | `push_across_tuned_raw.toml` |
+| `20261006-163044-push_backward_multi_demo_settings_damping_filtered` | `push_backward_multi_demo_settings_damping_filtered.toml` |
+| `20261006-163049-push_backward_multi_demo_settings_damping_raw` | `push_backward_multi_demo_settings_damping_raw.toml` |
+| `20261006-163049-push_backward_multi_demo_settings_filtered` | `push_backward_multi_demo_settings_filtered.toml` |
+| `20261006-163052-push_backward_multi_demo_settings_pd_gains_filtered` | `push_backward_multi_demo_settings_pd_gains_filtered.toml` |
+| `20261006-163105-push_backward_multi_demo_settings_pd_gains_raw` | `push_backward_multi_demo_settings_pd_gains_raw.toml` |
+| `20261006-163111-push_backward_multi_demo_settings_raw` | `push_backward_multi_demo_settings_raw.toml` |
+| `20261006-163113-push_backward_tuned_damping_filtered` | `push_backward_tuned_damping_filtered.toml` |
+| `20261006-163122-push_backward_tuned_damping_raw` | `push_backward_tuned_damping_raw.toml` |
+| `20261006-163130-push_backward_tuned_filtered` | `push_backward_tuned_filtered.toml` |
+| `20261006-163133-push_backward_tuned_pd_gains_filtered` | `push_backward_tuned_pd_gains_filtered.toml` |
+| `20261006-163134-push_backward_tuned_pd_gains_raw` | `push_backward_tuned_pd_gains_raw.toml` |
+| `20261006-163135-push_backward_tuned_raw` | `push_backward_tuned_raw.toml` |
+| `20261006-163154-push_forward_multi_demo_settings_damping_filtered` | `push_forward_multi_demo_settings_damping_filtered.toml` |
+| `20261006-163159-push_forward_multi_demo_settings_damping_raw` | `push_forward_multi_demo_settings_damping_raw.toml` |
+| `20261006-163203-push_forward_multi_demo_settings_filtered` | `push_forward_multi_demo_settings_filtered.toml` |
+| `20261006-163204-push_forward_multi_demo_settings_pd_gains_filtered` | `push_forward_multi_demo_settings_pd_gains_filtered.toml` |
+| `20261006-163214-push_forward_multi_demo_settings_pd_gains_raw` | `push_forward_multi_demo_settings_pd_gains_raw.toml` |
+| `20261006-163219-push_forward_multi_demo_settings_raw` | `push_forward_multi_demo_settings_raw.toml` |
+| `20261006-163226-push_forward_tuned_damping_filtered` | `push_forward_tuned_damping_filtered.toml` |
+| `20261006-163233-push_forward_tuned_damping_raw` | `push_forward_tuned_damping_raw.toml` |
+| `20261006-163243-push_forward_tuned_filtered` | `push_forward_tuned_filtered.toml` |
+| `20261006-163244-push_forward_tuned_pd_gains_filtered` | `push_forward_tuned_pd_gains_filtered.toml` |
+| `20261006-163247-push_forward_tuned_pd_gains_raw` | `push_forward_tuned_pd_gains_raw.toml` |
+| `20261006-163254-push_forward_tuned_raw` | `push_forward_tuned_raw.toml` |
