@@ -127,6 +127,21 @@ the common route when its spread stays below 20 mm. `route_candidate_{a,b}_raw.t
 measure the two candidates; the run directory receives `convergence.csv` and
 `convergence.png`.
 
+### Around candidate A
+
+Candidate A returns to the taught path without jumping, but about half of its runs,
+those that start with the elbow more bent, swing about 1 m away first. The next
+sweeps look for settings without the swings, on the take as recorded only and from
+49 start postures (every 5° up to ±15°). A run swings when its hand strays from the
+taught path by more than 50 mm beyond where it started (`max_detour`); the ranking
+is the fewest failures, then swings, then first steps over 30 mm, and `runs.csv`
+keeps every run's detour and first step for other thresholds.
+
+| Configurations | Sweep |
+| --- | --- |
+| `sweep_around_a_ridge_{1e-6,1e-5,1e-4,1e-3}_raw.toml` | input scaling 0.01 to 0.1, spectral radius 0.9 to 1.5, and leak rate 0.3 to 1 (125 combinations) |
+| `sweep_noise_a_raw.toml` | noisy teacher forcing for candidate A: the noise on the input, 0 to 8°, with four noisy copies of the take, against the ridge, 1e-6 to 1e-3 (24 combinations) |
+
 ## Runs
 
 Under `results/manual_demonstration_autonomous_reaching/` in the storage, all on the
