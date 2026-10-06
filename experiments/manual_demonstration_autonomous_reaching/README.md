@@ -110,6 +110,23 @@ best: the two most robust of each take, at either ridge, each trained on both ta
 | `sweep_ridge_warmup_{raw,filtered}_lr0.2_sr0.6_is1.toml` | the same, with leak rate 0.2, spectral radius 0.6, and input scaling 1 |
 | `sweep_ridge_warmup_{raw,filtered}_lr0.5_sr0.6_is1.toml` | the same, with leak rate 0.5, spectral radius 0.6, and input scaling 1 |
 
+### Candidates and their routes
+
+Two ESNs of the sweeps, both trained on the take as recorded and robust from every
+start, return to the taught motion in opposite ways:
+
+| Configuration | ESN | How it returns |
+| --- | --- | --- |
+| `grid_candidate_a_raw.toml` | leak rate 0.5, spectral radius 1.2, input scaling 0.03, ridge 1e-4 | no first step jumps, but many runs swing far before reaching the target |
+| `grid_candidate_b_raw.toml` | leak rate 0.2, spectral radius 0.6, input scaling 1, ridge 1 | the first step of 73 runs jumps toward the taught path, then the runs follow it smoothly |
+
+[`route_convergence.py`](../route_convergence.py) measures how the runs of a grid
+run gather onto a common route, regardless of timing: the spread of a run is the
+median distance of its hand from the routes the other runs take, and a run joins
+the common route when its spread stays below 20 mm. `route_candidate_{a,b}_raw.toml`
+measure the two candidates; the run directory receives `convergence.csv` and
+`convergence.png`.
+
 ## Runs
 
 Under `results/manual_demonstration_autonomous_reaching/` in the storage, all on the

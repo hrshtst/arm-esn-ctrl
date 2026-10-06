@@ -11,10 +11,12 @@ from arm_esn_ctrl.metrics import (
     count_speed_peaks,
     hold_metrics,
     jitter,
+    join_index,
     onset_index,
     path_distance,
     path_progress,
     reach_metrics,
+    route_spread,
 )
 
 START = np.array([0.5, 1.2])
@@ -172,3 +174,23 @@ def test_a_late_arrival_is_judged_on_the_part_of_the_window_that_fits():
     assert m["success"]
     assert m["hold_observed_s"] == pytest.approx(0.1)
     assert m["hold_error_m"] == pytest.approx(0.01)  # at the end of the trajectory
+
+
+def test_runs_on_one_route_have_no_spread_whatever_their_timing():
+    route = np.column_stack([np.linspace(0.0, 1.0, 101), np.zeros(101)])
+    late = np.column_stack([np.clip((np.arange(101) - 30) / 70, 0.0, 1.0), np.zeros(101)])  # waits, then hurries
+    spread = route_spread([route, late, route[::-1]])  # the last one runs it backward
+    np.testing.assert_allclose(spread, 0.0, atol=1e-12)
+
+
+def test_a_run_that_gathers_onto_the_others_route_loses_its_spread():
+    x = np.linspace(0.0, 1.0, 101)
+    on_route = [np.column_stack([x, np.zeros(101)]) for _ in range(4)]
+    joining = np.column_stack([x, 0.5 * np.clip(1.0 - x / 0.4, 0.0, None)])  # 0.5 off, on the route from x = 0.4
+    spread = route_spread([*on_route, joining])
+    assert spread[4, 0] == pytest.approx(0.5)
+    assert spread[4, 40:].max() == pytest.approx(0.0, abs=1e-12)
+    assert spread[:4].max() == pytest.approx(0.0, abs=1e-12)  # the median ignores the one that is off
+    assert join_index(spread[4], 0.12) == 31  # 0.5 (1 - x / 0.4) < 0.12 from x > 0.304
+    assert join_index(np.array([0.5, 0.0, 0.5, 0.0]), 0.1) == 3  # it must stay
+    assert join_index(np.array([0.5, 0.5]), 0.1) is None

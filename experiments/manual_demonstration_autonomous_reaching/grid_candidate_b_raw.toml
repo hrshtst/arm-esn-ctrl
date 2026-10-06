@@ -1,0 +1,35 @@
+# Stage 1, Phase 4, with a demonstration taught by hand: candidate B of the sweeps,
+# the ESN trained on the take as recorded with leak rate 0.2, spectral radius 0.6,
+# input scaling 1, ridge 1.0, and a 1 s warm-up
+# (sweep_ridge_warmup_raw_lr0.2_sr0.6_is1.toml), run from the grid of start postures
+# of Phase 1. No run fails and the runs return smoothly onto the taught path, but
+# the first step of 73 runs jumps more than 30 mm toward it.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_autonomous_reaching/grid_candidate_b_raw.toml
+#
+# route_candidate_b_raw.toml measures how its runs gather onto a common route.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the reach taught by hand from one start posture (reach_manual_single.toml).
+run = "results/demonstrations/20261006-152823-reach_manual_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 0.6
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.2
+input_scaling = 1
+bias = true
+ridge = 1.0
+seed = 0
+
+[evaluation]
+duration = 16.0        # autonomous run (s); the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint (169 start postures)
+step_deg = 2.5

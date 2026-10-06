@@ -156,6 +156,30 @@ def distances_to_path(points: NDArray[np.float64], reference: NDArray[np.float64
     return _nearest_on_path(points, reference)[2]
 
 
+def route_spread(paths: list[NDArray[np.float64]]) -> NDArray[np.float64]:
+    """Return how far each point of each path is from the routes the other paths take, regardless of timing.
+
+    ``paths`` are sequences of points of any dimension, each shaped ``(n, d)``. For
+    each point, the result is the median over the other paths of its distance to
+    the nearest point on their polylines, shaped ``(len(paths), n)``. Runs that
+    gather onto a common route lose their spread from where they join it, however
+    late or early they get there; the median ignores the few that do not.
+    """
+    spread = np.empty((len(paths), len(paths[0])))
+    for i, path in enumerate(paths):
+        others = [distances_to_path(path, other) for j, other in enumerate(paths) if j != i]
+        spread[i] = np.median(others, axis=0)
+    return spread
+
+
+def join_index(distances: NDArray[np.float64], threshold: float) -> int | None:
+    """Return the first index from which ``distances`` stay below ``threshold``, or None if they end above it."""
+    above = np.flatnonzero(distances >= threshold)
+    if above.size == 0:
+        return 0
+    return None if above[-1] == len(distances) - 1 else int(above[-1]) + 1
+
+
 def path_progress(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:
     """Return how far along the ``reference`` path the nearest point to each of ``points`` lies.
 
