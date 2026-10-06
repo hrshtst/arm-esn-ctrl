@@ -49,3 +49,45 @@ taught motion in place of those against the demonstrator: the joint error and th
 path distance from the taught motion, the onset and arrival delays after it, the
 offset retained (0 returns onto the taught motion, 1 keeps the start's offset), and
 the jitter and speed peaks of the run and of the taught motion.
+
+## Phase 2: reservoir states by principal components
+
+As in report 003, the states while the take is fed in give the principal
+components, and the runs from the grid are projected onto them and compared with
+the take's states over time. The phase lead is measured over the reach, from 4.1 s,
+when the hand heads for the target, to 7.3 s, when it arrives.
+
+| Configurations | ESN |
+| --- | --- |
+| `states_single_demo_settings_{raw,filtered}.toml` | of `grid_single_demo_settings_{raw,filtered}.toml` |
+| `states_multi_demo_settings_{raw,filtered}.toml` | of `grid_multi_demo_settings_{raw,filtered}.toml` |
+
+```bash
+uv run python experiments/reservoir_states.py \
+    experiments/manual_demonstration_autonomous_reaching/states_single_demo_settings_raw.toml
+```
+
+## Phase 3: warm-up
+
+As in report 003, each ESN runs again with warm-ups from 0 to 2.5 s: one that times
+its reach from the reset of its reservoir arrives earlier by as much as the warm-up
+is longer; one that times it from the end of the warm-up arrives as before.
+
+| Configurations | ESN |
+| --- | --- |
+| `warmup_single_demo_settings_{raw,filtered}.toml` | of `grid_single_demo_settings_{raw,filtered}.toml` (trained with a 1 s warm-up) |
+| `warmup_multi_demo_settings_{raw,filtered}.toml` | of `grid_multi_demo_settings_{raw,filtered}.toml` (trained with a 0.25 s warm-up) |
+
+## Runs
+
+Under `results/manual_demonstration_autonomous_reaching/` in the storage, all on the
+demonstration `results/demonstrations/20261006-152823-reach_manual_single`:
+
+| Run | Configuration |
+| --- | --- |
+| `20261006-153058-grid_multi_demo_settings_filtered` | `grid_multi_demo_settings_filtered.toml` |
+| `20261006-153139-grid_multi_demo_settings_raw` | `grid_multi_demo_settings_raw.toml` |
+| `20261006-153219-grid_single_demo_settings_filtered` | `grid_single_demo_settings_filtered.toml` |
+| `20261006-153239-grid_single_demo_settings_raw` | `grid_single_demo_settings_raw.toml` |
+| `20261006-153258-grid_tuned_settings_filtered` | `grid_tuned_settings_filtered.toml` |
+| `20261006-153325-grid_tuned_settings_raw` | `grid_tuned_settings_raw.toml` |

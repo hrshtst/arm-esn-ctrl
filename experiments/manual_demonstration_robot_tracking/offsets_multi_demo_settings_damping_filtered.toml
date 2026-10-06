@@ -1,0 +1,39 @@
+# Stage 2 with a demonstration taught by hand, underdamped trackers: no disturbance,
+# from the grid of start postures of manual-demonstration autonomous reaching: the
+# demonstrated start offset by -15 to 15 deg in each joint.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/offsets_multi_demo_settings_damping_filtered.toml
+#
+# The ESN has the settings found best for eight demonstrations: ridge 1e-6, leak
+# rate 0.05, input scaling 0.1, 600 neurons, spectral radius 1.3, warm-up 0.25 s
+# (grid_multi_demo_settings_filtered.toml of manual-demonstration autonomous
+# reaching), trained on the filtered take, which the replay replays.
+# offsets_multi_demo_settings_damping_raw.toml runs the ESN trained on the take as
+# recorded in the same scenario.
+#
+# As offsets_multi_demo_settings_filtered.toml, with the tracker underdamped:
+# computed torque at omega = 10 rad/s and joint PD at omega = 20 rad/s, each with
+# the damping ratios 1, 0.5, 0.3, and 0.1.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_autonomous_reaching/20261006-153058-grid_multi_demo_settings_filtered/esn.toml"
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["computed_torque", "pd"]
+# One natural frequency of the tracking error for each law (rad/s), and several
+# damping ratios: 1 is critically damped, and smaller ratios make the error
+# oscillate as it decays. Computed torque: kp = omega^2, kd = 2 zeta omega. Joint
+# PD: the same, scaled by each joint's inertia at the posture where the reach ends.
+omegas = { computed_torque = [10.0], pd = [20.0] }
+dampings = [1.0, 0.5, 0.3, 0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+
+[evaluation]
+duration = 16.0        # task (s), after the warm-up; the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+# Two of the start offsets (deg): roughly along the demonstrated motion, and mostly across it.
+start_offsets_deg = [[10.0, -10.0], [-10.0, -10.0]]

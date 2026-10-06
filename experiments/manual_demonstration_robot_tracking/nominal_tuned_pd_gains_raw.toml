@@ -1,0 +1,33 @@
+# Stage 2 with a demonstration taught by hand, joint PD at higher gains: no
+# disturbance, from the demonstrated start.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/nominal_tuned_pd_gains_raw.toml
+#
+# The ESN has the settings report 003's sweeps found best for its scripted
+# demonstration: ridge 10, leak rate 0.2, input scaling 3, 400 neurons, spectral
+# radius 0.3, warm-up 1 s (grid_tuned_settings_raw.toml of manual-demonstration
+# autonomous reaching), trained on the take as recorded, which the replay replays.
+# nominal_tuned_pd_gains_filtered.toml runs the ESN trained on the filtered take in
+# the same scenario.
+#
+# As nominal_tuned_raw.toml, with joint PD only, at omega = 10, 20, and 40 rad/s.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_autonomous_reaching/20261006-153325-grid_tuned_settings_raw/esn.toml"
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["pd"]
+# Natural frequencies of the tracking error (rad/s), critically damped. Joint PD:
+# kp = omega^2, kd = 2 omega, scaled by each joint's inertia at the posture where
+# the reach ends.
+omegas = [10.0, 20.0, 40.0]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+
+[evaluation]
+duration = 16.0        # task (s), after the warm-up; the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
