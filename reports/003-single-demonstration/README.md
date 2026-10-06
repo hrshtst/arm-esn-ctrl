@@ -210,10 +210,11 @@ the sweeps and warm-up checks their tables.
 of Section 3 from those copies:
 
 - With `--logs`, it reads the robot runs' logs under the storage root. It draws
-  Figure 9 and writes `departures.csv`, `offset_references.csv`, and
-  `push_progress.csv` to [`results/summary`](results/summary), from which their
-  tables are printed.
-- With `--animations`, it exports the animations of the block.
+  Figure 9 and the examples' figures of Section 3.8, and writes `departures.csv`,
+  `offset_references.csv`, and `push_progress.csv` to
+  [`results/summary`](results/summary), from which their tables are printed.
+- With `--animations`, it exports the examples' animations of Section 3.8, each
+  arm rendered by skelarm's player.
 
 The logs and the reservoir states' `projections.npz` are not kept in Git.
 
@@ -413,6 +414,9 @@ worth sweeping. It needs no sweep of its own:
 
 ### 3.5 On the robot: start offsets and gains
 
+Section 3.8 shows one example of every robot scenario over time, with each ESN's
+output, and animated.
+
 ![The arms in every robot scenario](results/summary/robot.png)
 
 **Figure 6.** Means over the start postures (169 for the offsets, 1 otherwise) at
@@ -500,10 +504,8 @@ demonstrated path, of the arm (solid) and of its reference (dashed). Bottom: the
 force holding the tip (zero outside the block). The thick light line is the
 demonstrator's undisturbed reach.
 
-The block with joint PD at ω = 20 rad/s in skelarm's player:
-[tuned ESN](results/summary/block_pd_w20_esn_tuned.gif),
-[eight-demonstration ESN](results/summary/block_pd_w20_esn_eight_demonstration_settings.gif), and
-[replay](results/summary/block_pd_w20_replay.gif).
+Section 3.8 shows the block's joint angles, with each ESN's output, and an
+animation of the four arms (Figure 16).
 
 The block, at every tracker setting:
 - *lead:* the reference's lead over the arm at the release, as a fraction of the
@@ -617,6 +619,138 @@ From the 168 offset starts, the RMS distance of the ESN's output over the reach
     (12–15°). It runs along the demonstrated path, but on its own timing.
   - *Report 002's ESN,* trained on eight demonstrations, followed the demonstrator's
     reach from offset starts within 1° RMS.
+
+### 3.8 Scenario by scenario: joint angles and animations
+
+One example of each robot scenario, from one start posture.
+
+- **Each figure:** the joint angles over time, at both featured tracker settings.
+  - *Columns:* the ESN and the tracker. *Rows:* the joints.
+  - *Each ESN:* its arm (solid) and its output, the reference it gives the tracker
+    (dashed).
+  - *The others:* the replay's arm (orange), and the demonstration it replays
+    (thick gray). From an offset start, the gray line is instead the
+    demonstrator's own reach from there, and the replay's reference is dashed
+    orange.
+  - *Under a disturbance:* the demonstrator's own disturbed reach (dash-dot), with
+    the disturbance shaded.
+- **Each animation:** the four arms side by side on one task clock, each rendered
+  by skelarm's player, with joint PD at ω = 20 rad/s.
+  - *Markers:* the purple dot is the target, and the red arrow the force at the tip.
+  - *The ESN's output* is not drawn in the animations; the figures show it.
+
+#### Nominal
+
+![Animation: nominal](results/summary/example_nominal.gif)
+
+![Joint angles: nominal](results/summary/example_nominal.png)
+
+**Figure 10.** No disturbance, from the demonstrated start.
+
+- **The eight-demonstration ESN** lies on the demonstration, output and arm, its
+  initial pause included.
+- **The tuned ESN starts at once.** Its joint 1 rises from t = 0 while the
+  demonstration still pauses. It joins the demonstration's course at about 0.5 s,
+  and its output and arm nearly coincide.
+
+#### Offset ahead: (+10°, −10°)
+
+![Animation: offset ahead](results/summary/example_offset_ahead.gif)
+
+![Joint angles: offset ahead](results/summary/example_offset_ahead.png)
+
+**Figure 11.** The start offset by +10° in joint 1 and −10° in joint 2, roughly
+along the demonstrated motion.
+
+- **The demonstrator,** from this start, pauses and then makes a reach of its own
+  (gray).
+- **The replay's reference jumps back** to the demonstrated start (18°, 120°) at
+  t = 0. Its arm follows with a yank, then replays the demonstration.
+- **The tuned ESN treats the start as a point along the demonstrated path.** Its
+  output goes on toward the end from where the arm is. The arm reaches the end
+  posture at 0.5–0.6 s, about half a second before the demonstrator does.
+- **The eight-demonstration ESN's output jumps the other way,** past the
+  demonstrated start, to about 13° in joint 1 and 124° in joint 2. It then follows
+  the demonstration's timing.
+
+#### Offset across: (−10°, −10°)
+
+![Animation: offset across](results/summary/example_offset_across.gif)
+
+![Joint angles: offset across](results/summary/example_offset_across.png)
+
+**Figure 12.** The start offset by −10° in both joints, mostly across the
+demonstrated motion.
+
+- **The replay** jumps back to the demonstrated start, as from every offset start.
+- **The tuned ESN's output jumps toward the demonstrated path** in its first steps:
+  joint 1 from 8° to about 21°, joint 2 up to 114–116°. It then runs along the
+  path ahead of the demonstration's timing, and reaches the end posture by about
+  0.7 s.
+- **The eight-demonstration ESN's output jumps in joint 2** above the demonstrated
+  start, up to 128°, and its arm overshoots to 130°. It then follows the
+  demonstration's timing.
+
+#### Push across the reach
+
+![Animation: push across](results/summary/example_push_across.gif)
+
+![Joint angles: push across](results/summary/example_push_across.png)
+
+**Figure 13.** A 5 N push at the tip for 0.1 s from 0.4 s (shaded), across the
+reach.
+
+- **Every arm is bent back in joint 2,** by up to 4–5° with computed torque and
+  2° with joint PD at ω = 20 rad/s.
+- **All return to the demonstration's course by about 1 s.** The tuned ESN, which
+  started early, stays slightly ahead of it.
+
+#### Push forward along the reach
+
+![Animation: push forward](results/summary/example_push_forward.gif)
+
+![Joint angles: push forward](results/summary/example_push_forward.png)
+
+**Figure 14.** The same push, along the reach toward the target.
+
+- **The tuned ESN speeds up after the push.** With computed torque, its output and
+  arm run ahead of the demonstration, and it arrives 0.12 s earlier than without
+  the push.
+- **The push hardly shows in the other arms,** which keep the demonstration's
+  course.
+
+#### Push backward along the reach
+
+![Animation: push backward](results/summary/example_push_backward.gif)
+
+![Joint angles: push backward](results/summary/example_push_backward.png)
+
+**Figure 15.** The same push, along the reach away from the target.
+
+- **The tuned ESN slows down after the push.** Its joint 1 falls behind the
+  demonstration from 0.5 s on, and it arrives 0.14 s later than without the push
+  (computed torque).
+- **The other arms keep the demonstration's course.**
+
+#### Block
+
+![Animation: block](results/summary/example_block.gif)
+
+![Joint angles: block](results/summary/example_block.png)
+
+**Figure 16.** The tip held from 0.3 s to 0.8 s (shaded), then let go.
+
+- **The tuned ESN's output stays with the held arm,** within 0.6°. After the
+  release, both resume along the demonstrated course, about 0.6 s later than
+  undisturbed. In the animation, its holding force (the red arrow) stays small.
+- **The eight-demonstration ESN's output runs on.**
+  - *During the block:* it follows the demonstration in joint 1, and slows in
+    joint 2.
+  - *After the release:* the output itself overshoots, to 56–58° in joint 1 (the
+    end posture is at 48.6°) and 92–93° in joint 2 (end: 97.2°), and the arm
+    follows it there.
+- **The replay's reference, the demonstration, runs to its end.** After the
+  release, the arm catches up with it, as the demonstrator's own arm does.
 
 ## 4. Observations
 

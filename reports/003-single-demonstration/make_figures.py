@@ -23,11 +23,13 @@ and prints the tables of the report. Two options read the run logs, which are no
 kept in Git, from the runs under the storage root, where
 ``experiments/robot_esn.py`` wrote them:
 
-- ``--logs`` draws ``block.png`` (the block over time, Section 3.6) and writes
-  ``departures.csv``, ``offset_references.csv``, and ``push_progress.csv``
-  (Section 3.7 and 3.6), from which their tables are printed (also without the
-  option);
-- ``--animations`` exports animated GIFs of the block with skelarm's player.
+- ``--logs`` draws ``block.png`` (the block over time, Section 3.6) and the joint
+  angles of the examples, scenario by scenario (``example_<name>.png``, Section
+  3.8), and writes ``departures.csv``, ``offset_references.csv``, and
+  ``push_progress.csv`` (Sections 3.6 and 3.7), from which their tables are
+  printed (also without the option);
+- ``--animations`` animates each example (``example_<name>.gif``): the four arms
+  side by side, each rendered by skelarm's player.
 """
 
 from __future__ import annotations
@@ -117,14 +119,24 @@ PROGRESS_TIMES = (0.5, 0.6)  # the end of the pushes, and 0.1 s later (s)
 DEPARTURES = SUMMARY / "departures.csv"
 OFFSET_REFERENCES = SUMMARY / "offset_references.csv"
 PUSH_PROGRESS = SUMMARY / "push_progress.csv"
-BLOCK_SPAN = (0.3, 0.8)
-# The animations: the block with joint PD at omega = 20 rad/s, from the demonstrated start.
-ANIMATIONS = [
-    ("block_pd_w20_esn_tuned", "tuned", "esn"),
-    ("block_pd_w20_esn_eight_demonstration_settings", "eight", "esn"),
-    ("block_pd_w20_replay", "tuned", "replay"),
+# When each disturbance acts (task time, s).
+SPANS = {"push across": (0.4, 0.5), "push forward": (0.4, 0.5), "push backward": (0.4, 0.5), "block": (0.3, 0.8)}
+# The examples, scenario by scenario: name, scenario, and start offset (deg) from the demonstrated start.
+EXAMPLES = [
+    ("nominal", "nominal", (0.0, 0.0)),
+    ("offset ahead", "offsets", (10.0, -10.0)),  # roughly along the demonstrated motion
+    ("offset across", "offsets", (-10.0, -10.0)),  # mostly across it
+    ("push across", "push across", (0.0, 0.0)),
+    ("push forward", "push forward", (0.0, 0.0)),
+    ("push backward", "push backward", (0.0, 0.0)),
+    ("block", "block", (0.0, 0.0)),
 ]
+EXAMPLE_END = 2.5  # the joint angles are drawn until this task time (s)
+# The animations of the examples: one tracker setting, the task times they cover (s), and their frame rate.
+ANIMATION_SETTING = ("pd", 20.0)
+ANIMATION_SPAN = (-0.2, 3.0)
 ANIMATION_FPS = 20.0  # a whole number of milliseconds per frame, so GIFs play in real time
+ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
 
 
 def main() -> None:
@@ -144,6 +156,8 @@ def main() -> None:
     }
     if args.logs:
         figures["block.png"] = plot_block()
+        for name, scenario, offset in EXAMPLES:
+            figures[f"example_{slug(name)}.png"] = plot_example(name, scenario, offset)
         write_departures()
         write_offset_references()
         write_push_progress()
@@ -151,7 +165,8 @@ def main() -> None:
         fig.savefig(SUMMARY / name, dpi=150)
     print_tables()
     if args.animations:
-        export_animations()
+        for name, scenario, offset in EXAMPLES:
+            export_example_animation(name, scenario, offset)
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -547,12 +562,18 @@ def demonstrated_path() -> NDArray[np.float64]:
     return load_joint_angles(DEMONSTRATION, 0.01)[1]
 
 
-def robot_log(scenario: str, esn: str, suffix: str, setting: str | None, arm: str) -> StateLog:
-    """A run log from the storage root: ``setting`` is None for the demonstrator."""
+def robot_log_path(scenario: str, esn: str, suffix: str, setting: str | None, arm: str, start: int = 0) -> Path:
+    """The path of a run log under the storage root: ``setting`` is None for the demonstrator."""
     from arm_esn_ctrl.storage import resolve_run_path
 
     run = resolve_run_path(f"results/{robot_run(scenario, esn, suffix)}")
-    return StateLog.load(run / f"{arm}_00.sklog.npz" if setting is None else run / setting / f"{arm}_00.sklog.npz")
+    name = f"{arm}_{start:02d}.sklog.npz"
+    return run / name if setting is None else run / setting / name
+
+
+def robot_log(scenario: str, esn: str, suffix: str, setting: str | None, arm: str, start: int = 0) -> StateLog:
+    """A run log from the storage root: ``setting`` is None for the demonstrator."""
+    return StateLog.load(robot_log_path(scenario, esn, suffix, setting, arm, start))
 
 
 def setting_name(law: str, omega: float) -> tuple[str, str]:
@@ -595,7 +616,7 @@ def plot_block() -> Figure:
         ax_distance, ax_progress, ax_force = axes[:, column]
         for ax in axes[:, column]:
             style(ax)
-            ax.axvspan(*BLOCK_SPAN, color=DISTURBANCE_COLOR, zorder=0)
+            ax.axvspan(*SPANS["block"], color=DISTURBANCE_COLOR, zorder=0)
         q = undisturbed.channel("q").reshape(len(undisturbed.times), -1)
         hand = endpoint_positions(skeleton, q)
         ax_distance.plot(
@@ -728,19 +749,192 @@ def write_push_progress() -> None:
     write_csv(PUSH_PROGRESS, rows)
 
 
-def export_animations() -> None:
-    """Export GIFs of the block with skelarm's player, from the logs under the storage root."""
-    from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path
+def slug(name: str) -> str:
+    """A file name part for an example's name."""
+    return name.replace(" ", "_")
+
+
+def example_start(scenario: str, esn: str, suffix: str, offset: tuple[float, float]) -> int:
+    """The index of the start posture at ``offset`` (deg) in a robot run."""
+    rows = read_csv(RESULTS / robot_run(scenario, esn, suffix) / "metrics.csv")
+    return next(int(r["start"]) for r in rows if r["arm"] == "demonstrator" and offset_of(r["origin"]) == offset)
+
+
+def example_paths(scenario: str, offset: tuple[float, float], law: str, omega: float) -> dict[str, Path]:
+    """The logs of an example: the three tracked arms, the demonstrator, and its undisturbed reach from that start."""
+    setting, suffix = setting_name(law, omega)
+    paths = {}
+    for arm, esn, name in (("tuned", "tuned", "esn"), ("eight", "eight", "esn"), ("replay", "tuned", "replay")):
+        paths[arm] = robot_log_path(scenario, esn, suffix, setting, name, example_start(scenario, esn, suffix, offset))
+    start = example_start(scenario, "tuned", suffix, offset)
+    paths["demonstrator"] = robot_log_path(scenario, "tuned", suffix, None, "demonstrator", start)
+    undisturbed = scenario if scenario not in SPANS else "nominal"
+    start = example_start(undisturbed, "tuned", suffix, offset)
+    paths["undisturbed"] = robot_log_path(undisturbed, "tuned", suffix, None, "demonstrator", start)
+    return paths
+
+
+def example_title(name: str, offset: tuple[float, float]) -> str:
+    """Where an example starts, for titles."""
+    if offset == (0.0, 0.0):
+        return f"{name}, from the demonstrated start"
+    return f"{name}: start offset by {offset[0]:+g}° in joint 1 and {offset[1]:+g}° in joint 2"
+
+
+def plot_example(name: str, scenario: str, offset: tuple[float, float]) -> Figure:
+    """The joint angles of one example over time: each ESN's arm and output against the replay and the demonstrator.
+
+    One column per ESN and featured tracker setting, one row per joint.
+    """
+    columns = [(esn, law, omega) for esn in ROBOT_ESNS for law, omega, _ in FEATURED]
+    logs = {
+        (law, omega): {arm: StateLog.load(path) for arm, path in example_paths(scenario, offset, law, omega).items()}
+        for law, omega, _ in FEATURED
+    }
+    times = np.arange(0.0, EXAMPLE_END + 1e-9, 0.005)
+    from_start = offset != (0.0, 0.0)
+    fig = Figure(figsize=(18, 7.2), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(f"Joint angles over time: {example_title(name, offset)}", color="#0b0b0b")
+    axes = fig.subplots(2, len(columns), sharex=True, squeeze=False)
+    for column, (esn, law, omega) in enumerate(columns):
+        run = logs[(law, omega)]
+        undisturbed_label = (
+            "demonstrator's reach from this start" if from_start else "demonstration (the replay's reference)"
+        )
+        lines = [(joint_angles_at(run["undisturbed"], times), undisturbed_label, "#c9c8c2", "-", 5.0)]
+        if scenario in SPANS:
+            lines.append((joint_angles_at(run["demonstrator"], times), "demonstrator, disturbed", "#0b0b0b", "-.", 1.0))
+        if from_start:
+            lines.append(
+                (joint_angles_at(run["replay"], times, "q_ref"), "replay: reference", ARM_COLORS["replay"], "--", 1.3)
+            )
+        lines += [
+            (joint_angles_at(run["replay"], times), "replay: arm", ARM_COLORS["replay"], "-", 1.3),
+            (
+                joint_angles_at(run[esn], times, "q_ref"),
+                f"{ARM_LABELS[esn]}: output (reference)",
+                ARM_COLORS[esn],
+                "--",
+                1.8,
+            ),
+            (joint_angles_at(run[esn], times), f"{ARM_LABELS[esn]}: arm", ARM_COLORS[esn], "-", 1.8),
+        ]
+        for joint in range(2):
+            ax = axes[joint, column]
+            style(ax)
+            if scenario in SPANS:
+                ax.axvspan(*SPANS[scenario], color=DISTURBANCE_COLOR, zorder=0)
+            for values, label, color, line, width in lines:
+                ax.plot(times, values[:, joint], color=color, linestyle=line, linewidth=width, label=label)
+            ax.set_title(
+                f"{ARM_LABELS[esn]}\n{LAW_NAMES[law]}, ω = {omega:g} rad/s: joint {joint + 1}",
+                color=TEXT_COLOR,
+                fontsize=9,
+            )
+            if column == 0:
+                ax.set_ylabel(f"joint {joint + 1} (deg)", color=TEXT_COLOR)
+        axes[1, column].set_xlabel("time (s)", color=TEXT_COLOR)
+    handles, labels = {}, []
+    for ax in (axes[0, 0], axes[0, len(columns) // 2]):
+        for handle, label in zip(*ax.get_legend_handles_labels(), strict=True):
+            if label not in handles:
+                handles[label] = handle
+                labels.append(label)
+    fig.legend(
+        [handles[label] for label in labels],
+        labels,
+        loc="outside lower center",
+        ncol=4,
+        frameon=False,
+        labelcolor=TEXT_COLOR,
+    )
+    return fig
+
+
+def export_example_animation(name: str, scenario: str, offset: tuple[float, float]) -> None:
+    """Animate an example: the four arms side by side, each rendered by skelarm's player, on one task clock.
+
+    The player exports each arm's run as a GIF (``--export``); its frames, which the
+    GIF merges where the arm rests, are spread back over time, cropped to where the
+    arms move, labeled, and tiled into one GIF with the task time and the
+    disturbance.
+    """
+    import tempfile
+
+    from PIL import Image, ImageDraw, ImageFont, ImageSequence
+
+    from arm_esn_ctrl.storage import REPO_ROOT
 
     player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
-    for name, esn, arm in ANIMATIONS:
-        run = resolve_run_path(f"results/{robot_run('block', esn, '_pd_gains')}")
-        log, gif = run / "pd_w20" / f"{arm}_00.sklog.npz", SUMMARY / f"{name}.gif"
-        subprocess.run(
-            [sys.executable, str(player), str(log), "--export", str(gif), "--fps", f"{ANIMATION_FPS:g}"],
-            check=True,
-            env=os.environ | {"QT_QPA_PLATFORM": "offscreen"},  # render without a window
-        )
+    law, omega = ANIMATION_SETTING
+    paths = example_paths(scenario, offset, law, omega)
+    arms = ("tuned", "eight", "replay", "demonstrator")
+    frames, starts = {}, {}
+    with tempfile.TemporaryDirectory() as tmp:
+        for arm in arms:
+            exported = Path(tmp) / f"{arm}.gif"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(player),
+                    str(paths[arm]),
+                    "--export",
+                    str(exported),
+                    "--fps",
+                    f"{ANIMATION_FPS:g}",
+                ],
+                check=True,
+                capture_output=True,
+                env=os.environ | {"QT_QPA_PLATFORM": "offscreen"},  # render without a window
+            )
+            with Image.open(exported) as gif:
+                spread = []
+                for frame in ImageSequence.Iterator(gif):
+                    repeats = max(round(frame.info.get("duration", 1000.0 / ANIMATION_FPS) * ANIMATION_FPS / 1000.0), 1)
+                    spread += [np.asarray(frame.convert("RGB"))] * repeats
+            frames[arm] = np.array(spread)
+            starts[arm] = float(StateLog.load(paths[arm]).times[0])
+    ink = np.any([(f < 235).any(axis=3).any(axis=0) for f in frames.values()], axis=0)
+    rows, cols = np.nonzero(ink)
+    margin = 24
+    top, bottom = max(rows.min() - margin, 0), rows.max() + margin
+    left, right = max(cols.min() - margin, 0), cols.max() + margin
+    width, height = right - left, bottom - top
+    header, label_height, gap = 44, 30, 8
+    font = ImageFont.load_default(size=20)
+    small = ImageFont.load_default(size=17)
+    labels = {
+        "tuned": "ESN, tuned settings",
+        "eight": "ESN, eight-demo. settings",
+        "replay": "replay",
+        "demonstrator": "demonstrator",
+    }
+    images = []
+    times = np.arange(ANIMATION_SPAN[0], ANIMATION_SPAN[1] + 1e-9, 1.0 / ANIMATION_FPS)
+    for t in times:
+        canvas = Image.new("RGB", (len(arms) * width + (len(arms) - 1) * gap, header + label_height + height), "white")
+        draw = ImageDraw.Draw(canvas)
+        status = ""
+        if scenario in SPANS and SPANS[scenario][0] <= t < SPANS[scenario][1]:
+            status = "   pushed" if scenario.startswith("push") else "   blocked"
+        draw.text((10, 10), f"{example_title(name, offset)}   t = {t:+.2f} s{status}", fill="#0b0b0b", font=font)
+        for i, arm in enumerate(arms):
+            k = int(np.clip(round((t - starts[arm]) * ANIMATION_FPS), 0, len(frames[arm]) - 1))
+            x = i * (width + gap)
+            canvas.paste(Image.fromarray(frames[arm][k][top:bottom, left:right]), (x, header + label_height))
+            draw.text((x + 8, header + 4), labels[arm], fill=ARM_COLORS[arm], font=small)
+        images.append(canvas)
+    # One palette for every frame, so that the GIF stores only what changes from frame to frame.
+    # It is learned from all the frames, so that brief colors, such as a push's arrow, keep theirs.
+    sample = Image.new("RGB", (images[0].width, len(images) * images[0].height))
+    for i, image in enumerate(images):
+        sample.paste(image, (0, i * images[0].height))
+    palette = sample.quantize(colors=128, method=Image.Quantize.MEDIANCUT)
+    images = [image.quantize(palette=palette, dither=Image.Dither.NONE) for image in images]
+    durations = [round(1000.0 / ANIMATION_FPS)] * (len(images) - 1) + [ANIMATION_HOLD_MS]
+    gif = SUMMARY / f"example_{slug(name)}.gif"
+    images[0].save(gif, save_all=True, append_images=images[1:], duration=durations, loop=0, optimize=True)
+    print(f"wrote {gif.name}: {len(images)} frames")
 
 
 # ---------------------------------------------------------------------------- the tables
