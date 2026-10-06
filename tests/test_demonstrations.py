@@ -192,3 +192,28 @@ def test_smoothing_removes_the_pixel_steps_and_keeps_a_demonstration():
     error = np.degrees(np.abs(smoothed.channel("q") - exact.channel("q"))).max()
     assert error < 0.3  # within one step of the exact reach
     assert check(smoothed) == []
+
+
+def test_the_configured_filter_never_takes_the_hand_out_of_where_it_held():
+    """A correction inside the goal, out toward its edge and back, as a hand makes it.
+
+    The filter of reach_manual_single.toml only averages, so the filtered hand never
+    goes farther from the target than the recorded hand did; a 4th-order Butterworth
+    filter overshoots such a correction.
+    """
+    skeleton = Skeleton.from_toml(CONFIG)
+    take = taught_take(reach=3.0)
+    times, q = take.times, take.channel("q")
+    # After arriving, move joint 1 out by 0.9 deg (about 16 mm of hand) within 0.1 s, then back.
+    q[(times > 4.0) & (times < 4.1)] += np.radians([0.9, 0.0])
+    corrected = joint_trajectory_log(skeleton, times, q, task_table(), producer="test")
+    target = endpoint_positions(skeleton, END[np.newaxis])[0]
+
+    def farthest(log):
+        hand = endpoint_positions(skeleton, log.channel("q"))
+        return np.linalg.norm(hand - target, axis=1)[times > 3.6].max()
+
+    with (REPO_ROOT / "experiments/demonstrations/reach_manual_single.toml").open("rb") as f:
+        smoothing = tomllib.load(f)["recording"]["filter"]
+    assert farthest(smooth_take(corrected, skeleton, task_table(), smoothing)) <= farthest(corrected) + 1e-5
+    assert farthest(smooth_take(corrected, skeleton, task_table(), SMOOTHING)) > farthest(corrected) + 1e-3

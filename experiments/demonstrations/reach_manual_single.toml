@@ -40,12 +40,13 @@ max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, 
 
 # The filter of demo_00_filtered: one of skelarm's zero-phase filters, as the keyword
 # arguments of skelarm.smooth (the keys of the filter table of skelarm's
-# trajectory-tracking tasks; its examples/track.toml uses these values). It removes
-# the steps of the cursor's whole pixels, a few millimeters each.
+# trajectory-tracking tasks). It removes the steps of the cursor's whole pixels, a
+# few millimeters each. The first-order low-pass only averages, so the filtered hand
+# never goes beyond where the hand went: a 4th-order Butterworth filter at 8 Hz
+# (skelarm's examples/track.toml) overshot a correction inside the goal out of it.
 [recording.filter]
-kind = "butterworth"
+kind = "lowpass"   # first order, run forward and backward
 cutoff_hz = 8.0
-order = 4
 
 [demonstrations]
 # The start posture: joint angles in degrees (elbow bent to the positive side).
