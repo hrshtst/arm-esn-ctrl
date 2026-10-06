@@ -168,9 +168,9 @@ the grid runs of manual-demonstration autonomous reaching:
 | `20261006-225619-push_across_candidate_f_damping_raw` | `push_across_candidate_f_damping_raw.toml` |
 | `20261006-225620-push_across_candidate_f_pd_gains_raw` | `push_across_candidate_f_pd_gains_raw.toml` |
 | `20261006-225635-push_across_candidate_f_raw` | `push_across_candidate_f_raw.toml` |
-| `20261006-225646-push_backward_candidate_f_damping_raw` | `push_backward_candidate_f_damping_raw.toml` |
-| `20261006-225658-push_backward_candidate_f_pd_gains_raw` | `push_backward_candidate_f_pd_gains_raw.toml` |
-| `20261006-225716-push_backward_candidate_f_raw` | `push_backward_candidate_f_raw.toml` |
-| `20261006-225718-push_forward_candidate_f_damping_raw` | `push_forward_candidate_f_damping_raw.toml` |
-| `20261006-225727-push_forward_candidate_f_pd_gains_raw` | `push_forward_candidate_f_pd_gains_raw.toml` |
-| `20261006-225739-push_forward_candidate_f_raw` | `push_forward_candidate_f_raw.toml` |
+| `20261007-003452-push_backward_candidate_f_damping_raw` | `push_backward_candidate_f_damping_raw.toml` |
+| `20261007-003452-push_backward_candidate_f_pd_gains_raw` | `push_backward_candidate_f_pd_gains_raw.toml` |
+| `20261007-003452-push_backward_candidate_f_raw` | `push_backward_candidate_f_raw.toml` |
+| `20261007-003452-push_forward_candidate_f_damping_raw` | `push_forward_candidate_f_damping_raw.toml` |
+| `20261007-003452-push_forward_candidate_f_pd_gains_raw` | `push_forward_candidate_f_pd_gains_raw.toml` |
+| `20261007-003452-push_forward_candidate_f_raw` | `push_forward_candidate_f_raw.toml` |
