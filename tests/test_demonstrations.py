@@ -16,6 +16,7 @@ from arm_esn_ctrl.demonstrations import (
     joint_trajectory_log,
     load_joint_angles,
     simulate_reaches,
+    smooth_take,
 )
 from arm_esn_ctrl.storage import REPO_ROOT
 
@@ -98,11 +99,13 @@ START = np.radians([18.2, 119.9])
 END = np.radians([48.6, 97.2])
 
 
-def taught_take(rest=0.5, reach=1.0, hold=3.0, start=START, jump_at=None, skeleton=None):
+def taught_take(rest=0.5, reach=1.0, hold=3.0, start=START, jump_at=None, skeleton=None, step_deg=None):
     """A take as the recorder saves it: at rest, a minimum-jerk reach to END, then still; sampled near 100 Hz.
 
     The intervals vary a little, as the recorder's clock does. ``jump_at`` moves the
-    arm by 5 deg in joint 1 at that time, and back 50 ms later.
+    arm by 5 deg in joint 1 at that time, and back 50 ms later. ``step_deg`` rounds
+    the joint angles' change from the start to its multiples, as the recorder's
+    whole-pixel cursor does.
     """
     skeleton = skeleton or Skeleton.from_toml(CONFIG)
     rng = np.random.default_rng(0)
@@ -111,6 +114,8 @@ def taught_take(rest=0.5, reach=1.0, hold=3.0, start=START, jump_at=None, skelet
     tau = np.clip((times - rest) / reach, 0.0, 1.0)
     s = 10 * tau**3 - 15 * tau**4 + 6 * tau**5
     q = start + np.outer(s, END - start)
+    if step_deg is not None:
+        q = start + np.radians(step_deg) * np.round((q - start) / np.radians(step_deg))
     if jump_at is not None:  # out and back within 50 ms
         q[(times >= jump_at) & (times < jump_at + 0.05)] += np.radians([5.0, 0.0])
     log = StateLog(skeleton)
@@ -154,3 +159,36 @@ def test_a_take_must_be_recorded_with_the_same_arm():
     other.links[1].prop.length = 1.1
     problems = check(taught_take(skeleton=other))
     assert any("arm" in problem for problem in problems)
+
+
+SMOOTHING = {"kind": "butterworth", "cutoff_hz": 8.0, "order": 4}
+
+
+def task_table():
+    with CONFIG.open("rb") as f:
+        return tomllib.load(f)["task"]
+
+
+def test_smoothing_keeps_the_times_and_a_still_posture():
+    take = taught_take(start=END)  # from the end posture: still all along
+    smoothed = smooth_take(take, Skeleton.from_toml(CONFIG), task_table(), SMOOTHING)
+    np.testing.assert_array_equal(smoothed.times, take.times)
+    np.testing.assert_allclose(smoothed.channel("q"), take.channel("q"), atol=1e-12)
+
+
+def test_smoothing_removes_the_pixel_steps_and_keeps_a_demonstration():
+    """A slow take whose joints move in 0.3 deg steps, as a whole-pixel cursor makes them, stalls between steps."""
+    exact, stepped = taught_take(reach=3.0), taught_take(reach=3.0, step_deg=0.3)
+    smoothed = smooth_take(stepped, Skeleton.from_toml(CONFIG), task_table(), SMOOTHING)
+
+    def stalls(log):  # samples of the reach where no joint moves
+        q = log.channel("q")
+        reach = (log.times[1:] > 0.8) & (log.times[1:] < 3.2)
+        return int(np.count_nonzero(np.all(np.abs(np.diff(q, axis=0)) < 1e-6, axis=1) & reach))
+
+    assert stalls(exact) == 0
+    assert stalls(stepped) > 20
+    assert stalls(smoothed) == 0
+    error = np.degrees(np.abs(smoothed.channel("q") - exact.channel("q"))).max()
+    assert error < 0.3  # within one step of the exact reach
+    assert check(smoothed) == []

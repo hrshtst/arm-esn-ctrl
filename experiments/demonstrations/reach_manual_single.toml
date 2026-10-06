@@ -11,13 +11,15 @@
 #       --duration 0 --show-tip-trail \
 #       --output "$STORAGE/data/reach_manual_single/reach_manual_single.sklog.npz"
 #
-#    The arm starts at [initial], and the ring is the [task] target. Space starts the
-#    take. Grab the tip within the dashed circle around it, move it to the target at
-#    a natural pace, let go, and keep still for at least 3 s. S saves the take; R
-#    discards an attempt before saving it; Q closes. The file is written once and
-#    never overwritten, so only one take is saved.
+#    Maximize the window: its pixels are the steps the tip moves in. The arm starts
+#    at [initial], and the ring is the [task] target. Space starts the take. Grab the
+#    tip within the dashed circle around it, move it to the cross at the center of
+#    the ring at a natural pace, let go, and keep still for at least 3 s. S saves
+#    the take; R discards an attempt before saving it; Q closes. The file is written
+#    once and never overwritten, so only one take is saved.
 #
-# 2. Import it into a demonstration run, which checks and measures it:
+# 2. Import it into a demonstration run, which checks and measures it, as recorded
+#    (demo_00) and filtered (demo_00_filtered):
 #
 #   uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_single.toml
 #
@@ -35,6 +37,15 @@ take = "data/reach_manual_single/reach_manual_single.sklog.npz"
 start_tolerance_deg = 0.01  # the take begins at start_q within this, in every joint
 hold = 2.0                  # after arriving within the target tolerance, the hand stays this long (s)
 max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, not a reach
+
+# The filter of demo_00_filtered: one of skelarm's zero-phase filters, as the keyword
+# arguments of skelarm.smooth (the keys of the filter table of skelarm's
+# trajectory-tracking tasks; its examples/track.toml uses these values). It removes
+# the steps of the cursor's whole pixels, a few millimeters each.
+[recording.filter]
+kind = "butterworth"
+cutoff_hz = 8.0
+order = 4
 
 [demonstrations]
 # The start posture: joint angles in degrees (elbow bent to the positive side).

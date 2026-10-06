@@ -12,7 +12,8 @@ A demonstration is a skelarm state log (``*.sklog.npz``). It is either
 
 Both kinds replay in skelarm's ``tools/player.py`` and load with
 :func:`load_joint_angles`, which resamples them at a fixed period. A taught take is
-checked with :func:`check_take` before it becomes a demonstration.
+checked with :func:`check_take` before it becomes a demonstration, and may be
+smoothed with :func:`smooth_take`: a mouse moves the tip in whole screen pixels.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from skelarm import (
     run_scenario,
     scenario_from_config,
     simulate_controlled,
+    smooth,
 )
 
 from arm_esn_ctrl.metrics import hold_metrics
@@ -128,6 +130,24 @@ def joint_trajectory_log(
     for t, qi, dqi in zip(times, q, dq, strict=True):
         log.record(float(t), q=qi, dq=dqi)
     return log
+
+
+def smooth_take(log: StateLog, skeleton: Skeleton, task: dict[str, Any], smoothing: dict[str, Any]) -> StateLog:
+    """Return a take with its joint angles smoothed, at the take's own sample times.
+
+    The recorder moves the tip with the cursor, in whole screen pixels of a few
+    millimeters, so a take taught by hand stalls and steps. ``smoothing`` names one of
+    skelarm's zero-phase filters and its parameters, as the keyword arguments of
+    :func:`skelarm.smooth`: ``kind``, and ``cutoff_hz`` and ``order``, or ``window``
+    and ``polyorder``. The filters assume even sampling; a take is nearly even, so
+    it is smoothed as if sampled at its mean interval, as skelarm's
+    trajectory-tracking tasks do. ``task`` is the skelarm ``[task]`` table the player
+    draws.
+    """
+    times = log.times
+    q = log.channel("q").reshape(len(times), -1)
+    smoothed = smooth(q, float(np.mean(np.diff(times))), **smoothing)
+    return joint_trajectory_log(skeleton, times, smoothed, task, producer=f"{log.producer}, smoothed: {smoothing}")
 
 
 def check_take(
