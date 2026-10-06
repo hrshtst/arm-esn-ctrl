@@ -11,17 +11,19 @@ A demonstration is a skelarm state log (``*.sklog.npz``). It is either
   ``tools/trajectory_recorder.py``.
 
 Both kinds replay in skelarm's ``tools/player.py`` and load with
-:func:`load_joint_angles`, which resamples them at a fixed period.
+:func:`load_joint_angles`, which resamples them at a fixed period. A taught take is
+checked with :func:`check_take` before it becomes a demonstration.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 from skelarm import (
     Skeleton,
     StateLog,
@@ -30,6 +32,8 @@ from skelarm import (
     scenario_from_config,
     simulate_controlled,
 )
+
+from arm_esn_ctrl.metrics import hold_metrics
 
 # The configuration tables that make up a skelarm scenario (see skelarm's
 # "Run Controlled Scenarios" guide). [initial] is set per start posture.
@@ -124,3 +128,56 @@ def joint_trajectory_log(
     for t, qi, dqi in zip(times, q, dq, strict=True):
         log.record(float(t), q=qi, dq=dqi)
     return log
+
+
+def check_take(
+    log: StateLog,
+    skeleton: Skeleton,
+    *,
+    start_q: ArrayLike,
+    target: ArrayLike,
+    radius: float,
+    hold: float,
+    start_tolerance: float,
+    max_tip_speed: float,
+) -> list[str]:
+    """Return why a take taught by hand cannot be a demonstration, or nothing if it can.
+
+    A take can be a demonstration when
+
+    - it was recorded with the arm ``skeleton`` (the same link properties);
+    - it begins at the start posture ``start_q`` (rad), within ``start_tolerance`` in every joint;
+    - the hand arrives within ``radius`` of the ``target`` and stays there for
+      ``hold`` seconds, before the take ends;
+    - the hand never moves faster than ``max_tip_speed`` (m/s) between two samples,
+      which would be a jump rather than a reach.
+    """
+    problems = []
+    recorded = [dataclasses.astuple(link.prop) for link in log.build_skeleton().links]
+    expected = [dataclasses.astuple(link.prop) for link in skeleton.links]
+    if len(recorded) != len(expected) or not np.allclose(recorded, expected):
+        problems.append("the take was recorded with another arm than the configuration's [skeleton]")
+        return problems
+    times = log.times
+    q = log.channel("q").reshape(len(times), -1)
+    offset = np.degrees(np.abs(q[0] - np.asarray(start_q, dtype=np.float64)))
+    if offset.max() > np.degrees(start_tolerance):
+        problems.append(f"the take begins {offset.max():.3g} deg away from the start posture")
+    hand = endpoint_positions(skeleton, q)
+    held = hold_metrics(times, hand, target, radius, hold)
+    if not held["arrived"]:
+        problems.append(f"the hand never comes within {radius:g} m of the target")
+    elif held["left_goal"]:
+        problems.append(f"the hand leaves the goal within {hold:g} s of arriving")
+    elif times[-1] - held["arrival_time_s"] < hold:  # the take must run past the whole hold window
+        problems.append(
+            f"the take ends {times[-1] - held['arrival_time_s']:.2f} s after the hand arrives,"
+            f" before {hold:g} s of holding"
+        )
+    speed = np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(times)
+    if speed.max() > max_tip_speed:
+        k = int(np.argmax(speed))
+        problems.append(
+            f"the hand jumps at {times[k]:.2f} s, moving at {speed[k]:.1f} m/s (more than {max_tip_speed:g})"
+        )
+    return problems

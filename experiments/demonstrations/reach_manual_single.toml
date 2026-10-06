@@ -1,0 +1,72 @@
+# A reaching demonstration taught by hand from one start posture: recorded with
+# skelarm's trajectory recorder, then imported into a demonstration run.
+#
+# 1. Record one take, into the storage root's data/ (what cannot be regenerated).
+#    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
+#    names; the recorder does not create the directory:
+#
+#   mkdir -p "$STORAGE/data/reach_manual_single"
+#   uv run python third_party/skelarm/tools/trajectory_recorder.py \
+#       experiments/demonstrations/reach_manual_single.toml --mode ik --sample-rate 100 \
+#       --duration 0 --show-tip-trail \
+#       --output "$STORAGE/data/reach_manual_single/reach_manual_single.sklog.npz"
+#
+#    The arm starts at [initial], and the ring is the [task] target. Space starts the
+#    take. Grab the tip within the dashed circle around it, move it to the target at
+#    a natural pace, let go, and keep still for at least 3 s. S saves the take; R
+#    discards an attempt before saving it; Q closes. The file is written once and
+#    never overwritten, so only one take is saved.
+#
+# 2. Import it into a demonstration run, which checks and measures it:
+#
+#   uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_single.toml
+#
+# The start posture and the target are those of reach_tvs_single.toml (report 003).
+# The [skeleton], [initial], and [task] tables follow skelarm's scenario format, so
+# the recorder reads this file. There is no [controller]: no demonstrator can be
+# simulated for a human, so the experiments measure their runs against the taught
+# motion and the target only. [simulator] holds the robot's simulation settings.
+
+[recording]
+# The take taught by hand, relative to the storage root. It is imported unchanged:
+# the human's pause before moving stays in.
+take = "data/reach_manual_single/reach_manual_single.sklog.npz"
+# What the import checks (experiments/import_demonstrations.py):
+start_tolerance_deg = 0.01  # the take begins at start_q within this, in every joint
+hold = 2.0                  # after arriving within the target tolerance, the hand stays this long (s)
+max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, not a reach
+
+[demonstrations]
+# The start posture: joint angles in degrees (elbow bent to the positive side).
+start_q = [
+  [18.2, 119.9],  # hand ( 0.35, 0.85) m, 315 deg from the target
+]
+
+[initial]
+q = [18.2, 119.9]  # deg: where the recorder starts the take, the start posture above
+
+# Two-link planar arm (the robot of skelarm's examples/reach.toml).
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 1.0
+mass = 1.0
+inertia = 0.1
+com = [0.5, 0.0]
+limits = [-180.0, 180.0]
+
+[[skeleton.link]]
+length = 0.8
+mass = 0.8
+inertia = 0.05
+com = [0.4, 0.0]
+limits = [-180.0, 180.0]
+
+[task]
+type = "reaching"
+target = { pos = [0.0, 1.2], tolerance = 0.02 }  # hand goal (m), 2 cm tolerance
+duration = 4.0  # skelarm's run length for this task (s); the recorder does not use it
+
+[simulator]
+dt = 0.002  # the robot's control and integration step (s)
