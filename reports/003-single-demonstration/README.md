@@ -31,6 +31,12 @@ own, then as the reference generator of the simulated arm of
     arrives earlier or later.
   - *The clock-type ESN runs on.* Like the replay, it keeps its schedule; after the
     block it overshoots.
+- **Underdamped trackers.**
+  - *With computed torque:* as in report 002, each ESN's reference rings along with
+    its arm, and at a damping ratio of 0.1 neither ESN holds after a disturbance.
+  - *The exception is the block:* the tuned ESN's waiting reference spares its arm
+    the overshoot that the replay and the other ESN suffer after the release.
+  - *With joint PD* at ω = 20 rad/s, the damping ratio hardly matters.
 - **Its costs.**
   - *Offset starts:* both single-demonstration ESNs yank the arm toward the
     demonstration, as the replay does. Peak torques reach 595–714 N m from the 10°
@@ -154,7 +160,9 @@ The setup of [report 002](../002-esn-reference-on-the-robot/README.md#2-setup):
 | block | 1 | from 0.3 s to 0.8 s, a stiff spring-damper (20 kN/m, 100 N s/m) holds the tip; then it lets go (as in report 002) |
 
 Every scenario ran with both laws at ω = 10 rad/s, and again with joint PD at
-ω = 10, 20, and 40 rad/s. The figures feature two settings:
+ω = 10, 20, and 40 rad/s. Section 3.9 runs every scenario once more with the
+tracker underdamped (damping ratios 1, 0.5, 0.3, and 0.1). Its offsets start only
+from the two example offsets of Section 3.8. The figures feature two settings:
 
 - computed torque at ω = 10 rad/s;
 - joint PD at ω = 20 rad/s, the lowest gain at which every arm holds in every
@@ -183,6 +191,7 @@ configurations' paths.
 | [`20261005-212407-grid_tuned_settings`](results/20261005-212407-grid_tuned_settings) | `uv run python experiments/autonomous_esn.py experiments/single_demonstration_autonomous_reaching/grid_tuned_settings.toml` |
 | `20261005-2310…`–`2312…` (12 runs) | `uv run python experiments/robot_esn.py experiments/single_demonstration_robot_tracking/<scenario>_<ESN>.toml` |
 | `20261005-2343…`–`2344…` (12 runs) | `uv run python experiments/robot_esn.py experiments/single_demonstration_robot_tracking/<scenario>_<ESN>_pd_gains.toml` |
+| `20261006-1211…`–`1221…` (12 runs) | `uv run python experiments/robot_esn.py experiments/single_demonstration_robot_tracking/<scenario>_<ESN>_damping.toml` |
 | [`summary`](results/summary) | `uv run python reports/003-single-demonstration/make_figures.py --logs --animations` |
 
 The `<scenario>` is one of `nominal`, `offsets`, `push_across`, `push_forward`,
@@ -200,6 +209,7 @@ named after their configurations. Each run record (`run.toml`) gives its commit:
 | `5cc5d95` | the grid of the tuned settings |
 | `097084e` | the robot runs |
 | `0c228ab` | the robot runs with joint PD at higher gains |
+| `6c95c68`, `3a38895` | the robot runs with underdamped trackers |
 
 All runs are deterministic. Each run directory here holds its configuration, its
 run record, and its per-run metrics. The ESN runs also hold their trained ESN and
@@ -210,9 +220,10 @@ the sweeps and warm-up checks their tables.
 of Section 3 from those copies:
 
 - With `--logs`, it reads the robot runs' logs under the storage root. It draws
-  Figure 9 and the examples' figures of Section 3.8, and writes `departures.csv`,
-  `offset_references.csv`, and `push_progress.csv` to
-  [`results/summary`](results/summary), from which their tables are printed.
+  Figure 9 and the examples' figures of Sections 3.8 and 3.9, and writes
+  `departures.csv`, `offset_references.csv`, `push_progress.csv`, `ringing.csv`,
+  and `overshoot.csv` to [`results/summary`](results/summary), from which their
+  tables are printed.
 - With `--animations`, it exports the examples' animations of Section 3.8, each
   arm rendered by skelarm's player.
 
@@ -752,6 +763,148 @@ reach.
 - **The replay's reference, the demonstration, runs to its end.** After the
   release, the arm catches up with it, as the demonstrator's own arm does.
 
+### 3.9 Underdamped trackers
+
+Every robot scenario ran again with the tracker underdamped, at the featured
+natural frequencies:
+
+- **Damping ratios:** ζ = 1, 0.5, 0.3, and 0.1.
+- **Trackers:** computed torque at ω = 10 rad/s and joint PD at ω = 20 rad/s.
+- **Starts:** the demonstrated start, except for the offsets, which start from
+  the two example offsets of Section 3.8. Each arm thus makes seven runs per
+  tracker setting, one for each example.
+
+At ζ < 1 the tracking error oscillates as it decays, at ω√(1 − ζ²); after a step,
+it overshoots by 16% at ζ = 0.5, 37% at 0.3, and 73% at 0.1 (as in report 002).
+
+![Underdamped trackers](results/summary/damping.png)
+
+**Figure 17.** Against the damping ratio (falling to the right), for every
+scenario:
+- *Rows:* the runs that arrive and hold, their settling time (of the runs that
+  settle within the 5 s), and the final distance to the target.
+- *Styles:* solid is computed torque at ω = 10 rad/s, dashed joint PD at
+  ω = 20 rad/s.
+- *A note on the final distance:* the ESNs end 0.5 mm from the target even when
+  critically damped, where their own end posture is.
+
+Of the 7 runs of each arm (tuned ESN / eight-demonstration ESN / replay):
+
+| Tracker | ζ | Arrive and hold | Settle within the run | Worst final distance (mm) |
+| --- | ---: | --- | --- | --- |
+| computed torque, ω = 10 | 1 | 7 / 7 / 7 | 7 / 7 / 7 | 0.5 / 0.6 / 0.0 |
+| | 0.5 | 7 / 7 / 6 | 7 / 7 / 7 | 0.5 / 0.6 / 0.0 |
+| | 0.3 | 4 / 6 / 5 | 7 / 7 / 7 | 0.5 / 0.6 / 0.0 |
+| | 0.1 | 0 / 1 / 4 | 5 / 5 / 7 | 25.4 / 97.1 / 4.2 |
+| joint PD, ω = 20 | 1 | 7 / 7 / 7 | 7 / 7 / 7 | 0.5 / 0.6 / 0.0 |
+| | 0.5 | 7 / 7 / 6 | 7 / 7 / 7 | 0.5 / 0.6 / 0.0 |
+| | 0.3 | 7 / 7 / 6 | 7 / 7 / 7 | 0.5 / 0.6 / 0.0 |
+| | 0.1 | 7 / 6 / 6 | 7 / 7 / 7 | 0.5 / 0.6 / 0.0 |
+
+How far the arm passes the end posture, the larger of its two joints (deg),
+critically damped → at ζ = 0.1 (tuned ESN / eight-demonstration ESN / replay):
+
+| Example | Computed torque, ω = 10 | Joint PD, ω = 20 |
+| --- | --- | --- |
+| nominal | 0.0 → 1.2 / 0.1 → 0.7 / 0.0 → 0.2 | 0.3 → 0.3 / 0.0 → 0.0 / 0.0 → 0.0 |
+| offset ahead | 0.0 → 1.6 / 0.2 → 2.6 / 0.0 → 0.4 | 0.3 → 0.3 / 0.3 → 0.4 / 0.0 → 0.8 |
+| offset across | 0.0 → 2.8 / 0.3 → 3.4 / 0.0 → 0.7 | 0.3 → 0.5 / 0.5 → 0.6 / 0.0 → 0.9 |
+| push across | 0.0 → 6.5 / 0.1 → 10.1 / 0.0 → 4.2 | 0.3 → 0.4 / 0.1 → 0.2 / 0.0 → 0.5 |
+| push forward | 0.0 → 2.5 / 0.1 → 2.0 / 0.0 → 0.6 | 0.3 → 0.3 / 0.0 → 0.1 / 0.0 → 0.1 |
+| push backward | 0.0 → 1.9 / 0.0 → 2.3 / 0.0 → 0.9 | 0.3 → 0.3 / 0.0 → 0.1 / 0.0 → 0.1 |
+| block | 0.0 → **1.2** / 6.4 → **28.2** / 0.0 → **14.2** | 0.3 → **0.3** / 7.3 → **19.9** / 0.0 → **16.8** |
+
+The ringing after the reaches (2.5–5 s), with computed torque at ζ = 0.1:
+- *Amplitude:* the standard deviation of the ESN's output against its arm's, joint
+  by joint (1: the output rings as much as the arm; 0: it holds still).
+- *Lag:* how far the output lags behind the arm, from their cross-correlation.
+- *Coverage:* medians (range) over the joints of the 7 runs that still ring by more
+  than 0.2°. With joint PD at ω = 20 rad/s, no joint still rings after 2.5 s.
+
+| ESN | Joints that ring | Amplitude | Lag (ms) |
+| --- | ---: | --- | --- |
+| tuned | 14 | 0.51 (0.47–0.69) | 23 (6–30) |
+| eight-demonstration | 13 | 0.39 (0.36–0.42) | 2 (0–10) |
+
+- **With computed torque, less damping hurts the ESNs more than the replay,** as in
+  report 002.
+  - *At ζ = 0.1:* no run of the tuned ESN holds, and one of the
+    eight-demonstration ESN's, against four of the replay's.
+  - *Settling:* the replay settles in all seven runs. Each ESN settles in five, and
+    their worst runs end 25 and 97 mm from the target, against 4.2 mm.
+- **Each ESN's output rings with its arm,** at half the arm's amplitude (tuned) or
+  0.39 of it (eight-demonstration).
+  - *Why it matters:* the replay's reference holds still at the end posture, so its
+    arm's ringing decays. The ESNs feed the ringing back into their references.
+  - *Compared with report 002:* the eight-demonstration ESN there rang at about
+    0.6, 30–45 ms behind its arm.
+- **After the block, the waiting reference helps.**
+  - *Why:* the tuned ESN's reference resumes from where the arm is, so the release
+    is no step for its tracker.
+  - *Overshoot at ζ = 0.1, computed torque:* its arm passes the end posture by
+    1.2°, against 14.2° for the replay and 28.2° for the eight-demonstration ESN,
+    which keeps oscillating to the end of the run (Figure 24).
+  - *With joint PD:* the tuned ESN holds after the block at every damping ratio.
+    The replay fails to hold from ζ = 0.5 on, and the eight-demonstration ESN at
+    ζ = 0.1.
+- **With joint PD at ω = 20 rad/s, the damping ratio hardly matters.**
+  - *At ζ = 0.1,* the tuned ESN still holds in all seven runs, and the other ESN and
+    the replay in six (each failing after the block).
+  - *A likely reason:* a second-order error's oscillation decays at the rate ζω,
+    twice as fast at ω = 20 rad/s as at 10 rad/s.
+
+The joint angles of each example with the trackers at ζ = 0.1, laid out as in
+Section 3.8 but over the whole 5 s run:
+
+![Underdamped: nominal](results/summary/underdamped_nominal.png)
+
+**Figure 18.** Nominal. With computed torque, both ESNs' arms keep ringing around
+the end posture to the end of the run, passing it by up to 1.2° (tuned) and 0.7°,
+and their outputs ring with them. The replay's arm settles. With joint PD, no arm
+rings.
+
+![Underdamped: offset ahead](results/summary/underdamped_offset_ahead.png)
+
+**Figure 19.** Offset ahead, (+10°, −10°). As in the nominal run: with computed
+torque, the ESNs' arms keep ringing after their reaches, by up to 1.6° (tuned) and
+2.6° past the end posture.
+
+![Underdamped: offset across](results/summary/underdamped_offset_across.png)
+
+**Figure 20.** Offset across, (−10°, −10°). The replay's jump to the demonstrated
+start now rings too, but it settles. The ESNs' arms ring after the reach, by up
+to 2.8° and 3.4° past the end posture with computed torque.
+
+![Underdamped: push across](results/summary/underdamped_push_across.png)
+
+**Figure 21.** Push across. With computed torque, the push sets every arm ringing.
+- *The replay's arm* settles by 2.6 s.
+- *The ESNs' arms* swing up to 6.5° (tuned) and 10.1° past the end posture, with
+  their outputs following. Neither settles within the run.
+
+![Underdamped: push forward](results/summary/underdamped_push_forward.png)
+
+**Figure 22.** Push forward. With computed torque, the tuned ESN still speeds up
+after the push, and both ESNs ring around the end posture, passing it by up to
+2.5° (tuned) and 2.0°.
+
+![Underdamped: push backward](results/summary/underdamped_push_backward.png)
+
+**Figure 23.** Push backward. As with the forward push, the ESNs ring by about 2°
+around the end posture with computed torque, while the replay settles.
+
+![Underdamped: block](results/summary/underdamped_block.png)
+
+**Figure 24.** Block, at ζ = 0.1.
+- *The tuned ESN:* its output waits with the held arm, and both resume smoothly
+  after the release.
+- *The replay:* its reference is already at the end, so the release is a step for
+  the tracker, and the arm overshoots by 14° and rings.
+- *The eight-demonstration ESN:* its output has run ahead and overshoots itself
+  after the release. Its arm overshoots by 28° and keeps oscillating to the end of
+  the run.
+- *With joint PD:* every arm's ringing dies out by about 2 s.
+
 ## 4. Observations
 
 - **A path-type ESN gives the adaptive reference that report 002 did not find.**
@@ -783,6 +936,14 @@ reach.
   ESN did, within 1°.
 - **On the gains.** As in report 002, an ESN reference needs stiffer joint PD than
   the replay: ω ≥ 20 rad/s here.
+- **On the damping.**
+  - *Underdamped trackers still expose the feedback:* an ESN reference rings along
+    with the arm. The tuned ESN's output follows its arm more closely (Section
+    3.7), and rings more with it.
+  - *Where waiting helps:* the waiting reference avoids the step that makes the
+    replay's arm ring after a block.
+  - *A well-damped or stiff tracker* (joint PD at ω = 20 rad/s) keeps every ESN
+    run holding.
 - **Caveats.**
   - *One demonstration and one seed per setting.*
   - *The tuned settings were chosen by path distance on their own,* not for

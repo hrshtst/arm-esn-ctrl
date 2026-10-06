@@ -95,3 +95,15 @@ Under `results/single_demonstration_robot_tracking/` in the storage:
 | `20261005-234434-push_backward_multi_demo_settings_pd_gains` | `push_backward_multi_demo_settings_pd_gains.toml` |
 | `20261005-234443-block_tuned_pd_gains` | `block_tuned_pd_gains.toml` |
 | `20261005-234453-block_multi_demo_settings_pd_gains` | `block_multi_demo_settings_pd_gains.toml` |
+| `20261006-121120-nominal_tuned_damping` | `nominal_tuned_damping.toml` |
+| `20261006-121145-nominal_multi_demo_settings_damping` | `nominal_multi_demo_settings_damping.toml` |
+| `20261006-121208-offsets_tuned_damping` | `offsets_tuned_damping.toml` |
+| `20261006-121731-offsets_multi_demo_settings_damping` | `offsets_multi_demo_settings_damping.toml` |
+| `20261006-121812-push_across_tuned_damping` | `push_across_tuned_damping.toml` |
+| `20261006-121838-push_across_multi_demo_settings_damping` | `push_across_multi_demo_settings_damping.toml` |
+| `20261006-121901-push_forward_tuned_damping` | `push_forward_tuned_damping.toml` |
+| `20261006-121927-push_forward_multi_demo_settings_damping` | `push_forward_multi_demo_settings_damping.toml` |
+| `20261006-121951-push_backward_tuned_damping` | `push_backward_tuned_damping.toml` |
+| `20261006-122017-push_backward_multi_demo_settings_damping` | `push_backward_multi_demo_settings_damping.toml` |
+| `20261006-122041-block_tuned_damping` | `block_tuned_damping.toml` |
+| `20261006-122107-block_multi_demo_settings_damping` | `block_multi_demo_settings_damping.toml` |

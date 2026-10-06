@@ -1,0 +1,44 @@
+# Stage 2 with one demonstration, underdamped trackers: a 5 N push at the tip for 0.1
+# s at 0.4 s, across the reach (as in multi_demonstration_robot_tracking/push.toml).
+#
+#   uv run python experiments/robot_esn.py experiments/single_demonstration_robot_tracking/push_across_multi_demo_settings_damping.toml
+#
+# The ESN is the single-demonstration ESN with the settings found best for eight
+# demonstrations (grid_multi_demo_settings.toml of single-demonstration autonomous
+# reaching): ridge 1e-6, leak rate 0.05, input scaling 0.1, 600 neurons, spectral
+# radius 1.3, warm-up 0.25 s. It keeps time like a clock running from the reset.
+# push_across_tuned_damping.toml runs the other ESN in the same scenario.
+#
+# As push_across_multi_demo_settings.toml, with the tracker underdamped: computed
+# torque at omega = 10 rad/s and joint PD at omega = 20 rad/s, each with the damping
+# ratios 1, 0.5, 0.3, and 0.1.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/single_demonstration_autonomous_reaching/20261005-190405-grid_multi_demo_settings/esn.toml"
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["computed_torque", "pd"]
+# One natural frequency of the tracking error for each law (rad/s), and several
+# damping ratios: 1 is critically damped, and smaller ratios make the error
+# oscillate as it decays. Computed torque: kp = omega^2, kd = 2 zeta omega. Joint
+# PD: the same, scaled by each joint's inertia at the posture where the reach ends.
+omegas = { computed_torque = [10.0], pd = [20.0] }
+dampings = [1.0, 0.5, 0.3, 0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+
+[evaluation]
+duration = 5.0         # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+effort_window = [0.4, 1.4]  # torque, effort, and force are measured from the push for 1 s (s)
+
+[disturbance]
+type = "push"
+force = 5.0            # N
+onset = 0.4            # task time when the push starts (s)
+duration = 0.1         # s
+direction = "across"   # perpendicular to the reach (start hand position to target), counterclockwise

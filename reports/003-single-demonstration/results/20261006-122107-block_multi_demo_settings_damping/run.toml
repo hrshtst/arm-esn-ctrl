@@ -1,0 +1,6 @@
+config = "experiments/single_demonstration_robot_tracking/block_multi_demo_settings_damping.toml"
+command = "experiments/robot_esn.py experiments/single_demonstration_robot_tracking/block_multi_demo_settings_damping.toml"
+started = 2026-10-06 12:21:07+09:00
+host = "delbosque"
+commit = "3a3889548054ff9068b0ebb2c87f8963819999d5"
+uncommitted_changes = false
