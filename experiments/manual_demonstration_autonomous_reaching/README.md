@@ -150,6 +150,12 @@ Candidates C and D lie at the largest input scaling and ridge of
 | --- | --- |
 | `sweep_past_edge_ridge_{1e-3,3e-3,1e-2,3e-2}_raw.toml` | input scaling 0.07 to 0.3, spectral radius 0.75 to 1.2, and leak rate 0.5 to 1 (60 combinations); ridge 1e-3 repeats the edge |
 
+Past the edge, with input scaling 0.2 to 0.3 and ridge 3e-3 to 3e-2, no run fails,
+swings, or jumps for 17 combinations. Two of them run from the 169 start postures:
+candidate E (leak rate 0.7, spectral radius 1.05, input scaling 0.2, ridge 3e-3), the
+best ranked, and candidate F (the same with input scaling 0.3 and ridge 1e-2), in the
+middle of that region: `grid_candidate_{e,f}_raw.toml`.
+
 The two best of `sweep_around_a_*`, with input scaling 0.1, spectral radius 1.05,
 and ridge 1e-3, run from the 169 start postures as candidates C (leak rate 0.7) and
 D (leak rate 0.5): `grid_candidate_{c,d}_raw.toml`.
