@@ -43,7 +43,7 @@ from matplotlib.axes import Axes
 from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
 
-from arm_esn_ctrl.autonomous import Run, Setup, load_setup, run_autonomously, run_metrics
+from arm_esn_ctrl.autonomous import Reference, Run, Setup, load_setup, run_autonomously, run_metrics
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import nearest_demonstration
@@ -83,7 +83,7 @@ def main() -> None:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    print_summary(rows, durations, trained)
+    print_summary(rows, durations, trained, setup.reference)
     title = f"Warm-up: {args.config.stem} (trained with {trained:g} s)"
     plot_warmup(rows, durations, trained, demonstrated_runs, setup, title).savefig(run_dir / "warmup.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
@@ -94,7 +94,8 @@ def run_row(warmup: float, i: int, run: Run, setup: Setup) -> dict[str, Any]:
     metrics = run_metrics(run, setup)
     demonstrated = setup.demos[nearest_demonstration(run.start.q, setup.demos)][0]
     offset = np.degrees(run.start.q - demonstrated)
-    keys = ("success", "arrival_time_s", "arrival_delay_s", "first_step_m", "reach_path_distance_m")
+    reference = setup.reference
+    keys = ("success", "arrival_time_s", reference.arrival_delay, "first_step_m", reference.path_distance)
     return {
         "warmup_s": warmup,
         "start": i,
@@ -102,7 +103,7 @@ def run_row(warmup: float, i: int, run: Run, setup: Setup) -> dict[str, Any]:
         "group": run.start.group,
         "offset_q1_deg": round(float(offset[0]), 6),
         "offset_q2_deg": round(float(offset[1]), 6),
-    } | {key: metrics[key] for key in (*keys, "training_path_ratio")}
+    } | {key: metrics[key] for key in (*keys, reference.course)}
 
 
 def by_warmup(rows: list[dict[str, Any]], warmup: float, demonstrated: bool) -> list[dict[str, Any]]:
@@ -116,12 +117,14 @@ def median_of(rows: list[dict[str, Any]], key: str) -> float:
     return float(np.median(values)) if values else float("nan")
 
 
-def print_summary(rows: list[dict[str, Any]], durations: list[float], trained: float) -> None:
-    """Print, for each warm-up, the failures, the arrival delay, and the training path ratio."""
-    reference = median_of(by_warmup(rows, trained, demonstrated=False), "arrival_delay_s")
+def print_summary(rows: list[dict[str, Any]], durations: list[float], trained: float, reference: Reference) -> None:
+    """Print, for each warm-up, the failures, the arrival delay, and the course metric of the ``reference``."""
+    delay_key, course_key = reference.arrival_delay, reference.course
+    at_trained = median_of(by_warmup(rows, trained, demonstrated=False), delay_key)
     print(
-        "Arrival delay: after the demonstrator's arrival, median over the runs that arrive;"
-        " shift: from the trained warm-up's (a clock from the reset shifts by minus the change of warm-up)"
+        f"Arrival delay: after the {reference.name}'s arrival, median over the runs that arrive;"
+        " shift: from the trained warm-up's (a clock from the reset shifts by minus the change of warm-up);"
+        f" ratio: {reference.course_label.split(':')[0].lower()}"
     )
     print(
         f"{'warm-up':>8}  {'fail':>8}  {'delay, demonstrated':>19}  {'delay, others':>13}  {'shift':>6}  {'ratio':>5}"
@@ -130,12 +133,12 @@ def print_summary(rows: list[dict[str, Any]], durations: list[float], trained: f
         others = by_warmup(rows, warmup, demonstrated=False)
         demonstrated = by_warmup(rows, warmup, demonstrated=True)
         failed = sum(not r["success"] for r in others + demonstrated)
-        delay = median_of(others, "arrival_delay_s")
+        delay = median_of(others, delay_key)
         mark = " (trained)" if warmup == trained else ""
         print(
             f"{warmup:7.2f}s  {failed:3d}/{len(others) + len(demonstrated):<4d}"
-            f"  {median_of(demonstrated, 'arrival_delay_s'):+18.2f}s  {delay:+12.2f}s  {delay - reference:+5.2f}s"
-            f"  {median_of(others, 'training_path_ratio'):5.2f}{mark}"
+            f"  {median_of(demonstrated, delay_key):+18.2f}s  {delay:+12.2f}s  {delay - at_trained:+5.2f}s"
+            f"  {median_of(others, course_key):5.2f}{mark}"
         )
 
 
@@ -155,7 +158,13 @@ def plot_warmup(
     setup: Setup,
     title: str,
 ) -> Figure:
-    """The arrival delay, failures, and training path ratio against the warm-up, and the hand's approach."""
+    """The arrival delay, failures, and course metric against the warm-up, and the hand's approach.
+
+    The delay and the course metric are those of the setup's reference: the
+    demonstrator, or the taught motion without one.
+    """
+    reference = setup.reference
+    delay_key = reference.arrival_delay
     fig = Figure(figsize=(13, 9), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
     ax_delay, ax_fail, ax_approach, ax_ratio = fig.subplots(2, 2).flat
@@ -164,13 +173,13 @@ def plot_warmup(
     x = np.array(durations)
 
     others = [by_warmup(rows, w, demonstrated=False) for w in durations]
-    delays = [[r["arrival_delay_s"] for r in group if np.isfinite(r["arrival_delay_s"])] for group in others]
+    delays = [[r[delay_key] for r in group if np.isfinite(r[delay_key])] for group in others]
     median = np.array([np.median(d) if d else np.nan for d in delays])
     low = np.array([np.percentile(d, 25) if d else np.nan for d in delays])
     high = np.array([np.percentile(d, 75) if d else np.nan for d in delays])
     ax_delay.fill_between(x, low, high, color=ESN_COLOR, alpha=0.2, label="offset starts, middle half")
     ax_delay.plot(x, median, color=ESN_COLOR, marker="o", label="offset starts, median")
-    demonstrated = [by_warmup(rows, w, demonstrated=True)[0]["arrival_delay_s"] for w in durations]
+    demonstrated = [by_warmup(rows, w, demonstrated=True)[0][delay_key] for w in durations]
     ax_delay.plot(x, demonstrated, color="#0b0b0b", marker="s", linestyle="none", label="demonstrated start")
     at_trained = float(median[durations.index(trained)])
     ax_delay.plot(x, at_trained - (x - trained), color=TEXT_COLOR, linestyle="--", label="a clock from the reset")
@@ -180,7 +189,7 @@ def plot_warmup(
     margin = 0.1 * max(float(np.ptp(shown)), 0.1)
     # The clock's line leaves the plot where the runs no longer follow it.
     ax_delay.set_ylim(float(shown.min()) - margin, float(shown.max()) + margin)
-    ax_delay.set(xlabel="warm-up (s)", ylabel="arrival delay after the demonstrator (s)")
+    ax_delay.set(xlabel="warm-up (s)", ylabel=f"arrival delay after the {reference.name} (s)")
     ax_delay.set_title("Arrival delay against the warm-up (dotted: trained)", color=TEXT_COLOR, fontsize=10)
     ax_delay.legend(fontsize=8)
 
@@ -192,9 +201,14 @@ def plot_warmup(
     ax_fail.set_title(f"Failed runs (never arrive or leave the goal), of {n_runs}", color=TEXT_COLOR, fontsize=10)
 
     norm = Normalize(vmin=-0.3 * max(durations), vmax=max(durations))  # the shortest warm-up stays visible
-    reference = demonstrated_runs[trained]
-    to_target = np.linalg.norm(reference.hand_ref - setup.target, axis=1)
-    ax_approach.plot(setup.times, to_target, color=DEMONSTRATOR_COLOR, linewidth=3, label="demonstrator")
+    trained_run = demonstrated_runs[trained]
+    if trained_run.hand_ref is not None:
+        reference_hand = trained_run.hand_ref
+    else:  # the taught motion, from the same start
+        reference_hand = setup.demo_hands[nearest_demonstration(trained_run.start.q, setup.demos)]
+    to_target = np.linalg.norm(reference_hand - setup.target, axis=1)
+    reference_times = setup.times[0] + (setup.times[1] - setup.times[0]) * np.arange(len(reference_hand))
+    ax_approach.plot(reference_times, to_target, color=DEMONSTRATOR_COLOR, linewidth=3, label=reference.name)
     for warmup, run in demonstrated_runs.items():
         width = 2.0 if warmup == trained else 1.0
         label = f"{warmup:g} s" + (" (trained)" if warmup == trained else "")
@@ -211,15 +225,12 @@ def plot_warmup(
     )
     ax_approach.legend(fontsize=8, ncol=2)
 
-    ratio = [median_of(group, "training_path_ratio") for group in others]
+    ratio = [median_of(group, reference.course) for group in others]
     ax_ratio.plot(x, ratio, color=ESN_COLOR, marker="o")
     ax_ratio.axvline(trained, color=TEXT_COLOR, linewidth=0.8, linestyle=":")
     ax_ratio.set(xlabel="warm-up (s)", ylabel="median ratio", ylim=(0.0, max(1.0, float(np.nanmax(ratio)) * 1.05)))
-    ax_ratio.set_title(
-        "Training path ratio of the offset starts:\n0 returns onto the demonstration, 1 reaches as the demonstrator",
-        color=TEXT_COLOR,
-        fontsize=10,
-    )
+    name, reading = reference.course_label.split(": ", 1)
+    ax_ratio.set_title(f"{name} of the offset starts:\n{reading}", color=TEXT_COLOR, fontsize=10)
     return fig
 
 

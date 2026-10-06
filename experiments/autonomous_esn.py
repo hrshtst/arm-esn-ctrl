@@ -48,7 +48,16 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 from numpy.typing import NDArray
 
-from arm_esn_ctrl.autonomous import Run, Setup, Start, load_setup, rms_degrees, run_autonomously, run_metrics
+from arm_esn_ctrl.autonomous import (
+    Reference,
+    Run,
+    Setup,
+    Start,
+    load_setup,
+    rms_degrees,
+    run_autonomously,
+    run_metrics,
+)
 from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed
@@ -83,14 +92,15 @@ def main() -> None:
     print(f"Trained on {len(setup.demos)} demonstrations ({n_samples} samples)")
     print(f"One-step prediction error {one_step_error:.4f} deg RMS")
 
-    # Run autonomously from each start posture and compare with the demonstrator's reach from it.
+    # Run autonomously from each start posture and compare with the demonstrator's reach from it, if any.
     runs = run_autonomously(esn, setup)
     rows = []
-    for i, (run, demonstrator_log) in enumerate(zip(runs, setup.demonstrator_logs, strict=True)):
+    for i, run in enumerate(runs):
         joint_trajectory_log(setup.skeleton, setup.times, run.q, setup.task, producer="autonomous ESN").save(
             run_dir / f"esn_{i:02d}.sklog.npz"
         )
-        demonstrator_log.save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
+        if setup.demonstrator_logs:
+            setup.demonstrator_logs[i].save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
         rows.append(
             {
                 "start": i,
@@ -105,7 +115,7 @@ def main() -> None:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    print_metrics(rows, setup.starts)
+    print_metrics(rows, setup.starts, setup.reference)
 
     title = f"Autonomous ESN: {args.config.stem}"
     training = [(q, endpoint_positions(setup.skeleton, q)) for q in setup.demos.values()]
@@ -116,34 +126,37 @@ def main() -> None:
     print("Replay with:\n  uv run python third_party/skelarm/tools/player.py " + str(run_dir / "esn_00.sklog.npz"))
 
 
-def print_metrics(rows: list[dict[str, Any]], starts: list[Start]) -> None:
+def print_metrics(rows: list[dict[str, Any]], starts: list[Start], reference: Reference) -> None:
     """Print the metrics as a table, one start posture per line, then a summary by kind of start.
 
     The table is left out when there are many start postures (see ``metrics.csv``).
+    The runs are compared with the ``reference``: the demonstrator, or the taught motion.
     """
     if len(rows) > _MAX_TABLE_ROWS:
         print(f"{len(rows)} start postures: see metrics.csv for each")
     else:
-        print_table(rows)
+        print_table(rows, reference)
     for name in dict.fromkeys(s.group for s in starts):  # the groups, in the order of the table
         group = [r for r, s in zip(rows, starts, strict=True) if s.group == name]
         first_step = 1000 * np.mean([r["first_step_m"] for r in group])
-        distance = 1000 * np.mean([r["reach_path_distance_m"] for r in group])
-        joint_error = np.mean([r["reach_joint_error_deg"] for r in group])
+        distance = 1000 * np.mean([r[reference.path_distance] for r in group])
+        joint_error = np.mean([r[reference.joint_error] for r in group])
         successes = sum(r["success"] for r in group)
         hold_error = 1000 * np.nanmedian([r["hold_error_m"] for r in group])
-        ratio = [r["training_path_ratio"] for r in group if np.isfinite(r["training_path_ratio"])]
-        ratio_text = f", median training path ratio {np.median(ratio):.2f}" if ratio else ""
+        course = [r[reference.course] for r in group if np.isfinite(r[reference.course])]
+        label = reference.course_label.split(":")[0].lower()
+        course_text = f", median {label} {np.median(course):.2f}" if course else ""
         print(
             f"{len(group)} {name} starts: mean first step {first_step:.1f} mm,"
-            f" mean reach path distance {distance:.1f} mm,"
-            f" mean reach joint error {joint_error:.2f} deg; {successes} of {len(group)} arrive and stay,"
-            f" median hold error {hold_error:.1f} mm{ratio_text}"
+            f" mean path distance from the {reference.name} {distance:.1f} mm,"
+            f" mean joint error from it {joint_error:.2f} deg; {successes} of {len(group)} arrive and stay,"
+            f" median hold error {hold_error:.1f} mm{course_text}"
         )
 
 
-def print_table(rows: list[dict[str, Any]]) -> None:
-    """Print the metrics of each start posture."""
+def print_table(rows: list[dict[str, Any]], reference: Reference) -> None:
+    """Print the metrics of each start posture; the path distance, joint error, and delay are from the ``reference``."""
+    print(f"Path distance, joint error, and arrival delay: from the {reference.name}")
     print("                             ------------------ reach ------------------   ----------- hold -----------")
     print("start  origin                first step  path dist.  joint error  arrival   left  hold error  observed")
     print("                             (mm)        (mm)        (deg RMS)    delay (s) goal  (mm)        (s)")
@@ -151,8 +164,8 @@ def print_table(rows: list[dict[str, Any]]) -> None:
         left = "-" if not r["arrived"] else ("yes" if r["left_goal"] else "no")
         print(
             f"{r['start']:5d}  {r['origin']:<20}  {1000 * r['first_step_m']:10.1f}"
-            f"  {1000 * r['reach_path_distance_m']:10.1f}  {r['reach_joint_error_deg']:11.2f}"
-            f"  {r['arrival_delay_s']:+9.2f}"
+            f"  {1000 * r[reference.path_distance]:10.1f}  {r[reference.joint_error]:11.2f}"
+            f"  {r[reference.arrival_delay]:+9.2f}"
             f"  {left:>4}  {1000 * r['hold_error_m']:10.1f}  {r['hold_observed_s']:8.2f}"
         )
 
@@ -194,23 +207,27 @@ def plot_runs(
     for i, run in enumerate(runs):
         esn_label = "ESN, run autonomously from each start" if i == 0 else None
         ref_label = "demonstrator, reaching from each start" if i == 0 else None
-        ax_hand.plot(run.hand_ref[:, 0], run.hand_ref[:, 1], label=ref_label, **ref_line)
+        if run.q_ref is not None and run.hand_ref is not None:  # without a demonstrator, nothing to draw
+            ax_hand.plot(run.hand_ref[:, 0], run.hand_ref[:, 1], label=ref_label, **ref_line)
+            t_ref = times[: len(run.hand_ref)]
+            ax_speed.plot(t_ref, hand_speed(t_ref, run.hand_ref), **ref_line)
+            for ax, j in ((ax_q1, 0), (ax_q2, 1)):
+                ax.plot(times[: len(run.q_ref)], np.degrees(run.q_ref[:, j]), **ref_line)
         ax_hand.plot(run.hand[:, 0], run.hand[:, 1], label=esn_label, **esn_line)
         face = ESN_COLOR if run.start.demonstrated else SURFACE_COLOR
         ax_hand.plot(*run.hand[0], marker="o", markersize=6, color=ESN_COLOR, markerfacecolor=face)
-        t_ref = times[: len(run.hand_ref)]
-        ax_speed.plot(t_ref, hand_speed(t_ref, run.hand_ref), **ref_line)
         ax_speed.plot(times, hand_speed(times, run.hand), **esn_line)
         for ax, j in ((ax_q1, 0), (ax_q2, 1)):
-            ax.plot(times[: len(run.q_ref)], np.degrees(run.q_ref[:, j]), **ref_line)
             ax.plot(times, np.degrees(run.q[:, j]), **esn_line)
 
     ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
     ax_hand.set(title="Hand paths", xlabel="x (m)", ylabel="y (m)", aspect="equal")
     handles, labels = ax_hand.get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
-    # A jump in the ESN's first step would squash the reach speeds, so the axis stops above them.
-    reach_speed = max(hand_speed(times[: len(run.hand_ref)], run.hand_ref).max() for run in runs)
+    # A jump in the ESN's first step would squash the reach speeds, so the axis stops above them: the
+    # demonstrator's, or, without one, the training demonstrations'.
+    references = [run.hand_ref for run in runs if run.hand_ref is not None] or [hand for _, hand in training]
+    reach_speed = max(hand_speed(times[: len(hand)], hand).max() for hand in references)
     first_step_speed = max(np.linalg.norm(run.hand[1] - run.hand[0]) / times[1] for run in runs)
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)", ylim=(0.0, 1.6 * reach_speed))
     if first_step_speed > 1.6 * reach_speed:
@@ -262,17 +279,11 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, title: str) -> Figure:
             for y in ys
         ]
     )
+    reference = setup.reference
+    where = "demonstrator's reach\nfrom each start" if reference.name == "demonstrator" else "taught motion"
     maps = [
-        (
-            "Path distance from the demonstrator's reach\nfrom each start (mm)",
-            values("reach_path_distance_m", 1000.0),
-            True,
-        ),
-        (
-            "Training path ratio: 0 returns onto the\ndemonstration, 1 reaches as the demonstrator",
-            values("training_path_ratio"),
-            False,
-        ),
+        (f"Path distance from the {where} (mm)", values(reference.path_distance, 1000.0), True),
+        (reference.course_label.replace(": ", ":\n", 1), values(reference.course), False),
         ("First step (mm)", values("first_step_m", 1000.0), True),
         ("Hold error at the end of the hold window (mm)", values("hold_error_m", 1000.0), True),
     ]

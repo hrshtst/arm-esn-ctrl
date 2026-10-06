@@ -3,11 +3,14 @@
 
 """Tests for the start postures and the metrics of autonomous runs."""
 
+import tomllib
+
 import numpy as np
 import pytest
-from skelarm import Skeleton
+import tomli_w
+from skelarm import Skeleton, StateLog
 
-from arm_esn_ctrl.autonomous import Run, Setup, Start, run_metrics, start_postures
+from arm_esn_ctrl.autonomous import Run, Setup, Start, load_setup, run_metrics, start_postures
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.metrics import path_distance
 from arm_esn_ctrl.storage import REPO_ROOT
@@ -71,21 +74,25 @@ def test_extra_start_postures_are_optional():
     assert [s.origin for s in starts] == ["demo_07"]
 
 
-def reach_setup(q_ref, training=None):
+def reach_setup(q_ref, training=None, demonstrator=True):
     """A setup whose single demonstrator reach is ``q_ref``, sampled every 0.01 s, ending at its target.
 
-    ``training`` is the training demonstration (by default, ``q_ref`` itself).
+    ``training`` is the training demonstration (by default, ``q_ref`` itself). Without
+    a ``demonstrator``, the setup has no demonstrator's reaches, as with a demonstration
+    taught by hand.
     """
     skeleton = Skeleton.from_toml(CONFIG)
     times = np.asarray(0.01 * np.arange(len(q_ref)), dtype=np.float64)
     hand_ref = endpoint_positions(skeleton, q_ref)
     start = Start("demo_00", q_ref[0], "demonstrated")
+    demos = {"demo_00": q_ref if training is None else training}
     return Setup(
-        demos={"demo_00": q_ref if training is None else training},
+        demos=demos,
+        demo_hands={name: endpoint_positions(skeleton, q) for name, q in demos.items()},
         starts=[start],
         demonstrator_logs=[],
-        q_refs=[q_ref],
-        hand_refs=[hand_ref],
+        q_refs=[q_ref] if demonstrator else None,
+        hand_refs=[hand_ref] if demonstrator else None,
         skeleton=skeleton,
         task={},
         target=hand_ref[-1],
@@ -104,7 +111,8 @@ def joint_reach(start, goal, n=200):
 def test_a_run_identical_to_the_demonstrator_has_no_reach_error_and_holds():
     q_ref = joint_reach([18.2, 119.9], [48.6, 97.2])
     setup = reach_setup(q_ref)
-    run = Run(setup.starts[0], q_ref, q_ref, setup.hand_refs[0], setup.hand_refs[0])
+    hand_ref = endpoint_positions(setup.skeleton, q_ref)
+    run = Run(setup.starts[0], q_ref, q_ref, hand_ref, hand_ref)
 
     m = run_metrics(run, setup)
 
@@ -119,13 +127,14 @@ def test_a_run_that_never_arrives_fails_and_is_measured_over_the_whole_run():
     q_run = joint_reach([18.2, 119.9], [30.0, 110.0])  # stops short of the target
     setup = reach_setup(q_ref)
     hand_run = endpoint_positions(setup.skeleton, q_run)
-    run = Run(setup.starts[0], q_run, q_ref, hand_run, setup.hand_refs[0])
+    hand_ref = endpoint_positions(setup.skeleton, q_ref)
+    run = Run(setup.starts[0], q_run, q_ref, hand_run, hand_ref)
 
     m = run_metrics(run, setup)
 
     assert not m["arrived"] and not m["success"]
     assert np.isnan(m["arrival_delay_s"])
-    assert m["reach_path_distance_m"] == pytest.approx(path_distance(hand_run, setup.hand_refs[0]))
+    assert m["reach_path_distance_m"] == pytest.approx(path_distance(hand_run, hand_ref))
 
 
 def test_a_start_grid_surrounds_each_demonstrated_start():
@@ -163,3 +172,76 @@ def test_the_training_path_ratio_tells_a_reach_of_its_own_from_a_jump_back():
     assert like_demonstrator["demonstrator_training_path_distance_deg"] > 1.0
     assert jumping_back["training_path_ratio"] < 0.05
     assert np.isnan(on_training["training_path_ratio"])  # nothing to compare: the start is on the training path
+
+
+def taught_run(setup, q):
+    """A run of joint angles ``q`` from the setup's start, with no demonstrator's reach."""
+    return Run(setup.starts[0], q, None, endpoint_positions(setup.skeleton, q), None)
+
+
+def test_a_run_identical_to_the_taught_motion_matches_it_and_has_no_demonstrator_metrics():
+    taught = joint_reach([18.2, 119.9], [48.6, 97.2])
+    setup = reach_setup(taught, demonstrator=False)
+
+    m = run_metrics(taught_run(setup, taught), setup)
+
+    assert m["taught_joint_error_deg"] == pytest.approx(0.0, abs=1e-12)
+    assert m["taught_path_distance_m"] == pytest.approx(0.0, abs=1e-12)
+    assert m["onset_delay_s"] == pytest.approx(0.0)
+    assert m["taught_arrival_delay_s"] == pytest.approx(0.0)
+    assert m["jitter_deg"] == pytest.approx(m["taught_jitter_deg"])
+    assert m["speed_peaks"] == m["taught_speed_peaks"] == 1
+    assert np.isnan(m["offset_retained"])  # the start is on the taught path: no offset to retain
+    assert m["success"]
+    assert "reach_path_distance_m" not in m and "training_path_ratio" not in m
+
+
+def test_the_offset_retained_tells_a_kept_offset_from_a_return():
+    taught = joint_reach([18.2, 119.9], [48.6, 97.2])  # a straight line in joint space
+    across = np.array([22.7, 30.4]) / np.hypot(22.7, 30.4) * np.radians(5.0)  # perpendicular to (30.4, -22.7)
+    beside = taught + across  # 5 deg beside the taught path, all along it
+    back = np.vstack([beside[:1], taught[1:]])  # back onto the taught path in one step
+    setup = reach_setup(beside, training=taught, demonstrator=False)
+
+    assert run_metrics(taught_run(setup, beside), setup)["offset_retained"] == pytest.approx(1.0)
+    assert run_metrics(taught_run(setup, back), setup)["offset_retained"] < 0.05
+
+
+def test_the_onset_and_the_arrival_are_timed_against_the_taught_motion():
+    taught = joint_reach([18.2, 119.9], [48.6, 97.2])
+    later = np.vstack([np.repeat(taught[:1], 20, axis=0), taught[:-20]])  # waits 0.2 s longer
+    setup = reach_setup(taught, demonstrator=False)
+
+    m = run_metrics(taught_run(setup, later), setup)
+
+    assert m["onset_delay_s"] == pytest.approx(0.2)
+    assert m["taught_arrival_delay_s"] == pytest.approx(0.2)
+
+
+def test_demonstrations_without_a_controller_have_no_demonstrator(tmp_path, monkeypatch):
+    """A demonstration run whose configuration has no [controller], as one taught by hand, simulates no reach."""
+    with CONFIG.open("rb") as f:
+        demo_config = tomllib.load(f)
+    del demo_config["controller"]
+    run = tmp_path / "results" / "demonstrations" / "taught"
+    run.mkdir(parents=True)
+    (run / "config.toml").write_text(tomli_w.dumps(demo_config))
+    skeleton = Skeleton.from_toml(CONFIG)
+    log = StateLog(skeleton)
+    for k, q in enumerate(joint_reach([18.2, 119.9], [48.6, 97.2])):
+        skeleton.q = q
+        log.record_skeleton(skeleton, 0.01 * k)
+    log.save(run / "demo_00.sklog.npz")
+    monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
+
+    setup = load_setup(
+        {
+            "esn": {"dt": 0.01},
+            "demonstrations": {"run": "results/demonstrations/taught", "train": ["demo_00.sklog.npz"]},
+            "evaluation": {"duration": 1.0, "hold": 0.5, "start_offsets_deg": [[0.0, 0.0], [5.0, 0.0]]},
+        }
+    )
+
+    assert setup.q_refs is None and setup.hand_refs is None and setup.demonstrator_logs == []
+    assert len(setup.starts) == 2
+    assert setup.demo_hands["demo_00"] == pytest.approx(endpoint_positions(skeleton, setup.demos["demo_00"]))
