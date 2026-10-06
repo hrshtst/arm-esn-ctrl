@@ -101,6 +101,15 @@ uv run python experiments/sweep_esn.py \
     experiments/manual_demonstration_autonomous_reaching/sweep_main_ridge_1_raw.toml
 ```
 
+The ridge and the warm-up are then swept together for the reservoirs that ranked
+best: the two most robust of each take, at either ridge, each trained on both takes.
+
+| Configurations | Sweep |
+| --- | --- |
+| `sweep_ridge_warmup_{raw,filtered}_lr0.5_sr1.2_is0.03.toml` | ridge 1e-8 to 100 and warm-up 0 to 4 s (42 combinations), with leak rate 0.5, spectral radius 1.2, and input scaling 0.03: the only combination of the first sweeps from which no run fails and none jumps (raw take, ridge 1e-6) |
+| `sweep_ridge_warmup_{raw,filtered}_lr0.2_sr0.6_is1.toml` | the same, with leak rate 0.2, spectral radius 0.6, and input scaling 1 |
+| `sweep_ridge_warmup_{raw,filtered}_lr0.5_sr0.6_is1.toml` | the same, with leak rate 0.5, spectral radius 0.6, and input scaling 1 |
+
 ## Runs
 
 Under `results/manual_demonstration_autonomous_reaching/` in the storage, all on the
