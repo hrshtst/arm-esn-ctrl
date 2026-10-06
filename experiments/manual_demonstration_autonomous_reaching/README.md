@@ -141,6 +141,11 @@ keeps every run's detour and first step for other thresholds.
 | --- | --- |
 | `sweep_around_a_ridge_{1e-6,1e-5,1e-4,1e-3}_raw.toml` | input scaling 0.01 to 0.1, spectral radius 0.9 to 1.5, and leak rate 0.3 to 1 (125 combinations) |
 | `sweep_noise_a_raw.toml` | noisy teacher forcing for candidate A: the noise on the input, 0 to 8°, with four noisy copies of the take, against the ridge, 1e-6 to 1e-3 (24 combinations) |
+| `sweep_noise_raw_lr{0.7,0.5,0.4}_sr1.05_is0.1.toml` | the same for the three most robust reservoirs of `sweep_around_a_*`, against the ridge 1e-4 to 1e-1 |
+
+The two best of `sweep_around_a_*`, with input scaling 0.1, spectral radius 1.05,
+and ridge 1e-3, run from the 169 start postures as candidates C (leak rate 0.7) and
+D (leak rate 0.5): `grid_candidate_{c,d}_raw.toml`.
 
 ## Runs
 
