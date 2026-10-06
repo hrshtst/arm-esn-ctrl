@@ -57,6 +57,25 @@ tracker underdamped: computed torque at ω = 10 rad/s and joint PD at ω = 20 ra
 each with the damping ratios 1, 0.5, 0.3, and 0.1, its `offsets` scenario from
 (+10°, −10°) and (−10°, −10°) only, as in report 003.
 
+## Candidate F
+
+Report 003's ESNs do not suit the take: the tuned one stays where the hand paused,
+and the one with the settings for eight demonstrations diverges on the robot.
+The sweeps of manual-demonstration autonomous reaching found candidate F (leak rate
+0.7, spectral radius 1.05, input scaling 0.3, ridge 1e-2, warm-up 1 s, trained on
+the take as recorded), which returns mildly onto the taught path from every start
+of the grid, without swinging or jumping.
+
+`<scenario>_candidate_f{,_pd_gains,_damping}_raw.toml` run it through the same
+scenarios and tracker settings as above; the replay replays the take as recorded.
+The disturbances strike at the same times, when the take's hand starts toward the
+target; candidate F, on its own, reaches about 2 s earlier, so they strike it
+mid-reach.
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/block_candidate_f_raw.toml
+```
+
 ## Runs
 
 Under `results/manual_demonstration_robot_tracking/` in the storage, with the ESNs of
