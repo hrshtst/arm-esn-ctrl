@@ -178,3 +178,45 @@ def test_scaling_the_normalization_is_scaling_the_input():
 
     start = q[0] + np.radians([5.0, -5.0])
     assert np.abs(scaled.generate(start, 100) - plain.generate(start, 100)).max() < 1e-9
+
+
+def trained(config: EsnConfig, q: NDArray[np.float64]) -> ReachingEsn:
+    esn = ReachingEsn(config)
+    esn.fit([q])
+    return esn
+
+
+NOISY = dataclasses.replace(CONFIG, teacher_noise_deg=2.0, teacher_copies=4)
+
+
+def test_teacher_noise_is_off_unless_asked_for():
+    assert (CONFIG.teacher_noise_deg, CONFIG.teacher_copies) == (0.0, 1)
+
+
+def test_noisy_teacher_forcing_is_reproducible_and_changes_the_readout():
+    q = joint_reach()
+    first, second = trained(NOISY, q).generate(q[0], 150), trained(NOISY, q).generate(q[0], 150)
+    np.testing.assert_array_equal(first, second)
+    assert not np.allclose(first, trained(CONFIG, q).generate(q[0], 150))
+
+
+def test_noisy_teacher_forcing_steers_an_offset_input_back_toward_the_trajectory():
+    """Fed the trajectory 2 deg off in joint 1, the next output keeps less of the offset after noisy training."""
+    q = joint_reach()
+    offset = np.radians([2.0, 0.0])
+
+    def kept(esn: ReachingEsn) -> float:
+        return float(np.median((esn.one_step_predictions(q + offset) - q[1:])[:, 0]) / offset[0])
+
+    assert kept(trained(NOISY, q)) < 0.75 * kept(trained(CONFIG, q))
+
+
+def test_an_esn_saved_before_the_teacher_noise_loads_without_it(tmp_path):
+    q = joint_reach()
+    path = tmp_path / "esn.toml"
+    trained(CONFIG, q).save(path)
+    text = path.read_text()
+    path.write_text("".join(line for line in text.splitlines(keepends=True) if not line.startswith("teacher_")))
+    loaded = ReachingEsn.load(path)
+    assert (loaded.config.teacher_noise_deg, loaded.config.teacher_copies) == (0.0, 1)
+    np.testing.assert_array_equal(loaded.generate(q[0], 150), trained(CONFIG, q).generate(q[0], 150))

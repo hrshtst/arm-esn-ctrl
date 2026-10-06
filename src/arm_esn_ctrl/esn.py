@@ -16,6 +16,14 @@ from its reset state to a state that reflects the start posture. The warm-up
 samples are excluded from training, so the ESN learns only to move from the
 start posture, never to stay there.
 
+With noisy teacher forcing (``teacher_noise_deg``), each training trajectory is fed
+in several times (``teacher_copies``), each time with fresh Gaussian noise added to
+the input, while the target stays the clean trajectory one step ahead: from a
+slightly wrong posture, the ESN learns to produce the right next one. This is the
+noise immunization of Lukoševičius's practical guide to ESNs (2012, section 5.2.1),
+which makes teacher-forced feedback stable. Every copy adds to the data the ridge
+regularization is weighed against, so K copies weaken a given ridge K times.
+
 Before they enter the ESN, joint angles are normalized by the range each joint
 covers in the training data, so that the training data span [-1, 1], and the
 outputs are converted back. Unlike the mean and standard deviation, the range does
@@ -48,7 +56,9 @@ class EsnConfig:
     input_scaling: float  # scale of the random input weights
     bias: bool  # whether each neuron receives a random constant input
     ridge: float  # ridge-regression regularization of the readout
-    seed: int  # random seed of the reservoir and input weights
+    seed: int  # random seed of the reservoir and input weights, and of the teacher noise
+    teacher_noise_deg: float = 0.0  # standard deviation of the noise on the teacher-forced input (deg)
+    teacher_copies: int = 1  # how many times each training trajectory is fed in, each with its own noise
 
     @property
     def warmup_steps(self) -> int:
@@ -100,11 +110,16 @@ class ReachingEsn:
         self.half_range = np.where(high > low, (high - low) / 2, 1.0)
         sequences = [self._with_warmup(self._normalize(q)) for q in trajectories]
         # Each input predicts the next sample; every sequence's warm-up is washed out.
-        self.model.fit_sequences(
-            [sequence[:-1] for sequence in sequences],
-            [sequence[1:] for sequence in sequences],
-            washout_len=self.config.warmup_steps,
-        )
+        # The teacher noise, if any, is on the input only: the target stays clean.
+        rng = np.random.default_rng(self.config.seed)
+        noise_std = np.radians(self.config.teacher_noise_deg) / self.half_range  # in normalized units
+        inputs, targets = [], []
+        for sequence in sequences:
+            for _ in range(self.config.teacher_copies):
+                noise = rng.normal(size=sequence[:-1].shape) * noise_std if self.config.teacher_noise_deg else 0.0
+                inputs.append(sequence[:-1] + noise)
+                targets.append(sequence[1:])
+        self.model.fit_sequences(inputs, targets, washout_len=self.config.warmup_steps)
 
     def one_step_predictions(self, q: NDArray[np.float64]) -> NDArray[np.float64]:
         """Predict each next sample of ``q`` from the samples up to it (teacher forcing).

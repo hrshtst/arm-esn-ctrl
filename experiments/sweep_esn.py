@@ -21,10 +21,14 @@ the same start postures as in ``autonomous_esn.py``. The run directory receives:
 
 The combinations printed as the best are those without failures that stay closest
 to the demonstrator's reach from the other starts. With a ``[ranking]`` table, they
-are ranked by robustness instead: the fewest failed runs, then the fewest runs
-whose first step is longer than ``max_first_step`` (m), a jump rather than a mild
-return, then the smallest mean first step from the other starts. ``sweep.csv`` then
-also counts those jumps and gives the largest first step.
+are ranked by robustness instead: the fewest failed runs, then, if the table has a
+``max_detour`` (m), the fewest swings: runs whose hand strays from the taught path
+by more than that beyond where it started; then the fewest jumps: runs whose first
+step is longer than ``max_first_step`` (m), rather than a mild return; then the
+smallest mean first step from the other starts. ``sweep.csv`` then also counts the
+swings and jumps and gives the largest detour and first step, and ``runs.csv`` holds
+every run's outcome, first step, and detour, so that other thresholds can be applied
+without running again.
 
 To look at one combination in detail, copy its values into a configuration for
 ``autonomous_esn.py`` and run that.
@@ -53,7 +57,9 @@ from arm_esn_ctrl.autonomous import (
     run_metrics,
 )
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
+from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import start_run
+from arm_esn_ctrl.tracking import nearest_demonstration
 
 TEXT_COLOR = "#52514e"
 COLORMAP = "Blues"  # sequential: darker is larger
@@ -107,15 +113,19 @@ def main() -> None:
         raise ValueError(msg)
 
     combinations = [dict(zip(sweep, values, strict=True)) for values in itertools.product(*sweep.values())]
-    rows = []
+    rows, run_rows = [], []
     for i, combination in enumerate(combinations):
         esn = ReachingEsn(EsnConfig(**(config["esn"] | combination)))
         esn.fit(list(setup.demos.values()))
         one_step = rms_degrees(np.vstack([esn.one_step_predictions(q) - q[1:] for q in setup.demos.values()]))
-        row = combination | {"one_step_error_deg": one_step} | summarize(run_autonomously(esn, setup), setup, ranking)
+        summary, per_run = summarize(run_autonomously(esn, setup), setup, ranking)
+        row = combination | {"one_step_error_deg": one_step} | summary
         rows.append(row)
+        run_rows += [combination | r for r in per_run]
         values = ", ".join(f"{name}={value:g}" for name, value in combination.items())
         jumps = "" if ranking is None else f" {row['jumps']} first steps over {1000 * ranking['max_first_step']:g} mm;"
+        if ranking is not None and "max_detour" in ranking:
+            jumps = f" {row['swings']} swings;{jumps}"
         hold = f"largest hold error {1000 * row['max_hold_error_m']:.1f} mm"
         print(
             f"[{i + 1:3d}/{len(combinations)}] {values}:"
@@ -128,26 +138,40 @@ def main() -> None:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+    if run_rows:
+        with (run_dir / "runs.csv").open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(run_rows[0]))
+            writer.writeheader()
+            writer.writerows(run_rows)
     if ranking is None:
         print_best(rows, list(sweep))
     else:
-        print_ranking(rows, list(sweep), ranking["max_first_step"])
+        print_ranking(rows, list(sweep), ranking)
     maps = HEATMAPS if reference is DEMONSTRATOR else TAUGHT_HEATMAPS
-    if ranking is not None:  # the jumps, before the hold error
-        jump_map = ("jumps", f"Runs whose first step is over {1000 * ranking['max_first_step']:g} mm", 1.0, False)
-        maps = [*maps[:-1], jump_map, maps[-1]]
+    if ranking is not None:  # the swings and jumps, before the hold error
+        ranked_maps = []
+        if "max_detour" in ranking:
+            title = f"Runs that stray over {1000 * ranking['max_detour']:g} mm beyond their start"
+            ranked_maps.append(("swings", title, 1.0, False))
+        title = f"Runs whose first step is over {1000 * ranking['max_first_step']:g} mm"
+        ranked_maps.append(("jumps", title, 1.0, False))
+        maps = [*maps[:-1], *ranked_maps, maps[-1]]
     title = f"ESN sweep: {args.config.stem}"
     plot_sweep(rows, sweep, maps, title).savefig(run_dir / "sweep.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
 
 
-def summarize(runs: list[Run], setup: Setup, ranking: dict[str, float] | None = None) -> dict[str, float]:
+def summarize(
+    runs: list[Run], setup: Setup, ranking: dict[str, float] | None = None
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Average the metrics against the reference by kind of start posture, and count and measure the holds of all runs.
 
     The training path ratio (or offset retained) of the other start postures is
     their median: near the training path, a few ratios grow large. Those without a
     ratio are left out. With a ``ranking``, the runs whose first step is longer than
-    its ``max_first_step`` are counted as jumps.
+    its ``max_first_step`` are counted as jumps and, if it has a ``max_detour``, the
+    runs whose :func:`detour` is longer than that as swings; the second result then
+    lists every run's outcome, first step, and detour (otherwise it is empty).
     """
     reference = setup.reference
     metrics = [run_metrics(run, setup) for run in runs]
@@ -159,16 +183,38 @@ def summarize(runs: list[Run], setup: Setup, ranking: dict[str, float] | None = 
     ratios = [m[reference.course] for m, run in zip(metrics, runs, strict=True) if not run.start.demonstrated]
     ratios = [r for r in ratios if np.isfinite(r)]
     summary[f"other_median_{reference.course}"] = float(np.median(ratios)) if ratios else float("nan")
+    per_run: list[dict[str, Any]] = []
     if ranking is not None:
         first_steps = [m["first_step_m"] for m in metrics]
+        detours = [detour(run, setup) for run in runs] if "max_detour" in ranking else [float("nan")] * len(runs)
+        if "max_detour" in ranking:
+            summary["swings"] = sum(d > ranking["max_detour"] for d in detours)
+            summary["largest_detour_m"] = float(np.max(detours))
         summary["jumps"] = sum(step > ranking["max_first_step"] for step in first_steps)
         summary["largest_first_step_m"] = float(np.max(first_steps))
+        per_run = [
+            {"start": i, "origin": run.start.origin, "success": m["success"], "first_step_m": m["first_step_m"]}
+            | {"detour_m": d, "hold_error_m": m["hold_error_m"]}
+            for i, (run, m, d) in enumerate(zip(runs, metrics, detours, strict=True))
+        ]
     hold_errors = [m["hold_error_m"] for m in metrics if m["arrived"]]
     summary["runs"] = len(metrics)
     summary["failures"] = sum(not m["success"] for m in metrics)
     summary["median_hold_error_m"] = float(np.median(hold_errors)) if hold_errors else float("nan")
     summary["max_hold_error_m"] = float(np.max(hold_errors)) if hold_errors else float("nan")
-    return summary
+    return summary, per_run
+
+
+def detour(run: Run, setup: Setup, every: int = 5) -> float:
+    """How much farther from the taught hand path the run's hand strays than where it started (m).
+
+    The taught path is that of the training demonstration that starts nearest; both
+    paths are compared every ``every`` samples, which is plenty for detours of
+    centimeters and keeps a sweep fast.
+    """
+    taught = setup.demo_hands[nearest_demonstration(run.start.q, setup.demos)]
+    distances = distances_to_path(run.hand[::every], taught[::every])
+    return float(distances.max() - distances[0])
 
 
 def print_best(rows: list[dict[str, Any]], names: list[str], count: int = 5) -> None:
@@ -191,20 +237,24 @@ def print_best(rows: list[dict[str, Any]], names: list[str], count: int = 5) -> 
         )
 
 
-def print_ranking(rows: list[dict[str, Any]], names: list[str], max_first_step: float, count: int = 5) -> None:
-    """Print the most robust combinations: the fewest failed runs, then the fewest jumps, then the mildest first step.
+def print_ranking(rows: list[dict[str, Any]], names: list[str], ranking: dict[str, float], count: int = 5) -> None:
+    """Print the most robust combinations: the fewest failed runs, swings, and jumps, then the mildest first step.
 
-    A jump is a first step longer than ``max_first_step`` (m); the mildest first step
-    is the smallest mean first step from the other starts.
+    A swing is a run that strays from the taught path by more than ``max_detour``
+    (m), if the ``ranking`` has one; a jump, a first step longer than
+    ``max_first_step`` (m); the mildest first step is the smallest mean first step
+    from the other starts.
     """
-    ranked = sorted(rows, key=lambda r: (r["failures"], r["jumps"], r["other_first_step_m"]))[:count]
+    ranked = sorted(rows, key=lambda r: (r["failures"], r.get("swings", 0), r["jumps"], r["other_first_step_m"]))
     robust = sum(r["failures"] == 0 for r in rows)
     print(f"\n{robust} of {len(rows)} combinations arrive and stay at the goal from every start.")
-    print(f"The fewest failed runs, then the fewest first steps over {1000 * max_first_step:g} mm:")
-    for r in ranked:
+    swings = f"swings over {1000 * ranking['max_detour']:g} mm, then " if "max_detour" in ranking else ""
+    print(f"The fewest failed runs, then {swings}first steps over {1000 * ranking['max_first_step']:g} mm:")
+    for r in ranked[:count]:
         values = ", ".join(f"{name}={r[name]:g}" for name in names)
+        swung = f"{r['swings']} swing (largest {1000 * r['largest_detour_m']:.0f} mm), " if "swings" in r else ""
         print(
-            f"  {values}: {r['failures']} of {r['runs']} runs fail, {r['jumps']} jump;"
+            f"  {values}: {r['failures']} of {r['runs']} runs fail, {swung}{r['jumps']} jump;"
             f" first step {1000 * r['other_first_step_m']:.1f} mm (other, mean),"
             f" {1000 * r['largest_first_step_m']:.1f} mm (largest);"
             f" offset retained {r['other_median_offset_retained']:.2f} (other, median);"
