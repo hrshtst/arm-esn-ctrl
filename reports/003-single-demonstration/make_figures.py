@@ -139,6 +139,8 @@ UNDERDAMPED = 0.1
 UNDERDAMPED_END = 5.0
 RINGING_WINDOW = (2.5, 5.0)
 RINGING = SUMMARY / "ringing.csv"
+OVERSHOOT = SUMMARY / "overshoot.csv"
+FLOOR_MM = 0.1  # final distances below this are drawn at it
 LAW_STYLES = {"computed_torque": "-", "pd": "--"}
 # The animations of the examples: one tracker setting, the task times they cover (s), and their frame rate.
 ANIMATION_SETTING = ("pd", 20.0)
@@ -169,6 +171,7 @@ def main() -> None:
             figures[f"example_{slug(name)}.png"] = plot_example(name, scenario, offset)
             figures[f"underdamped_{slug(name)}.png"] = plot_example(name, scenario, offset, UNDERDAMPED)
         write_ringing()
+        write_overshoot()
         write_departures()
         write_offset_references()
         write_push_progress()
@@ -585,7 +588,12 @@ def plot_damping() -> Figure:
     measures = [
         ("success", "Arrive and hold (% of runs)", 1.0, False),
         ("settling_time_s", "Settling time (s)", 1.0, False),
-        ("final_distance_m", "Final distance to the target (mm)", 1000.0, True),
+        (
+            "final_distance_m",
+            f"Final distance to the target (mm;\n{FLOOR_MM:g} mm and below drawn at {FLOOR_MM:g})",
+            1000.0,
+            True,
+        ),
     ]
     fig = Figure(figsize=(18, 9.5), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(
@@ -600,6 +608,8 @@ def plot_damping() -> Figure:
             for arm in ("tuned", "eight", "replay"):
                 for law, _, _ in FEATURED:
                     values = [mean(damping_rows(scenario, arm, law, z), key) * factor for z in DAMPINGS]
+                    if log:
+                        values = [max(v, FLOOR_MM) for v in values]
                     label = f"{ARM_LABELS[arm]}, {LAW_NAMES[law]}"
                     kwargs = {"color": ARM_COLORS[arm], "marker": ARM_MARKERS[arm], "markersize": 6}
                     ax.plot(DAMPINGS, values, linestyle=LAW_STYLES[law], linewidth=1.6, label=label, **kwargs)
@@ -609,10 +619,14 @@ def plot_damping() -> Figure:
             ax.set_xlim(1.25, 0.08)  # less damping to the right
             if log:
                 ax.set_yscale("log")
+                ax.set_ylim(FLOOR_MM * 0.7, None)
             if key == "success":
                 ax.set_ylim(-5, 105)
-            n = len(damping_rows(scenario, "replay", "pd", 1.0))
-            ax.set_title(f"{scenario} ({n} start{'s' if n > 1 else ''}): {title}", color=TEXT_COLOR, fontsize=9)
+            if row == 0:
+                n = len(damping_rows(scenario, "replay", "pd", 1.0))
+                ax.set_title(f"{scenario} ({n} start{'s' if n > 1 else ''})", color="#0b0b0b", fontsize=10)
+            if column == 0:
+                ax.set_ylabel(title, color=TEXT_COLOR)
             if row == len(measures) - 1:
                 ax.set_xlabel("damping ratio ζ", color=TEXT_COLOR, fontsize=9)
     handles, labels = axes[0, 0].get_legend_handles_labels()
@@ -846,6 +860,31 @@ def write_ringing() -> None:
                         | {"amplitude_ratio": float(b.std() / a.std())}
                     )
     write_csv(RINGING, rows)
+
+
+def write_overshoot() -> None:
+    """How far each tracked arm passes the end posture, critically damped and with the damping ratio 0.1.
+
+    For each joint, the largest excursion beyond its end posture in the direction it
+    moves in the demonstration (0 if it never passes it), for every example and
+    featured law.
+    """
+    path = demonstrated_path()
+    end, direction = np.degrees(path[-1]), np.sign(path[-1] - path[0])
+    rows = []
+    for name, scenario, offset in EXAMPLES:
+        for law, omega, _ in FEATURED:
+            for damping in (1.0, UNDERDAMPED):
+                paths = example_paths(scenario, offset, law, omega, damping)
+                for arm in ("tuned", "eight", "replay"):
+                    log = StateLog.load(paths[arm])
+                    q = np.degrees(log.channel("q").reshape(len(log.times), -1))[log.times > -1e-9]
+                    past = np.maximum((q - end) * direction, 0.0).max(axis=0)
+                    rows.append(
+                        {"example": name, "law": law, "omega": omega, "damping": damping, "arm": arm}
+                        | {"joint_1_deg": float(past[0]), "joint_2_deg": float(past[1])}
+                    )
+    write_csv(OVERSHOOT, rows)
 
 
 def slug(name: str) -> str:
@@ -1231,6 +1270,24 @@ def print_tables() -> None:
                 )
             n = len(damping_rows(scenario, "replay", law, 1.0))
             print(f"  {LAW_NAMES[law]} {omega:g}, {scenario} (of {n}): " + " | ".join(cells))
+    if OVERSHOOT.exists():
+        print("\n== 3.9 Overshoot past the end posture, the larger of the two joints (deg), ζ = 1 → 0.1")
+        print("(tuned / eight / replay)")
+        rows = read_csv(OVERSHOOT)
+        for law, omega, _ in FEATURED:
+            for name, _, _ in EXAMPLES:
+                cells = []
+                for arm in ("tuned", "eight", "replay"):
+                    values = []
+                    for damping in (1.0, UNDERDAMPED):
+                        r = next(
+                            r
+                            for r in rows
+                            if (r["example"], r["law"], r["damping"], r["arm"]) == (name, law, damping, arm)
+                        )
+                        values.append(max(r["joint_1_deg"], r["joint_2_deg"]))
+                    cells.append(f"{values[0]:.1f} → {values[1]:.1f}")
+                print(f"  {LAW_NAMES[law]} {omega:g}, {name}: " + " / ".join(cells))
     if RINGING.exists():
         print("\n== 3.9 Ringing after the reach (ζ = 0.1): the output's amplitude against the arm's, and its lag (s),")
         print("median (range) over the ringing joints of the 7 examples")
