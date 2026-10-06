@@ -207,3 +207,11 @@ demonstration `results/demonstrations/20261006-152823-reach_manual_single`:
 | `20261006-213831-sweep_noise_raw_lr0.7_sr1.05_is0.1` | `sweep_noise_raw_lr0.7_sr1.05_is0.1.toml` |
 | `20261006-214212-route_candidate_c_raw` | `route_candidate_c_raw.toml` |
 | `20261006-214212-route_candidate_d_raw` | `route_candidate_d_raw.toml` |
+| `20261006-222506-sweep_past_edge_ridge_1e-2_raw` | `sweep_past_edge_ridge_1e-2_raw.toml` |
+| `20261006-222506-sweep_past_edge_ridge_1e-3_raw` | `sweep_past_edge_ridge_1e-3_raw.toml` |
+| `20261006-222506-sweep_past_edge_ridge_3e-2_raw` | `sweep_past_edge_ridge_3e-2_raw.toml` |
+| `20261006-222506-sweep_past_edge_ridge_3e-3_raw` | `sweep_past_edge_ridge_3e-3_raw.toml` |
+| `20261006-223223-grid_candidate_e_raw` | `grid_candidate_e_raw.toml` |
+| `20261006-223223-grid_candidate_f_raw` | `grid_candidate_f_raw.toml` |
+| `20261006-223252-route_candidate_e_raw` | `route_candidate_e_raw.toml` |
+| `20261006-223252-route_candidate_f_raw` | `route_candidate_f_raw.toml` |
