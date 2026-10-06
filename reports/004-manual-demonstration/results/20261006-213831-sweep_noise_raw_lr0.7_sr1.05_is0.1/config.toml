@@ -1,0 +1,52 @@
+# Stage 1, Phase 4, with a demonstration taught by hand: sweep the noise of noisy
+# teacher forcing and the ridge for leak rate 0.7, spectral radius 1.05, and input
+# scaling 0.1, one of the three most robust reservoirs of the sweeps around
+# candidate A (sweep_around_a_ridge_*_raw.toml: 0 of 49 runs fail, 7 swing (largest
+# 76 mm), and none jumps at ridge 1e-3), trained on the take as recorded. As in
+# sweep_noise_a_raw.toml, the take is fed in four times with fresh noise on the
+# input while the target stays clean; the ridge, here 1e-4 to 1e-1, reaches past the
+# largest of the sweeps around A, where these reservoirs did best.
+#
+#   uv run python experiments/sweep_esn.py experiments/manual_demonstration_autonomous_reaching/sweep_noise_raw_lr0.7_sr1.05_is0.1.toml
+#
+# Every combination runs from 49 start postures, every 5 deg, and is ranked by
+# robustness: the fewest runs that fail to arrive and hold, then the fewest swings,
+# runs whose hand strays from the taught path by more than 50 mm beyond where it
+# started, then the fewest first steps over 30 mm. runs.csv keeps every run's detour
+# and first step, for other thresholds.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the reach taught by hand from one start posture (reach_manual_single.toml).
+run = "results/demonstrations/20261006-152823-reach_manual_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.05
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.7
+input_scaling = 0.1
+bias = true
+ridge = 1e-3  # swept
+seed = 0               # also seeds the teacher noise
+teacher_noise_deg = 1.0  # swept: standard deviation of the noise on the input (deg)
+teacher_copies = 4
+
+[sweep]
+# The first two are the heatmap axes (x, then y); each value of the third gets its own column.
+teacher_noise_deg = [0.0, 0.5, 1.0, 2.0, 4.0, 8.0]
+ridge = [1e-4, 1e-3, 1e-2, 1e-1]
+
+[ranking]
+max_detour = 0.05      # m: a run that strays from the taught path by more than this beyond where it started swings
+max_first_step = 0.03  # m: a first step longer than this is a jump, not a mild return
+
+[evaluation]
+duration = 16.0        # autonomous run (s); the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint, every 5 deg (49 start postures)
+step_deg = 5.0

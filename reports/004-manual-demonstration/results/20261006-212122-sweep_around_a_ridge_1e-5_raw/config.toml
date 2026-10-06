@@ -1,0 +1,51 @@
+# Stage 1, Phase 4, with a demonstration taught by hand: sweep the three main
+# reservoir parameters around candidate A (leak rate 0.5, spectral radius 1.2, input
+# scaling 0.03, ridge 1e-4), at ridge 1e-5, trained on the take as recorded.
+# Candidate A returns to the taught path without jumping, but about half of its
+# runs, those starting with the elbow more bent, swing about 1 m away first; these
+# sweeps look for settings without the swings.
+#
+#   uv run python experiments/sweep_esn.py experiments/manual_demonstration_autonomous_reaching/sweep_around_a_ridge_1e-5_raw.toml
+#
+# Every combination runs from 49 start postures, every 5 deg, and is ranked by
+# robustness: the fewest runs that fail to arrive and hold, then the fewest swings,
+# runs whose hand strays from the taught path by more than 50 mm beyond where it
+# started, then the fewest first steps over 30 mm. runs.csv keeps every run's detour
+# and first step, for other thresholds.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the reach taught by hand from one start posture (reach_manual_single.toml).
+run = "results/demonstrations/20261006-152823-reach_manual_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.2  # swept
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.5        # swept
+input_scaling = 0.03   # swept
+bias = true
+ridge = 1e-5
+seed = 0               # also seeds the teacher noise
+teacher_noise_deg = 0.0  # no teacher noise
+teacher_copies = 1
+
+[sweep]
+# The first two are the heatmap axes (x, then y); each value of the third gets its own column.
+leak_rate = [0.3, 0.4, 0.5, 0.7, 1.0]
+spectral_radius = [0.9, 1.05, 1.2, 1.35, 1.5]
+input_scaling = [0.01, 0.02, 0.03, 0.05, 0.1]
+
+[ranking]
+max_detour = 0.05      # m: a run that strays from the taught path by more than this beyond where it started swings
+max_first_step = 0.03  # m: a first step longer than this is a jump, not a mild return
+
+[evaluation]
+duration = 16.0        # autonomous run (s); the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint, every 5 deg (49 start postures)
+step_deg = 5.0

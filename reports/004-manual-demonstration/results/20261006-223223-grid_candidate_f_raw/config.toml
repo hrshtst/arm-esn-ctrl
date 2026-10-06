@@ -1,0 +1,34 @@
+# Stage 1, Phase 4, with a demonstration taught by hand: candidate F, the ESN
+# trained on the take as recorded with leak rate 0.7, spectral radius 1.05, input
+# scaling 0.3, ridge 1e-2, and a 1 s warm-up, run from the grid of start postures of
+# Phase 1. Of the sweeps past the edge (sweep_past_edge_ridge_1e-2_raw.toml), no run
+# fails, swings, or jumps from the 49 start postures; it is in the middle of the
+# region where no run fails, swings, or jumps: the largest detour beyond the start
+# is 6 mm and the largest first step 23 mm.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_autonomous_reaching/grid_candidate_f_raw.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the reach taught by hand from one start posture (reach_manual_single.toml).
+run = "results/demonstrations/20261006-152823-reach_manual_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.05
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.7
+input_scaling = 0.3
+bias = true
+ridge = 1e-2
+seed = 0
+
+[evaluation]
+duration = 16.0        # autonomous run (s); the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint (169 start postures)
+step_deg = 2.5

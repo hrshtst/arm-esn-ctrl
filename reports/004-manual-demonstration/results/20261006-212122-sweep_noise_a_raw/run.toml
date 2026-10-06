@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_autonomous_reaching/sweep_noise_a_raw.toml"
+command = "experiments/sweep_esn.py experiments/manual_demonstration_autonomous_reaching/sweep_noise_a_raw.toml"
+started = 2026-10-06 21:21:22+09:00
+host = "delbosque"
+commit = "dcbc8514af53f67c495ae91c0d9cb8df1bec5817"
+uncommitted_changes = false

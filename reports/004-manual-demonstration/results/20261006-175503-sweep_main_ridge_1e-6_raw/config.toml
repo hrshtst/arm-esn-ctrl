@@ -1,0 +1,56 @@
+# Stage 1, Phase 4, with a demonstration taught by hand: sweep the three main
+# reservoir parameters (Lukosevicius, A Practical Guide to Applying Echo State
+# Networks, 2012, section 3.3.1), the spectral radius, the leak rate, and the input
+# scaling, of the ESN trained on the take as recorded, at ridge 1e-6, the ridge of
+# the eight-demonstration settings.
+#
+#   uv run python experiments/sweep_esn.py experiments/manual_demonstration_autonomous_reaching/sweep_main_ridge_1e-6_raw.toml
+#
+# sweep_main_ridge_1_raw.toml sweeps the same values at ridge 1, and
+# sweep_main_ridge_1e-6_filtered.toml on the filtered take. The ridge is then chosen
+# on a logarithmic grid for the best of them, as the guide advises (section 4.2),
+# together with the warm-up.
+#
+# Every combination runs from the 169 start postures of Phase 1 and is ranked by
+# robustness: the fewest runs that fail to arrive and hold, then the fewest runs
+# whose first step is a jump of more than 30 mm, rather than a mild return toward
+# the taught motion, then the smallest mean first step.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the reach taught by hand from one start posture (reach_manual_single.toml),
+# as recorded (demo_00) and filtered by a first-order low-pass at 8 Hz (demo_00_filtered).
+run = "results/demonstrations/20261006-152823-reach_manual_single"
+train = ["demo_00.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 0.9  # swept
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.1        # swept
+input_scaling = 1.0    # swept
+bias = true
+ridge = 1e-6
+seed = 0
+
+[sweep]
+# The first two are the heatmap axes (x, then y); each value of the third gets its own column.
+# The leak rate should match the speed of the motion: at 10 ms steps, 0.01 gives a time
+# constant of 1 s, and the take holds still for about 4 s before a 3 s reach. A larger
+# spectral radius gives a longer memory. The input scaling also stands for the scale
+# of the joint-angle normalization.
+leak_rate = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5]
+spectral_radius = [0.3, 0.6, 0.9, 1.2, 1.5]
+input_scaling = [0.03, 0.1, 0.3, 1.0, 3.0]
+
+[ranking]
+max_first_step = 0.03  # m: a first step longer than this is a jump, not a mild return
+
+[evaluation]
+duration = 16.0        # autonomous run (s); the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint (169 start postures)
+step_deg = 2.5

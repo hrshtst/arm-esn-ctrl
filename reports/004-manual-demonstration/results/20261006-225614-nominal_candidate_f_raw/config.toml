@@ -1,0 +1,30 @@
+# Stage 2 with a demonstration taught by hand: no disturbance, from the demonstrated
+# start.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/nominal_candidate_f_raw.toml
+#
+# The ESN is candidate F of manual-demonstration autonomous reaching
+# (grid_candidate_f_raw.toml): leak rate 0.7, spectral radius 1.05, input scaling
+# 0.3, ridge 1e-2, and a 1 s warm-up, trained on the take as recorded, which the
+# replay replays. On its own, it returns mildly onto the taught path from every
+# start of the grid, without swinging or jumping.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_autonomous_reaching/20261006-223223-grid_candidate_f_raw/esn.toml"
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["computed_torque", "pd"]
+# Natural frequency of the tracking error (rad/s), critically damped. Computed
+# torque: kp = omega^2, kd = 2 omega. Joint PD: the same, scaled by each joint's
+# inertia at the posture where the reach ends.
+omegas = [10.0]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+
+[evaluation]
+duration = 16.0        # task (s), after the warm-up; the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start

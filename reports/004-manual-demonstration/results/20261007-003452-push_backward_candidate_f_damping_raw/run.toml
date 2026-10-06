@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_robot_tracking/push_backward_candidate_f_damping_raw.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/push_backward_candidate_f_damping_raw.toml"
+started = 2026-10-07 00:34:52+09:00
+host = "delbosque"
+commit = "64e766636b697f9fd822d68e191c55346e0a5abe"
+uncommitted_changes = false
