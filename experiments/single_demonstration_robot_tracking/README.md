@@ -46,6 +46,11 @@ At ω = 10 rad/s, joint PD lets the hand drift out of the goal after it arrives
 with either ESN, though it settles. `<scenario>_<ESN>_pd_gains.toml` runs each
 scenario again with joint PD only, at ω = 10, 20, and 40 rad/s.
 
+`<scenario>_<ESN>_damping.toml` runs each scenario with the tracker underdamped:
+computed torque at ω = 10 rad/s and joint PD at ω = 20 rad/s, each with the damping
+ratios 1, 0.5, 0.3, and 0.1. Its `offsets` scenario starts from two of the grid's
+offsets only, (+10°, −10°) and (−10°, −10°).
+
 The runner and its outputs are those of
 [multi-demonstration robot tracking](../multi_demonstration_robot_tracking/README.md).
 Two outputs answer the questions here:

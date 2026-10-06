@@ -16,7 +16,9 @@ reach from each start posture:
 
 The ESN and the replay run with every tracking law, natural frequency of the
 tracking error, and damping ratio listed in ``[tracker]`` (``dampings`` is
-optional; its default, 1, is critically damped). Their runs start with the arm holding its
+optional; its default, 1, is critically damped). ``omegas`` is a list for every
+law, or a table with a list for each law, such as
+``omegas = {computed_torque = [10.0], pd = [20.0]}``. Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table pushes or blocks all three arms alike
 (see :mod:`arm_esn_ctrl.disturbances`); start postures away from the demonstrated
@@ -219,19 +221,19 @@ class Setting:
 def tracker_settings(tracker: dict[str, Any]) -> list[Setting]:
     """Every combination of the laws, natural frequencies, and damping ratios of ``[tracker]``, law by law.
 
-    Only one of the natural frequency and the damping ratio may take several values,
-    so that the metrics plot against it.
+    ``omegas`` lists the natural frequencies of every law, or maps each law to its
+    own list. Only one of the natural frequency and the damping ratio may take
+    several values, so that the metrics plot against it.
     """
-    omegas, dampings = tracker["omegas"], tracker.get("dampings", [1.0])
-    if len(omegas) > 1 and len(dampings) > 1:
+    laws, omegas, dampings = tracker["laws"], tracker["omegas"], tracker.get("dampings", [1.0])
+    by_law: dict[str, list[float]] = omegas if isinstance(omegas, dict) else {law: omegas for law in laws}
+    if set(by_law) != set(laws):
+        msg = f"[tracker] omegas must give the natural frequencies of exactly the laws {', '.join(laws)}"
+        raise ValueError(msg)
+    if any(len(values) > 1 for values in by_law.values()) and len(dampings) > 1:
         msg = "[tracker] can sweep the natural frequencies (omegas) or the damping ratios (dampings), not both"
         raise ValueError(msg)
-    return [
-        Setting(law, float(omega), float(damping))
-        for law in tracker["laws"]
-        for omega in omegas
-        for damping in dampings
-    ]
+    return [Setting(law, float(omega), float(damping)) for law in laws for omega in by_law[law] for damping in dampings]
 
 
 def posed(skeleton: Skeleton, q: NDArray[np.float64]) -> Skeleton:
