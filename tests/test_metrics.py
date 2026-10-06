@@ -6,7 +6,16 @@
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.metrics import arrival_index, hold_metrics, path_distance, path_progress, reach_metrics
+from arm_esn_ctrl.metrics import (
+    arrival_index,
+    count_speed_peaks,
+    hold_metrics,
+    jitter,
+    onset_index,
+    path_distance,
+    path_progress,
+    reach_metrics,
+)
 
 START = np.array([0.5, 1.2])
 TARGET = np.array([0.0, 1.2])
@@ -81,6 +90,33 @@ def test_path_progress_is_the_fraction_of_the_path_up_to_the_nearest_point():
     progress = path_progress(points, path)
 
     assert progress == pytest.approx([0.0, 0.5 / 3, 2.5 / 3, 1.0, 1.0, 0.0])
+
+
+def test_the_onset_is_the_first_sample_the_hand_is_away_from_its_start():
+    rest = np.zeros((20, 2))
+    moving = np.column_stack([0.001 * np.arange(1, 30), np.zeros(29)])  # 1 mm per sample
+    hand = np.vstack([rest, moving]).astype(np.float64)
+
+    assert onset_index(hand, 0.005) == 20 + 5  # first beyond 5 mm: 6 mm, the sixth moving sample
+    assert onset_index(rest, 0.005) is None
+
+
+def test_jitter_is_zero_for_a_ramp_and_measures_alternating_noise():
+    ramp = np.column_stack([np.linspace(0.0, 1.0, 50), np.linspace(1.0, 0.0, 50)])
+    noise = 0.01 * (-1.0) ** np.arange(50)
+
+    assert jitter(ramp, 5) == pytest.approx(0.0, abs=1e-12)
+    # A 5-sample average of alternating +-e is +-e/5, leaving +-0.8 e in the one noisy joint.
+    assert jitter(ramp + np.column_stack([noise, np.zeros(50)]), 5) == pytest.approx(0.008)
+
+
+def test_speed_peaks_count_the_bells_of_the_speed_profile():
+    times = np.linspace(0.0, 2.0, 401)
+    one = np.column_stack([np.cumsum(np.sin(np.pi * times / 2.0) ** 2), np.zeros_like(times)])
+    two = np.column_stack([np.cumsum(np.sin(np.pi * times) ** 2), np.zeros_like(times)])
+
+    assert count_speed_peaks(times, one) == 1
+    assert count_speed_peaks(times, two) == 2
 
 
 def test_arrival_is_the_first_sample_within_the_radius():

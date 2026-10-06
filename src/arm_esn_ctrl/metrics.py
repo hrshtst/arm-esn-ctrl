@@ -24,6 +24,8 @@ from numpy.typing import ArrayLike, NDArray
 MOVING_THRESHOLD = 0.05
 # Speed peaks below this fraction of the highest peak are ignored.
 PEAK_THRESHOLD = 0.1
+# The hand has started to move once it is this far from where it started (m).
+MOVED = 0.005
 # Normalized time at which a minimum-jerk speed profile first exceeds
 # MOVING_THRESHOLD: the solution of 16 tau^2 (1 - tau)^2 = MOVING_THRESHOLD.
 _MINIMUM_JERK_ONSET = 0.5 * (1.0 - np.sqrt(1.0 - np.sqrt(MOVING_THRESHOLD)))
@@ -91,19 +93,48 @@ def reach_metrics(times: NDArray[np.float64], hand: NDArray[np.float64], target:
     along = (hand - hand[0]) @ direction
     across = (hand - hand[0]) @ np.array([-direction[1], direction[0]])
 
-    inner = speed[1:-1]
-    is_peak = (inner > speed[:-2]) & (inner >= speed[2:]) & (inner > PEAK_THRESHOLD * speed.max())
-
     return {
         "movement_time": float(times[end] - times[start]),
         "peak_speed": float(speed.max()),
         "peak_timing": float(tau[np.argmax(profile)]),
         "speed_profile_error": float(np.sqrt(np.mean((profile - minimum_jerk_profile(tau)) ** 2))),
-        "speed_peaks": float(np.count_nonzero(is_peak)),
+        "speed_peaks": float(count_speed_peaks(times, hand)),
         "path_deviation": float(np.max(np.abs(across)) / distance),
         "overshoot": float(max(0.0, along.max() - distance) / distance),
         "final_error": float(np.linalg.norm(hand[-1] - target)),
     }
+
+
+def count_speed_peaks(times: NDArray[np.float64], hand: NDArray[np.float64]) -> int:
+    """Return the number of peaks in the hand speed, ignoring those below 10 % of the highest; 1 is smooth."""
+    speed = hand_speed(times, hand)
+    inner = speed[1:-1]
+    is_peak = (inner > speed[:-2]) & (inner >= speed[2:]) & (inner > PEAK_THRESHOLD * speed.max())
+    return int(np.count_nonzero(is_peak))
+
+
+def onset_index(hand: NDArray[np.float64], distance: float = MOVED) -> int | None:
+    """Return the first sample where the hand is more than ``distance`` from where it started, or None if never.
+
+    It marks when a movement begins, whether it starts smoothly or with a jump.
+    """
+    moved = np.linalg.norm(hand - hand[0], axis=1) > distance
+    return int(np.argmax(moved)) if moved.any() else None
+
+
+def jitter(values: NDArray[np.float64], window: int) -> float:
+    """Return the RMS deviation of ``values`` from their centered moving average over ``window`` samples.
+
+    ``values`` is a sequence of vectors, shaped ``(n, d)``, such as joint angles, and
+    ``window`` is odd. The deviation is the vector's length, averaged over the samples
+    whose window fits: a straight ramp has none, and noise faster than the window
+    shows almost in full. It is in the units of ``values``.
+    """
+    kernel = np.ones(window) / window
+    smooth = np.column_stack([np.convolve(values[:, j], kernel, mode="valid") for j in range(values.shape[1])])
+    half = window // 2
+    residual = values[half : len(values) - half] - smooth
+    return float(np.sqrt(np.mean(np.sum(residual**2, axis=1))))
 
 
 def path_distance(path: NDArray[np.float64], reference: NDArray[np.float64]) -> float:
