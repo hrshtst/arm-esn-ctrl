@@ -132,6 +132,14 @@ EXAMPLES = [
     ("block", "block", (0.0, 0.0)),
 ]
 EXAMPLE_END = 2.5  # the joint angles are drawn until this task time (s)
+# The underdamped trackers (Section 3.9): the damping ratios of the runs, the one of the examples' figures,
+# how long those figures run (s), and the window after every reach in which the ringing is measured (s).
+DAMPINGS = [1.0, 0.5, 0.3, 0.1]
+UNDERDAMPED = 0.1
+UNDERDAMPED_END = 5.0
+RINGING_WINDOW = (2.5, 5.0)
+RINGING = SUMMARY / "ringing.csv"
+LAW_STYLES = {"computed_torque": "-", "pd": "--"}
 # The animations of the examples: one tracker setting, the task times they cover (s), and their frame rate.
 ANIMATION_SETTING = ("pd", 20.0)
 ANIMATION_SPAN = (-0.2, 3.0)
@@ -153,11 +161,14 @@ def main() -> None:
         "robot.png": plot_robot(),
         "offsets.png": plot_offsets(),
         "gains.png": plot_gains(),
+        "damping.png": plot_damping(),
     }
     if args.logs:
         figures["block.png"] = plot_block()
         for name, scenario, offset in EXAMPLES:
             figures[f"example_{slug(name)}.png"] = plot_example(name, scenario, offset)
+            figures[f"underdamped_{slug(name)}.png"] = plot_example(name, scenario, offset, UNDERDAMPED)
+        write_ringing()
         write_departures()
         write_offset_references()
         write_push_progress()
@@ -229,6 +240,19 @@ def robot_rows(scenario: str, arm: str, law: str, omega: float) -> list[dict[str
         return [r for r in rows if r["arm"] == "demonstrator"]
     name = "esn" if arm in ROBOT_ESNS else arm
     return [r for r in rows if r["arm"] == name and r["law"] == law and r["omega"] == omega]
+
+
+def damping_rows(scenario: str, arm: str, law: str, damping: float) -> list[dict[str, Any]]:
+    """The metrics rows of one arm in the underdamped runs of a scenario, at one law and damping ratio.
+
+    Each law runs at its featured natural frequency. The replay and the demonstrator
+    are read from the tuned ESN's runs.
+    """
+    rows = read_csv(RESULTS / robot_run(scenario, arm if arm in ROBOT_ESNS else "tuned", "_damping") / "metrics.csv")
+    if arm == "demonstrator":
+        return [r for r in rows if r["arm"] == "demonstrator"]
+    name = "esn" if arm in ROBOT_ESNS else arm
+    return [r for r in rows if r["arm"] == name and r["law"] == law and r["damping"] == damping]
 
 
 def mean(rows: list[dict[str, Any]], key: str) -> float:
@@ -552,6 +576,50 @@ def plot_gains() -> Figure:
     return fig
 
 
+def plot_damping() -> Figure:
+    """The underdamped runs against the damping ratio (falling to the right): one column per scenario.
+
+    Rows: the share of the runs that arrive and hold, their settling time (of those
+    that settle), and the final distance to the target.
+    """
+    measures = [
+        ("success", "Arrive and hold (% of runs)", 1.0, False),
+        ("settling_time_s", "Settling time (s)", 1.0, False),
+        ("final_distance_m", "Final distance to the target (mm)", 1000.0, True),
+    ]
+    fig = Figure(figsize=(18, 9.5), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(
+        "Underdamped trackers: computed torque at ω = 10 rad/s (solid), joint PD at ω = 20 rad/s (dashed)",
+        color="#0b0b0b",
+    )
+    axes = fig.subplots(len(measures), len(SCENARIOS), squeeze=False)
+    for row, (key, title, factor, log) in enumerate(measures):
+        for column, scenario in enumerate(SCENARIOS):
+            ax = axes[row, column]
+            style(ax)
+            for arm in ("tuned", "eight", "replay"):
+                for law, _, _ in FEATURED:
+                    values = [mean(damping_rows(scenario, arm, law, z), key) * factor for z in DAMPINGS]
+                    label = f"{ARM_LABELS[arm]}, {LAW_NAMES[law]}"
+                    kwargs = {"color": ARM_COLORS[arm], "marker": ARM_MARKERS[arm], "markersize": 6}
+                    ax.plot(DAMPINGS, values, linestyle=LAW_STYLES[law], linewidth=1.6, label=label, **kwargs)
+            ax.set_xscale("log")
+            ax.set_xticks(DAMPINGS, [f"{z:g}" for z in DAMPINGS])
+            ax.minorticks_off()
+            ax.set_xlim(1.25, 0.08)  # less damping to the right
+            if log:
+                ax.set_yscale("log")
+            if key == "success":
+                ax.set_ylim(-5, 105)
+            n = len(damping_rows(scenario, "replay", "pd", 1.0))
+            ax.set_title(f"{scenario} ({n} start{'s' if n > 1 else ''}): {title}", color=TEXT_COLOR, fontsize=9)
+            if row == len(measures) - 1:
+                ax.set_xlabel("damping ratio ζ", color=TEXT_COLOR, fontsize=9)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
+    return fig
+
+
 # ---------------------------------------------------------------------------- the run logs
 
 
@@ -749,6 +817,37 @@ def write_push_progress() -> None:
     write_csv(PUSH_PROGRESS, rows)
 
 
+def write_ringing() -> None:
+    """How each ESN's output rings with its arm after the reach, with the trackers at the damping ratio 0.1.
+
+    For every example and featured law, over a window after every reach: the
+    standard deviation of the output against the arm's, joint by joint (1: the
+    output rings as much as the arm; 0: it holds still), and the lag of the output
+    behind the arm, from their cross-correlation. Joints that ring less than 0.2°
+    (standard deviation) are left out, as report 002 did.
+    """
+    rows = []
+    begin, end = RINGING_WINDOW
+    for name, scenario, offset in EXAMPLES:
+        for law, omega, _ in FEATURED:
+            paths = example_paths(scenario, offset, law, omega, UNDERDAMPED)
+            for esn in ROBOT_ESNS:
+                log = StateLog.load(paths[esn])
+                times = log.times[(log.times >= begin - 1e-9) & (log.times <= end + 1e-9)]
+                arm, output = joint_angles_at(log, times), joint_angles_at(log, times, "q_ref")
+                for joint in range(arm.shape[1]):
+                    a, b = arm[:, joint] - arm[:, joint].mean(), output[:, joint] - output[:, joint].mean()
+                    if a.std() < 0.2:  # this joint has stopped ringing (deg)
+                        continue
+                    lag = (np.argmax(np.correlate(b, a, "full")) - (len(a) - 1)) * float(np.diff(times).mean())
+                    rows.append(
+                        {"example": name, "law": law, "omega": omega, "damping": UNDERDAMPED, "esn": esn}
+                        | {"joint": joint + 1, "arm_std_deg": float(a.std()), "lag_s": lag}
+                        | {"amplitude_ratio": float(b.std() / a.std())}
+                    )
+    write_csv(RINGING, rows)
+
+
 def slug(name: str) -> str:
     """A file name part for an example's name."""
     return name.replace(" ", "_")
@@ -760,9 +859,16 @@ def example_start(scenario: str, esn: str, suffix: str, offset: tuple[float, flo
     return next(int(r["start"]) for r in rows if r["arm"] == "demonstrator" and offset_of(r["origin"]) == offset)
 
 
-def example_paths(scenario: str, offset: tuple[float, float], law: str, omega: float) -> dict[str, Path]:
-    """The logs of an example: the three tracked arms, the demonstrator, and its undisturbed reach from that start."""
+def example_paths(
+    scenario: str, offset: tuple[float, float], law: str, omega: float, damping: float | None = None
+) -> dict[str, Path]:
+    """The logs of an example: the three tracked arms, the demonstrator, and its undisturbed reach from that start.
+
+    With a ``damping`` ratio, the logs are those of the underdamped runs.
+    """
     setting, suffix = setting_name(law, omega)
+    if damping is not None:
+        setting, suffix = f"{law}_w{omega:g}" + ("" if damping == 1.0 else f"_z{damping:g}"), "_damping"
     paths = {}
     for arm, esn, name in (("tuned", "tuned", "esn"), ("eight", "eight", "esn"), ("replay", "tuned", "replay")):
         paths[arm] = robot_log_path(scenario, esn, suffix, setting, name, example_start(scenario, esn, suffix, offset))
@@ -781,20 +887,25 @@ def example_title(name: str, offset: tuple[float, float]) -> str:
     return f"{name}: start offset by {offset[0]:+g}° in joint 1 and {offset[1]:+g}° in joint 2"
 
 
-def plot_example(name: str, scenario: str, offset: tuple[float, float]) -> Figure:
+def plot_example(name: str, scenario: str, offset: tuple[float, float], damping: float | None = None) -> Figure:
     """The joint angles of one example over time: each ESN's arm and output against the replay and the demonstrator.
 
-    One column per ESN and featured tracker setting, one row per joint.
+    One column per ESN and featured tracker setting, one row per joint. With a
+    ``damping`` ratio, the trackers are underdamped, and the figure covers the whole run.
     """
     columns = [(esn, law, omega) for esn in ROBOT_ESNS for law, omega, _ in FEATURED]
     logs = {
-        (law, omega): {arm: StateLog.load(path) for arm, path in example_paths(scenario, offset, law, omega).items()}
+        (law, omega): {
+            arm: StateLog.load(path) for arm, path in example_paths(scenario, offset, law, omega, damping).items()
+        }
         for law, omega, _ in FEATURED
     }
-    times = np.arange(0.0, EXAMPLE_END + 1e-9, 0.005)
+    end = EXAMPLE_END if damping is None else UNDERDAMPED_END
+    times = np.arange(0.0, end + 1e-9, 0.005)
     from_start = offset != (0.0, 0.0)
     fig = Figure(figsize=(18, 7.2), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle(f"Joint angles over time: {example_title(name, offset)}", color="#0b0b0b")
+    damped = "" if damping is None else f", trackers underdamped (ζ = {damping:g})"
+    fig.suptitle(f"Joint angles over time: {example_title(name, offset)}{damped}", color="#0b0b0b")
     axes = fig.subplots(2, len(columns), sharex=True, squeeze=False)
     for column, (esn, law, omega) in enumerate(columns):
         run = logs[(law, omega)]
@@ -1098,6 +1209,44 @@ def print_tables() -> None:
             print(f"  {ARM_LABELS[arm]}, {LAW_NAMES[law]} {omega:g}: {arrival['nominal']:.2f}; {shifts}")
             if arm == "demonstrator":
                 break
+
+    print("\n== 3.9 Underdamped: of the 7 example runs, those that arrive and hold; those that settle;")
+    print("the worst final distance (mm)")
+    for law, omega, _ in FEATURED:
+        for damping in DAMPINGS:
+            cells = []
+            for arm in ("tuned", "eight", "replay"):
+                rows = [r for scenario in SCENARIOS for r in damping_rows(scenario, arm, law, damping)]
+                settled = sum(np.isfinite(r["settling_time_s"]) for r in rows)
+                worst = 1000 * max(r["final_distance_m"] for r in rows)
+                cells.append(f"{sum(r['success'] for r in rows)}, {settled}, {worst:.1f}")
+            print(f"  {LAW_NAMES[law]} {omega:g}, ζ = {damping:g} (tuned / eight / replay): " + " / ".join(cells))
+    print("\n== 3.9 Underdamped: per scenario, arrive and hold (tuned / eight / replay), ζ = 1 / 0.5 / 0.3 / 0.1")
+    for law, omega, _ in FEATURED:
+        for scenario in SCENARIOS:
+            cells = []
+            for arm in ("tuned", "eight", "replay"):
+                cells.append(
+                    " ".join(f"{sum(r['success'] for r in damping_rows(scenario, arm, law, z))}" for z in DAMPINGS)
+                )
+            n = len(damping_rows(scenario, "replay", law, 1.0))
+            print(f"  {LAW_NAMES[law]} {omega:g}, {scenario} (of {n}): " + " | ".join(cells))
+    if RINGING.exists():
+        print("\n== 3.9 Ringing after the reach (ζ = 0.1): the output's amplitude against the arm's, and its lag (s),")
+        print("median (range) over the ringing joints of the 7 examples")
+        rows = read_csv(RINGING)
+        for law, omega, _ in FEATURED:
+            for esn in ROBOT_ESNS:
+                group = [r for r in rows if r["law"] == law and r["esn"] == esn]
+                if not group:
+                    print(f"  {LAW_NAMES[law]} {omega:g}, {ARM_LABELS[esn]}: no joint rings")
+                    continue
+                ratios, lags = [r["amplitude_ratio"] for r in group], [r["lag_s"] for r in group]
+                print(
+                    f"  {LAW_NAMES[law]} {omega:g}, {ARM_LABELS[esn]}: {len(group)} joints; amplitude"
+                    f" {np.median(ratios):.2f} ({min(ratios):.2f}-{max(ratios):.2f}); lag {np.median(lags):+.3f}"
+                    f" ({min(lags):+.3f} to {max(lags):+.3f})"
+                )
 
     if PUSH_PROGRESS.exists():
         print("\n== 3.6 Progress moved by the pushes along the reach (fraction of the path), at 0.5 s and 0.6 s")
