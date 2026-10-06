@@ -78,6 +78,29 @@ is longer; one that times it from the end of the warm-up arrives as before.
 | `warmup_single_demo_settings_{raw,filtered}.toml` | of `grid_single_demo_settings_{raw,filtered}.toml` (trained with a 1 s warm-up) |
 | `warmup_multi_demo_settings_{raw,filtered}.toml` | of `grid_multi_demo_settings_{raw,filtered}.toml` (trained with a 0.25 s warm-up) |
 
+## Phase 4: sweeps
+
+The settings of report 003 do not suit the take: the tuned ESN stays where the hand
+paused, and those found best for eight demonstrations fail from every offset start.
+The sweeps follow Lukoševičius, *A Practical Guide to Applying Echo State
+Networks* (2012): first the three main reservoir parameters (§3.3.1), on a coarse
+grid (§3.3.4), then the ridge on a logarithmic grid (§4.2), with the warm-up.
+
+Every combination runs from the 169 start postures of Phase 1 and is ranked by
+robustness: the fewest runs that fail to arrive and hold, then the fewest runs whose
+first step is a jump of more than 30 mm rather than a mild return toward the taught
+motion (`[ranking]`), then the smallest mean first step. How closely a run
+reproduces the taught motion does not count.
+
+| Configurations | Sweep |
+| --- | --- |
+| `sweep_main_ridge_{1e-6,1}_{raw,filtered}.toml` | spectral radius 0.3 to 1.5, leak rate 0.01 to 0.5, and input scaling 0.03 to 3 (150 combinations), at ridge 1e-6 or 1, with 400 neurons and a 1 s warm-up |
+
+```bash
+uv run python experiments/sweep_esn.py \
+    experiments/manual_demonstration_autonomous_reaching/sweep_main_ridge_1_raw.toml
+```
+
 ## Runs
 
 Under `results/manual_demonstration_autonomous_reaching/` in the storage, all on the
