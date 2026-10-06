@@ -5,7 +5,7 @@
 
 [runs]
 # A run directory of experiments/autonomous_esn.py, relative to the storage root.
-grid = "results/manual_demonstration_autonomous_reaching/20261006-203058-grid_candidate_d_raw"
+grid = "results/manual_demonstration_autonomous_reaching/20261006-213831-grid_candidate_d_raw"
 
 [convergence]
 step = 0.1             # s: the hand paths are compared at this period
