@@ -117,6 +117,23 @@ def test_the_reference_moves_straight_from_one_posture_to_the_next():
     assert log.channel("q_ref")[task] == pytest.approx(expected, abs=1e-12)
 
 
+@pytest.mark.parametrize("given", [True, False])
+def test_without_the_reference_velocity_joint_pd_lags_a_ramp_by_kd_over_kp_times_its_speed(given):
+    start = np.radians([30.0, 90.0])
+    step = np.radians([0.1, -0.05])
+    ramp = start + step * np.arange(1, 400)[:, np.newaxis]  # a constant reference velocity
+    config = TrackerConfig("pd", omega=40.0, acceleration_filter=0.02, reference_velocity=given)
+
+    log = run(ReplaySource(np.vstack([start, ramp]).astype(np.float64)), start, config, duration=1.0)
+
+    # Once settled, the arm moves with the reference; without its velocity, the
+    # derivative term resists that motion, which the proportional term balances.
+    kp, kd = tracking_gains(config, Skeleton.from_toml(CONFIG), start)
+    lag = 0.0 if given else kd / kp * step / ESN_CONFIG.dt
+    settled = (log.times > 0.5) & (log.times < 0.9)
+    assert np.degrees(log.channel("error")[settled] - lag) == pytest.approx(0.0, abs=0.01)
+
+
 def test_replaying_a_demonstration_reproduces_it(demos):
     demo = demos[1]
 

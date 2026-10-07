@@ -9,7 +9,10 @@ one period later, q̂_{k+1}. Between two such instants, the reference moves in a
 straight line from q̂_k to q̂_{k+1}, so its velocity is (q̂_{k+1} - q̂_k)/Δ; its
 acceleration is the change of that velocity per period, low-pass filtered. A
 tracking law of skelarm, computed torque or joint PD, turns the reference into
-joint torques at every simulation step.
+joint torques at every simulation step. The tracking law can instead be given a
+zero reference velocity (``reference_velocity = False``): then its derivative term
+damps the arm's own velocity, as in PD control of a fixed posture, rather than the
+velocity error.
 
 There are two sources:
 
@@ -58,6 +61,7 @@ class TrackerConfig:
     omega: float | None  # natural frequency of the tracking error (rad/s); None if the gains are given directly
     acceleration_filter: float  # time constant of the low-pass filter on the reference acceleration (s)
     damping: float = 1.0  # damping ratio of the tracking error: 1 is critically damped, less oscillates
+    reference_velocity: bool = True  # False gives the tracking law a zero reference velocity
 
 
 def tracking_gains(
@@ -236,7 +240,9 @@ class ReferenceTracker(Controller):
             velocity = (self._q_to - self._q_from) / self.period
             acceleration = (velocity - self._velocity) / self.period
             self.reference.ddq = self.reference.ddq + self._filter_gain * (acceleration - self.reference.ddq)
-            self.reference.dq = self._velocity = velocity
+            self._velocity = velocity
+            if self.config.reference_velocity:
+                self.reference.dq = velocity
         self.reference.q = self._q_from + (within / steps_per_period) * (self._q_to - self._q_from)
         self._step += 1
 

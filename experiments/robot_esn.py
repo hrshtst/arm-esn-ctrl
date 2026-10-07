@@ -18,7 +18,10 @@ The ESN and the replay run with every tracking law, natural frequency of the
 tracking error, and damping ratio listed in ``[tracker]`` (``dampings`` is
 optional; its default, 1, is critically damped). ``omegas`` is a list for every
 law, or a table with a list for each law, such as
-``omegas = {computed_torque = [10.0], pd = [20.0]}``. Their runs start with the arm holding its
+``omegas = {computed_torque = [10.0], pd = [20.0]}``. With ``reference_velocity =
+false`` (optional; the default is true), the tracking laws are given a zero
+reference velocity, so that their derivative term damps the arm's own velocity
+rather than the velocity error. Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table pushes or blocks all three arms alike
 (see :mod:`arm_esn_ctrl.disturbances`); start postures away from the demonstrated
@@ -114,6 +117,8 @@ def main() -> None:
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
     print(f"ESN {config['esn']['model']}, trained on {len(setup.demos)} demonstrations")
     print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
+    if not config["tracker"].get("reference_velocity", True):
+        print("The tracking laws are given a zero reference velocity")
 
     def disturbance_from(i: int) -> Any:
         """A fresh disturbance for a run from start posture ``i``."""
@@ -139,7 +144,13 @@ def main() -> None:
     end_posture = np.mean([q[-1] for q in setup.demos.values()], axis=0)  # where the reaches end
     for setting in settings:
         law, omega = setting.law, setting.omega
-        tracker_config = TrackerConfig(law, omega, tracker["acceleration_filter"], damping=setting.damping)
+        tracker_config = TrackerConfig(
+            law,
+            omega,
+            tracker["acceleration_filter"],
+            damping=setting.damping,
+            reference_velocity=tracker.get("reference_velocity", True),
+        )
         gains = tracking_gains(tracker_config, setup.skeleton, end_posture)
         setting_dir = run_dir / setting.name
         setting_dir.mkdir()
@@ -167,6 +178,7 @@ def main() -> None:
                             "law": law,
                             "omega": omega,
                             "damping": setting.damping,
+                            "reference_velocity": tracker_config.reference_velocity,
                             "start": start.origin,
                         },
                     },

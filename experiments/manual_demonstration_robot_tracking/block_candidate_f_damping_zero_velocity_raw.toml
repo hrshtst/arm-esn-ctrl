@@ -1,0 +1,54 @@
+# Stage 2 with a demonstration taught by hand, joint PD underdamped, without the
+# reference velocity: the tip held from 4.1 s to 4.6 s by a stiff spring-damper,
+# then let go.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/block_candidate_f_damping_zero_velocity_raw.toml
+#
+# The ESN is candidate F of manual-demonstration autonomous reaching
+# (grid_candidate_f_raw.toml): leak rate 0.7, spectral radius 1.05, input scaling
+# 0.3, ridge 1e-2, and a 1 s warm-up, trained on the take as recorded, which the
+# replay replays. On its own, it returns mildly onto the taught path from every
+# start of the grid, without swinging or jumping.
+#
+# The disturbances strike at the times of the other ESNs' runs: when the take's hand
+# is 3.4 % (the block, 4.10 s) and 9.9 % (the pushes, 4.32 s) of the way to the
+# target, as report 003's struck its scripted reach. On its own, candidate F reaches
+# about 2 s earlier than the take, so they strike it mid-reach: its hand is then
+# 49 % and 58 % of the way.
+#
+# As block_candidate_f_damping_raw.toml, with joint PD only (omega = 20 rad/s,
+# damping ratios 1, 0.5, 0.3, and 0.1), and with the tracking laws given a zero
+# reference velocity.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_autonomous_reaching/20261006-223223-grid_candidate_f_raw/esn.toml"
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["pd"]
+# A natural frequency of the tracking error (rad/s), and several damping ratios: 1
+# is critically damped, and smaller ratios make the error oscillate as it decays.
+# Joint PD: kp = omega^2, kd = 2 zeta omega, scaled by each joint's inertia at the
+# posture where the reach ends.
+omegas = [20.0]
+dampings = [1.0, 0.5, 0.3, 0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+# The tracking laws are given a zero reference velocity, so that the derivative
+# term damps the arm's own velocity rather than the velocity error.
+reference_velocity = false
+
+[evaluation]
+duration = 16.0        # task (s), after the warm-up; the demonstration lasts 14.8 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+effort_window = [4.1, 5.1]  # torque, effort, and force are measured from the block's onset for 1 s (s)
+
+[disturbance]
+type = "block"
+onset = 4.1            # task time when the tip is gripped (s)
+release = 4.6          # task time when it is let go (s)
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m
