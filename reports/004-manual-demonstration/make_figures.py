@@ -27,8 +27,9 @@ pushed and held, Section 3.7), and writes ``candidates.csv``, ``dwell.csv``, and
 also draws the joint angles of the examples, scenario by scenario, with the trackers
 critically damped (``example_<name>.png``, Section 3.8) and underdamped
 (``underdamped_<name>.png``, Section 3.9). With ``--animations``, it animates each
-example (``example_<name>.gif``, Section 3.8): the arms side by side, each rendered
-by skelarm's player.
+example, the arms side by side, each rendered by skelarm's player: with the trackers
+critically damped (``example_<name>.gif``, Section 3.8) and with joint PD underdamped
+(``underdamped_<name>.gif``, Section 3.9).
 """
 
 from __future__ import annotations
@@ -163,6 +164,12 @@ ANIMATION_PANELS = [
     ("replay, joint PD 20 rad/s", "replay", "_pd_gains", "pd_w20", REPLAY_COLOR),
     ("F, computed torque 10 rad/s", "esn", "", "computed_torque_w10", "#4a3aa7"),
 ]
+# The animations of the underdamped examples: candidate F and the replay, both with joint PD underdamped.
+UNDERDAMPED_ANIMATION_PANELS = [
+    ("F, joint PD 20 rad/s", "esn", "_damping", "pd_w20_z0.1", ESN_COLOR),
+    ("replay, joint PD 20 rad/s", "replay", "_damping", "pd_w20_z0.1", REPLAY_COLOR),
+]
+UNDERDAMPED_NOTE = "tracker underdamped: damping ratio 0.1"
 ANIMATION_SPAN = (-0.2, 16.0)
 ANIMATION_FPS = 10.0
 ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
@@ -197,7 +204,10 @@ def main() -> None:
     print_tables()
     if args.animations:
         for name, scenario, offset in EXAMPLES:
-            export_example_animation(name, scenario, offset)
+            export_example_animation(name, scenario, offset, ANIMATION_PANELS, "example")
+            export_example_animation(
+                name, scenario, offset, UNDERDAMPED_ANIMATION_PANELS, "underdamped", UNDERDAMPED_NOTE
+            )
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -829,12 +839,23 @@ def plot_example(name: str, scenario: str, offset: tuple[float, float], settings
     return fig
 
 
-def export_example_animation(name: str, scenario: str, offset: tuple[float, float]) -> None:
-    """Animate an example: the arms of ANIMATION_PANELS side by side, each rendered by skelarm's player.
+def export_example_animation(
+    name: str,
+    scenario: str,
+    offset: tuple[float, float],
+    panels: list[tuple[str, str, str, str, str]],
+    prefix: str,
+    note: str | None = None,
+) -> None:
+    """Animate an example into ``<prefix>_<name>.gif``: the arms of ``panels`` side by side, rendered by skelarm.
 
-    The player exports each arm's run as a GIF (``--export``); its frames, which the
-    GIF merges where the arm rests, are spread back over time, cropped to where the
-    arms move, labeled, and tiled into one GIF with the task time and the disturbance.
+    Each panel is a label, an arm ("esn" or "replay"), a configuration suffix, a
+    tracker setting, and the label's color. The player exports each arm's run as a
+    GIF (``--export``); its frames, which the GIF merges where the arm rests, are
+    spread back over time, cropped to where the arms move, labeled, and tiled into
+    one GIF with the task time and the disturbance. With a ``note``, the header has
+    two lines: the example, then the note with the time. A header line too wide for
+    the panels is set in a smaller font.
     """
     import tempfile
 
@@ -845,7 +866,7 @@ def export_example_animation(name: str, scenario: str, offset: tuple[float, floa
     player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
     frames, starts = [], []
     with tempfile.TemporaryDirectory() as tmp:
-        for i, (_, arm, suffix, setting, _) in enumerate(ANIMATION_PANELS):
+        for i, (_, arm, suffix, setting, _) in enumerate(panels):
             path = example_log_path(scenario, suffix, setting, arm, offset)
             exported = Path(tmp) / f"{i}.gif"
             subprocess.run(
@@ -867,20 +888,36 @@ def export_example_animation(name: str, scenario: str, offset: tuple[float, floa
     top, bottom = int(max(rows.min() - margin, 0)), int(rows.max() + margin)
     left, right = int(max(cols.min() - margin, 0)), int(cols.max() + margin)
     width, height = right - left, bottom - top
-    header, label_height, gap = 44, 30, 8
-    font = ImageFont.load_default(size=20)
+    label_height, gap = 30, 8
+    canvas_width = len(frames) * width + (len(frames) - 1) * gap
     small = ImageFont.load_default(size=15)
-    images = []
-    for t in np.arange(ANIMATION_SPAN[0], ANIMATION_SPAN[1] + 1e-9, 1.0 / ANIMATION_FPS):
-        canvas = Image.new(
-            "RGB", (len(frames) * width + (len(frames) - 1) * gap, header + label_height + height), "white"
-        )
-        draw = ImageDraw.Draw(canvas)
+
+    def header_lines(t: float) -> list[str]:
         status = ""
         if scenario in SPANS and SPANS[scenario][0] <= t < SPANS[scenario][1]:
             status = f"   {DISTURBANCES.get(scenario, 'blocked')}"
-        draw.text((10, 10), f"{example_title(name, offset)}   t = {t:+.1f} s{status}", fill="#0b0b0b", font=font)
-        for i, (label, _, _, _, color) in enumerate(ANIMATION_PANELS):
+        clock = f"t = {t:+.1f} s{status}"
+        title = example_title(name, offset)
+        return [f"{title}   {clock}"] if note is None else [title, f"{note}   {clock}"]
+
+    # One font for every frame: the largest, up to 20, in which every header line fits. The widest lines are
+    # those with a disturbance's status, or with the last time.
+    lines = [line for t in (*SPANS.get(scenario, ()), ANIMATION_SPAN[1]) for line in header_lines(t)]
+    measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    size = 20
+    while size > 12 and max(measure.textlength(line, font=ImageFont.load_default(size=size)) for line in lines) > (
+        canvas_width - 20
+    ):
+        size -= 1
+    font = ImageFont.load_default(size=size)
+    header = 44 if note is None else 44 + size + 6
+    images = []
+    for t in np.arange(ANIMATION_SPAN[0], ANIMATION_SPAN[1] + 1e-9, 1.0 / ANIMATION_FPS):
+        canvas = Image.new("RGB", (canvas_width, header + label_height + height), "white")
+        draw = ImageDraw.Draw(canvas)
+        for row, line in enumerate(header_lines(t)):
+            draw.text((10, 10 + row * (size + 6)), line, fill="#0b0b0b", font=font)
+        for i, (label, _, _, _, color) in enumerate(panels):
             k = int(np.clip(round((t - starts[i]) * ANIMATION_FPS), 0, len(frames[i]) - 1))
             x = i * (width + gap)
             canvas.paste(Image.fromarray(frames[i][k][top:bottom, left:right]), (x, header + label_height))
@@ -894,7 +931,7 @@ def export_example_animation(name: str, scenario: str, offset: tuple[float, floa
     palette = sample.quantize(colors=128, method=Image.Quantize.MEDIANCUT)
     images = [image.quantize(palette=palette, dither=Image.Dither.NONE) for image in images]
     durations = [round(1000.0 / ANIMATION_FPS)] * (len(images) - 1) + [ANIMATION_HOLD_MS]
-    gif = SUMMARY / f"example_{slug(name)}.gif"
+    gif = SUMMARY / f"{prefix}_{slug(name)}.gif"
     images[0].save(gif, save_all=True, append_images=images[1:], duration=durations, loop=0, optimize=True)
     print(f"wrote {gif.name}: {len(images)} frames")
 

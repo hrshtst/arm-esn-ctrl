@@ -204,8 +204,9 @@ copies. With `--logs`, it reads the runs' logs under the storage root, which are
 kept in Git, to draw `candidates.png`, `dwell.png`, `pushes.png`, and the joint
 angles of the examples of Sections 3.8 and 3.9 (`example_<name>.png`,
 `underdamped_<name>.png`), and to write `candidates.csv`, `dwell.csv`, and
-`pushes.csv`. With `--animations`, it exports the examples' animations of Section
-3.8 (`example_<name>.gif`), each arm rendered by skelarm's player.
+`pushes.csv`. With `--animations`, it exports the examples' animations, each arm
+rendered by skelarm's player: those of Section 3.8 (`example_<name>.gif`), and those
+of Section 3.9 with joint PD underdamped (`underdamped_<name>.gif`).
 
 ## 3. Results
 
@@ -608,48 +609,83 @@ Of the 7 runs of each arm (candidate F / replay):
   and after its yank from the offsets, but never passes the hold: its holds fail on
   the take's correction (Section 3.6).
 
+The examples at ζ = 0.1:
+
+- **Each figure:** the joint angles over time, as in Section 3.8, with computed
+  torque at ω = 10 rad/s and joint PD at ω = 20 rad/s.
+- **Each animation:** candidate F and the replay side by side, both with joint PD
+  at ω = 20 rad/s and ζ = 0.1. Computed torque, under which F's arm swings away, is
+  not animated.
+
+#### Nominal, ζ = 0.1
+
+![Animation, underdamped: nominal](results/summary/underdamped_nominal.gif)
+
 ![Underdamped: nominal](results/summary/underdamped_nominal.png)
 
-Nominal, ζ = 0.1. With computed torque, F arrives at 5.8 s and holds for its 2 s,
-but the oscillation grows from about 8 s until the arm swings by tens of degrees
-(joint 2 up to 150° at 15.8 s); F's output rings with it. With joint PD, F settles
-smoothly; the replay's arm rings on the take's steps.
+With computed torque, F arrives at 5.8 s and holds for its 2 s, but the oscillation
+grows from about 8 s until the arm swings by tens of degrees (joint 2 up to 150° at
+15.8 s); F's output rings with it. With joint PD, F settles smoothly; the replay's
+arm rings on the take's steps, by up to 2° around the end posture.
+
+#### Offset ahead: (+10°, −10°), ζ = 0.1
+
+![Animation, underdamped: offset ahead](results/summary/underdamped_offset_ahead.gif)
 
 ![Underdamped: offset ahead](results/summary/underdamped_offset_ahead.png)
 
-Offset ahead, (+10°, −10°), ζ = 0.1. With computed torque, the arm rings around the
-end posture from its arrival at 1.8 s, and from about 10 s it spins: the joint
-angles wrap through ±180°. With joint PD, F's return is as when critically damped,
-and the replay's yank back to the take's start rings.
+With computed torque, the arm rings around the end posture from its arrival at 1.8
+s, and from about 10 s it spins: the joint angles wrap through ±180°. With joint PD,
+F's return is as when critically damped, and the replay's yank back to the take's
+start rings.
+
+#### Offset across: (−10°, −10°), ζ = 0.1
+
+![Animation, underdamped: offset across](results/summary/underdamped_offset_across.gif)
 
 ![Underdamped: offset across](results/summary/underdamped_offset_across.png)
 
-Offset across, (−10°, −10°), ζ = 0.1. With computed torque, the arm never arrives
-and ends 2.9 m from the target; with joint PD, F arrives at 3.0 s and holds.
+With computed torque, the arm never arrives and ends 2.9 m from the target; with
+joint PD, F arrives at 3.0 s and holds.
+
+#### Push across the reach (5 N), ζ = 0.1
+
+![Animation, underdamped: push across](results/summary/underdamped_push_across.gif)
 
 ![Underdamped: push across](results/summary/underdamped_push_across.png)
 
-Push across, ζ = 0.1. With computed torque, the push sets off an oscillation that
-grows until the arm spins, its joint angles wrapping through ±180° from about 8 s;
-with joint PD, F re-reaches as when critically damped, arriving at 13.0 s.
+With computed torque, the push sets off an oscillation that grows until the arm
+spins, its joint angles wrapping through ±180° from about 8 s; with joint PD, F
+re-reaches as when critically damped, arriving at 13.0 s.
+
+#### Push forward along the reach (10 N), ζ = 0.1
+
+![Animation, underdamped: push forward](results/summary/underdamped_push_forward.gif)
 
 ![Underdamped: push forward](results/summary/underdamped_push_forward.png)
 
-Push forward, 10 N, ζ = 0.1. With computed torque, the arm swings away; with joint
-PD, F skips ahead and arrives 1.2 s earlier than undisturbed, briefly passing the
-goal's edge.
+With computed torque, the arm swings away; with joint PD, F skips ahead and arrives
+1.2 s earlier than undisturbed, briefly passing the goal's edge.
+
+#### Push backward along the reach (10 N), ζ = 0.1
+
+![Animation, underdamped: push backward](results/summary/underdamped_push_backward.gif)
 
 ![Underdamped: push backward](results/summary/underdamped_push_backward.png)
 
-Push backward, 10 N, ζ = 0.1. With computed torque, the arm swings away; with joint
-PD, F starts over from about the start posture and arrives at 11.8 s.
+With computed torque, the arm swings away; with joint PD, F starts over from about
+the start posture and arrives at 11.8 s.
+
+#### Block, ζ = 0.1
+
+![Animation, underdamped: block](results/summary/underdamped_block.gif)
 
 ![Underdamped: block](results/summary/underdamped_block.png)
 
-Block, ζ = 0.1. With computed torque, F waits with the held arm and arrives at
-6.5 s, but its ringing grows from about 11 s until the arm swings away near the end,
-1.4 m from the target, as F's undisturbed arm also does; with joint PD, F waits with
-the held arm and arrives at 7.2 s.
+With computed torque, F waits with the held arm and arrives at 6.5 s, but its
+ringing grows from about 11 s until the arm swings away near the end, 1.4 m from the
+target, as F's undisturbed arm also does; with joint PD, F waits with the held arm
+and arrives at 7.2 s.
 
 ## 4. Observations
 
