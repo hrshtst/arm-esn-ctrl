@@ -77,6 +77,12 @@ mid-reach.
 uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/block_candidate_f_raw.toml
 ```
 
+`<scenario>_candidate_f_{pd_gains,damping}_zero_velocity_raw.toml` repeat its joint
+PD runs with the tracking law given a zero reference velocity
+(`reference_velocity = false` in `[tracker]`), so that the derivative term damps the
+arm's own velocity rather than the velocity error: joint PD at ω = 10, 20, and
+40 rad/s, and at ω = 20 rad/s with the damping ratios 1, 0.5, 0.3, and 0.1.
+
 ## Runs
 
 Under `results/manual_demonstration_robot_tracking/` in the storage, with the ESNs of
@@ -174,3 +180,15 @@ the grid runs of manual-demonstration autonomous reaching:
 | `20261007-003452-push_forward_candidate_f_damping_raw` | `push_forward_candidate_f_damping_raw.toml` |
 | `20261007-003452-push_forward_candidate_f_pd_gains_raw` | `push_forward_candidate_f_pd_gains_raw.toml` |
 | `20261007-003452-push_forward_candidate_f_raw` | `push_forward_candidate_f_raw.toml` |
+| `20261007-103933-block_candidate_f_damping_zero_velocity_raw` | `block_candidate_f_damping_zero_velocity_raw.toml` |
+| `20261007-103933-block_candidate_f_pd_gains_zero_velocity_raw` | `block_candidate_f_pd_gains_zero_velocity_raw.toml` |
+| `20261007-103933-nominal_candidate_f_damping_zero_velocity_raw` | `nominal_candidate_f_damping_zero_velocity_raw.toml` |
+| `20261007-103933-nominal_candidate_f_pd_gains_zero_velocity_raw` | `nominal_candidate_f_pd_gains_zero_velocity_raw.toml` |
+| `20261007-103933-offsets_candidate_f_damping_zero_velocity_raw` | `offsets_candidate_f_damping_zero_velocity_raw.toml` |
+| `20261007-103933-offsets_candidate_f_pd_gains_zero_velocity_raw` | `offsets_candidate_f_pd_gains_zero_velocity_raw.toml` |
+| `20261007-103933-push_across_candidate_f_damping_zero_velocity_raw` | `push_across_candidate_f_damping_zero_velocity_raw.toml` |
+| `20261007-103933-push_across_candidate_f_pd_gains_zero_velocity_raw` | `push_across_candidate_f_pd_gains_zero_velocity_raw.toml` |
+| `20261007-103933-push_backward_candidate_f_damping_zero_velocity_raw` | `push_backward_candidate_f_damping_zero_velocity_raw.toml` |
+| `20261007-103933-push_backward_candidate_f_pd_gains_zero_velocity_raw` | `push_backward_candidate_f_pd_gains_zero_velocity_raw.toml` |
+| `20261007-103933-push_forward_candidate_f_damping_zero_velocity_raw` | `push_forward_candidate_f_damping_zero_velocity_raw.toml` |
+| `20261007-103933-push_forward_candidate_f_pd_gains_zero_velocity_raw` | `push_forward_candidate_f_pd_gains_zero_velocity_raw.toml` |

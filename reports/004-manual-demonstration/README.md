@@ -56,6 +56,11 @@ arm.
     with computed torque, F's reference falls back toward the start and the arm
     swings 0.39–0.45 m off the path before reaching again: the sweeps tested offsets
     around the start posture only.
+  - *It needs the reference velocity.* Joint PD given a zero reference velocity, as
+    on real arms to avoid derivative kicks, lets the arm trail F's reference, and F
+    waits for it: critically damped at ω = 20 rad/s, no run arrives. The replay, whose
+    reference jumps, loses its torque pulses and holds; the ringing of a lightly
+    damped tracker stays (Section 3.10).
 
 ## 1. Question
 
@@ -172,7 +177,7 @@ by its name anywhere under `results/`; place or link the copies there to rerun.
 | `states_*`, `warmup_*` (8) | `uv run python experiments/{reservoir_states,warmup_esn}.py experiments/manual_demonstration_autonomous_reaching/<name>.toml` |
 | `sweep_*` (22) | `uv run python experiments/sweep_esn.py experiments/manual_demonstration_autonomous_reaching/<name>.toml` |
 | `grid_candidate_*`, `route_candidate_*` (12) | `uv run python experiments/{autonomous_esn,route_convergence}.py experiments/manual_demonstration_autonomous_reaching/<name>.toml` |
-| `<scenario>_<ESN>[_pd_gains\|_damping]_<take>` (90) | `uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/<name>.toml` |
+| `<scenario>_<ESN>[_pd_gains\|_damping][_zero_velocity]_<take>` (102) | `uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/<name>.toml` |
 | [`summary`](results/summary) | `uv run python reports/004-manual-demonstration/make_figures.py --logs --animations` |
 
 The `<scenario>` is `nominal`, `offsets`, `push_across`, `push_forward`,
@@ -192,6 +197,7 @@ configuration, and its run record (`run.toml`) gives its commit:
 | `f6b00a7`, `0b0023d` | the noise of the best around A, candidates C and D, and their routes |
 | `9768dac`, `4b2b7ca`, `c32c073` | the sweeps past the edge, candidates E and F, and their routes |
 | `5ff8465`, `64e7666` | candidate F on the robot; its pushes along the reach at 10 N |
+| `da06895` | candidate F with joint PD without the reference velocity |
 
 All runs are deterministic. Each run directory here holds its configuration, its
 run record, and its metrics (`metrics.csv`, `sweep.csv` and `runs.csv`,
@@ -203,8 +209,9 @@ candidates their maps (`grid.png`, `convergence.png`).
 copies. With `--logs`, it reads the runs' logs under the storage root, which are not
 kept in Git, to draw `candidates.png`, `dwell.png`, `pushes.png`, and the joint
 angles of the examples of Sections 3.8 and 3.9 (`example_<name>.png`,
-`underdamped_<name>.png`), and to write `candidates.csv`, `dwell.csv`, and
-`pushes.csv`. With `--animations`, it exports the examples' animations, each arm
+`underdamped_<name>.png`) and of joint PD without the reference velocity
+(`zero_velocity.png`, Section 3.10), and to write `candidates.csv`, `dwell.csv`,
+`pushes.csv`, and `zero_velocity.csv`. With `--animations`, it exports the examples' animations, each arm
 rendered by skelarm's player: those of Section 3.8 (`example_<name>.gif`), and those
 of Section 3.9 with joint PD underdamped (`underdamped_<name>.gif`).
 
@@ -687,6 +694,85 @@ ringing grows from about 11 s until the arm swings away near the end, 1.4 m from
 target, as F's undisturbed arm also does; with joint PD, F waits with the held arm
 and arrives at 7.2 s.
 
+### 3.10 Joint PD without the reference velocity
+
+Joint PD gives the torque τ = Kp (q_r − q) + Kd (q̇_r − q̇), and every run above
+gives it the reference's velocity q̇_r, the slope of the reference over each 10 ms
+period. Given q̇_r = 0 instead (`reference_velocity = false` in `[tracker]`), its
+derivative term damps the arm's own velocity, as in PD control of a fixed posture,
+which is said to suppress oscillation on real arms. That leaves the damping of the
+loop as it is, and changes two things:
+
+- **The reference no longer pushes through the damper.** Kd·q̇_r is a torque pulse
+  wherever the reference jumps, as at the take's pixel steps and the replay's jump
+  to the take's start; in the linear model of a joint, a step of the reference
+  overshoots by 13.5% with it, even at ζ = 1, and not at all without it. At the
+  loop's natural frequency, the push multiplies the reference's excitation by
+  √(1 + 4ζ²): 2.2 times at ζ = 1, 1.02 times at ζ = 0.1.
+- **The arm trails a moving reference,** by (Kd / Kp)·q̇ = (2ζ / ω)·q̇: by 0.2 s of
+  its motion at ω = 10 rad/s, 0.1 s at 20 rad/s, and 0.05 s at 40 rad/s, critically
+  damped; at ω = 20 rad/s and ζ = 0.1, by 0.01 s, one reference period.
+
+Every joint PD run of Sections 3.6 to 3.9 ran again this way: ω = 10, 20, and
+40 rad/s, critically damped, in every scenario with the 169 offsets, and
+ω = 20 rad/s at ζ = 0.5, 0.3, and 0.1 with the seven examples of Section 3.8.
+
+![Joint PD with and without the reference velocity](results/summary/zero_velocity.png)
+
+Arrive and hold, with the reference velocity → without it:
+
+| Joint PD | F: 7 examples | F: 169 offsets | Replay: 7 examples | Replay: 169 offsets |
+| --- | --- | --- | --- | --- |
+| ω = 10 | 0 → 0 | 0 → 0 | 7 → 7 | 169 → 169 |
+| ω = 20 | 6 → 0 | 169 → 0 | 0 → 7 | 0 → 169 |
+| ω = 40 | 7 → 1 | 169 → 12 | 0 → 7 | 0 → 169 |
+| ω = 20, ζ = 0.5 | 6 → 1 | | 0 → 0 | |
+| ω = 20, ζ = 0.3 | 6 → 1 | | 0 → 0 | |
+| ω = 20, ζ = 0.1 | 6 → 5 | | 0 → 0 | |
+
+The replay, with the reference velocity → without it:
+
+| Joint PD | Peak torque, nominal | Peak torque from the 169 offsets (mean) | Ringing, joints 1 and 2 | Nominal arrival |
+| --- | --- | --- | --- | --- |
+| ω = 10 | 25.4 → 2.1 N m | 354 → 16 N m | ×0.58, ×0.62 | 7.30 → 7.40 s |
+| ω = 20 | 50.8 → 5.2 N m | 709 → 58 N m | ×0.60, ×0.61 | 7.30 → 7.34 s |
+| ω = 40 | 101.7 → 13.3 N m | 1418 → 185 N m | ×0.59, ×0.59 | 7.29 → 7.32 s |
+| ω = 20, ζ = 0.5 | 25.4 → 7.4 N m | | ×0.82, ×0.82 | 7.31 → 7.33 s |
+| ω = 20, ζ = 0.3 | 17.1 → 8.9 N m | | ×0.92, ×0.91 | 7.31 → 7.33 s |
+| ω = 20, ζ = 0.1 | 12.4 → 11.2 N m | | ×0.99, ×0.99 | 7.32 → 7.33 s |
+
+The ringing is how much the arm moves near the tracker's natural frequency: the RMS
+of each joint angle with only the frequencies from half to twice ω/2π kept,
+averaged over the seven examples.
+
+- **The replay loses its torque pulses.** Without the reference velocity, the
+  take's pixel steps and the jump to the take's start no longer kick the arm:
+  critically damped, its peak torque falls 8- to 22-fold, and its ringing by about
+  40%. It now holds in every run at ω = 20 and 40 rad/s: the take's correction comes
+  back out to 18.9 mm from the target, and with the reference velocity the arm
+  overshoots it past the goal's edge, to 22.2 mm (ω = 20 rad/s) and 21.6 mm
+  (40 rad/s); without it, the arm stays within the goal. The cost is a lag: the
+  replay arrives 0.01–0.1 s later.
+- **It does not damp a lightly damped tracker.** The push it removes is
+  proportional to Kd, and so to ζ: the ringing falls by 18% at ζ = 0.5, 8–9% at
+  ζ = 0.3, and 1% at ζ = 0.1, and with ζ ≤ 0.5 the replay still fails every hold.
+  From the demonstrated start at ζ = 0.1, it leaves the goal out to 38 mm either
+  way. Only more damping helps there.
+- **Candidate F stalls.** F is driven by the measured posture and gives a reference
+  only a little ahead of the arm; the arm, trailing it, creeps, and F waits for it,
+  as it waits under the block. Critically damped at ω = 20 rad/s, the arm barely
+  leaves the start posture (dashed blue in the figure), and F's hand ends 497 mm
+  from the target. The less the arm trails, the further F gets: 12 of the 169
+  offsets arrive and hold at ω = 40 rad/s, and at ζ = 0.1, where the arm trails by
+  one reference period, F arrives and holds in 5 of the 7 examples, but later
+  (nominal: at 14.5 s instead of 6.45 s).
+- **So the choice depends on the reference.** Zeroing the reference velocity suits
+  a reference replayed by time that jumps, as the take does: it removes the
+  derivative kicks that would excite a real arm's unmodelled modes. It does not suit
+  a reference generated from the arm's measured state, as F's is: F's reference is
+  smooth, so there is no kick to remove, and the reference velocity is what lets the
+  arm keep F's pace.
+
 ## 4. Observations
 
 - **A person's take carries more than the reach.** Its pause, its grab move, and
@@ -710,7 +796,10 @@ and arrives at 7.2 s.
   attracting route and the target as its equilibrium, at least around the start.
 - **On the robot, the tracker is part of the loop.** An ESN that corrects toward
   the path adds feedback to the tracker's; together they need a tracker that is
-  neither slow nor lightly damped.
+  neither slow nor lightly damped, and that is given the reference velocity: without
+  it, the arm trails the reference, and an ESN driven by the measured posture waits
+  for the arm. A reference replayed by time is the opposite case: its jumps make the
+  reference velocity a train of torque pulses.
 
 ## 5. Next steps
 

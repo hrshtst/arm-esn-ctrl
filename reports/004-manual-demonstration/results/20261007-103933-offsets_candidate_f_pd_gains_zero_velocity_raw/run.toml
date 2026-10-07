@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_robot_tracking/offsets_candidate_f_pd_gains_zero_velocity_raw.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/offsets_candidate_f_pd_gains_zero_velocity_raw.toml"
+started = 2026-10-07 10:39:33+09:00
+host = "delbosque"
+commit = "da06895fbff627b5fdf4eb555c453e671abc1527"
+uncommitted_changes = false

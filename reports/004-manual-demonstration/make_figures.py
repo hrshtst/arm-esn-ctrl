@@ -26,9 +26,11 @@ pushed and held, Section 3.7), and writes ``candidates.csv``, ``dwell.csv``, and
 ``pushes.csv``, from which their tables are printed (also without the option). It
 also draws the joint angles of the examples, scenario by scenario, with the trackers
 critically damped (``example_<name>.png``, Section 3.8) and underdamped
-(``underdamped_<name>.png``, Section 3.9). With ``--animations``, it animates each
-example, the arms side by side, each rendered by skelarm's player: with the trackers
-critically damped (``example_<name>.gif``, Section 3.8) and with joint PD underdamped
+(``underdamped_<name>.png``, Section 3.9), and compares joint PD with and without
+the reference velocity (``zero_velocity.png`` and ``zero_velocity.csv``, Section
+3.10). With ``--animations``, it animates each example, the arms side by side, each
+rendered by skelarm's player: with the trackers critically damped
+(``example_<name>.gif``, Section 3.8) and with joint PD underdamped
 (``underdamped_<name>.gif``, Section 3.9).
 """
 
@@ -109,6 +111,7 @@ PUSHES_CSV = SUMMARY / "pushes.csv"
 
 ESN_COLOR = "#2a78d6"
 REPLAY_COLOR = "#eb6834"
+REPLAY_DARK_COLOR = "#8a3510"  # the replay's torque without the reference velocity, over its torque with it
 TAUGHT_COLOR = "#eb6834"
 RECORDED_COLOR = "#a3a29d"
 TEXT_COLOR = "#52514e"
@@ -173,6 +176,19 @@ UNDERDAMPED_NOTE = "tracker underdamped: damping ratio 0.1"
 ANIMATION_SPAN = (-0.2, 16.0)
 ANIMATION_FPS = 10.0
 ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
+# Joint PD without the reference velocity (Section 3.10): the runs repeat the joint PD runs, with this suffix after
+# their configuration suffix. The settings compared: label, configuration suffix, setting directory, ω (rad/s), ζ.
+ZERO_VELOCITY = "_zero_velocity"
+ZERO_VELOCITY_SETTINGS = [
+    ("joint PD, ω = 10", "_pd_gains", "pd_w10", 10.0, 1.0),
+    ("joint PD, ω = 20", "_pd_gains", "pd_w20", 20.0, 1.0),
+    ("joint PD, ω = 40", "_pd_gains", "pd_w40", 40.0, 1.0),
+    ("joint PD, ω = 20, ζ = 0.5", "_damping", "pd_w20_z0.5", 20.0, 0.5),
+    ("joint PD, ω = 20, ζ = 0.3", "_damping", "pd_w20_z0.3", 20.0, 0.3),
+    ("joint PD, ω = 20, ζ = 0.1", "_damping", "pd_w20_z0.1", 20.0, 0.1),
+]
+ZERO_VELOCITY_CSV = SUMMARY / "zero_velocity.csv"
+HOLD = 2.0  # s: the runs' hold window after arrival
 
 
 def main() -> None:
@@ -196,9 +212,11 @@ def main() -> None:
         for name, scenario, offset in EXAMPLES:
             figures[f"example_{slug(name)}.png"] = plot_example(name, scenario, offset, EXAMPLE_SETTINGS)
             figures[f"underdamped_{slug(name)}.png"] = plot_example(name, scenario, offset, UNDERDAMPED_SETTINGS)
+        figures["zero_velocity.png"] = plot_zero_velocity()
         write_candidates()
         write_dwell()
         write_pushes()
+        write_zero_velocity()
     for name, fig in figures.items():
         fig.savefig(SUMMARY / name, dpi=150)
     print_tables()
@@ -885,8 +903,8 @@ def export_example_animation(
     ink = np.any([(f < 235).any(axis=3).any(axis=0) for f in frames], axis=0)
     rows, cols = np.nonzero(ink)
     margin = 24
-    top, bottom = int(max(rows.min() - margin, 0)), int(rows.max() + margin)
-    left, right = int(max(cols.min() - margin, 0)), int(cols.max() + margin)
+    top, bottom = max(int(rows.min()) - margin, 0), int(rows.max()) + margin
+    left, right = max(int(cols.min()) - margin, 0), int(cols.max()) + margin
     width, height = right - left, bottom - top
     label_height, gap = 30, 8
     canvas_width = len(frames) * width + (len(frames) - 1) * gap
@@ -931,9 +949,122 @@ def export_example_animation(
     palette = sample.quantize(colors=128, method=Image.Quantize.MEDIANCUT)
     images = [image.quantize(palette=palette, dither=Image.Dither.NONE) for image in images]
     durations = [round(1000.0 / ANIMATION_FPS)] * (len(images) - 1) + [ANIMATION_HOLD_MS]
-    gif = SUMMARY / f"{prefix}_{slug(name)}.gif"
-    images[0].save(gif, save_all=True, append_images=images[1:], duration=durations, loop=0, optimize=True)
-    print(f"wrote {gif.name}: {len(images)} frames")
+    out = SUMMARY / f"{prefix}_{slug(name)}.gif"
+    images[0].save(out, save_all=True, append_images=images[1:], duration=durations, loop=0, optimize=True)
+    print(f"wrote {out.name}: {len(images)} frames")
+
+
+# ---------------------------------------------------------------------------- joint PD without the reference velocity
+
+
+def example_rows(suffix: str, setting: str, arm: str) -> list[dict[str, Any]]:
+    """The metrics of one arm's runs of the examples (EXAMPLES) at one tracker setting."""
+    return [
+        next(
+            r
+            for r in rows_of(f"{scenario}_candidate_f{suffix}_raw")
+            if r["arm"] == arm and setting_of(r) == setting and offset_of(r["origin"]) == offset
+        )
+        for _, scenario, offset in EXAMPLES
+    ]
+
+
+def ringing(log: StateLog, omega: float) -> NDArray[np.float64]:
+    """How much the arm moves near the tracker's natural frequency: per joint, the RMS (deg) over the task of the
+    joint angle with only the frequencies from half to twice ω/2π kept (by the Fourier transform, after removing the
+    straight line from the first angle to the last)."""
+    task = log.times >= 0
+    q = np.degrees(log.channel("q").reshape(len(log.times), -1)[task])
+    q = q - np.linspace(q[0], q[-1], len(q))
+    frequencies = np.fft.rfftfreq(len(q), d=float(np.median(np.diff(log.times))))
+    spectrum = np.fft.rfft(q, axis=0)
+    natural = omega / (2 * np.pi)
+    spectrum[(frequencies < 0.5 * natural) | (frequencies > 2.0 * natural)] = 0
+    return np.sqrt(np.mean(np.fft.irfft(spectrum, n=len(q), axis=0) ** 2, axis=0))
+
+
+def farthest_in_hold(log: StateLog, arrival: float, channel: str = "q") -> float:
+    """The farthest the hand gets from the target (m) in the hold window after ``arrival`` (NaN if it never
+    arrives); with channel "q_ref", the reference's hand."""
+    if not np.isfinite(arrival):
+        return float("nan")
+    window = (log.times >= arrival) & (log.times <= arrival + HOLD)
+    hand = endpoint_positions(SKELETON, log.channel(channel).reshape(len(log.times), -1)[window])
+    return float(np.linalg.norm(hand - TARGET, axis=1).max())
+
+
+def write_zero_velocity() -> None:
+    """Per joint PD setting, arm, and reference velocity: the ringing of the examples (mean per joint), and, from
+    the demonstrated start undisturbed, the farthest the hand and its reference get from the target in the hold."""
+    out = []
+    for label, suffix, setting, omega, damping in ZERO_VELOCITY_SETTINGS:
+        for given, extra in ((True, ""), (False, ZERO_VELOCITY)):
+            for arm in ("esn", "replay"):
+                rings = [
+                    ringing(StateLog.load(example_log_path(scenario, suffix + extra, setting, arm, offset)), omega)
+                    for _, scenario, offset in EXAMPLES
+                ]
+                stem = f"nominal_candidate_f{suffix}{extra}_raw"
+                nominal = next(r for r in rows_of(stem) if r["arm"] == arm and setting_of(r) == setting)
+                log = log_of(stem, setting, f"{arm}_00.sklog.npz")
+                out.append(
+                    {"tracker": label, "omega": omega, "damping": damping, "reference_velocity": given, "arm": arm}
+                    | {f"ringing_joint{j + 1}_deg": float(np.mean([r[j] for r in rings])) for j in range(2)}
+                    | {
+                        "nominal_arrival_s": nominal["arrival_time_s"],
+                        "nominal_hold_farthest_m": farthest_in_hold(log, nominal["arrival_time_s"]),
+                        "nominal_reference_hold_farthest_m": farthest_in_hold(log, nominal["arrival_time_s"], "q_ref"),
+                    }
+                )
+    write_csv(ZERO_VELOCITY_CSV, out)
+
+
+def plot_zero_velocity() -> Figure:
+    """Joint PD at ω = 20 rad/s with and without the reference velocity, from the demonstrated start, undisturbed:
+    the joint angles of F and the replay against the take, and the replay's joint 1 torque, at ζ = 1 and 0.1."""
+    take_log = StateLog.load(TAKE_RUN / "demo_00.sklog.npz")
+    times = np.arange(0.0, EXAMPLE_END + 1e-9, 0.01)
+    take = joint_angles_at(take_log, np.clip(times, 0.0, float(take_log.times[-1])))
+    columns = [("ζ = 1", "_pd_gains", "pd_w20"), ("ζ = 0.1", "_damping", "pd_w20_z0.1")]
+    fig = Figure(figsize=(13, 10), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(
+        "Joint PD at ω = 20 rad/s with and without the reference velocity: nominal, from the demonstrated start",
+        color="#0b0b0b",
+    )
+    axes = fig.subplots(3, len(columns), sharex=True)
+    for column, (title, suffix, setting) in enumerate(columns):
+        for joint in range(2):
+            ax = axes[joint, column]
+            style(ax)
+            ax.plot(
+                times, take[:, joint], color=RECORDED_COLOR, linewidth=4.0, label="the take (the replay's reference)"
+            )
+        ax_torque = axes[2, column]
+        style(ax_torque)
+        for arm, color, name in (("replay", REPLAY_COLOR, "replay"), ("esn", ESN_COLOR, "candidate F")):
+            for extra, line, how in (("", "-", r"with $\dot q_r$"), (ZERO_VELOCITY, "--", r"$\dot q_r = 0$")):
+                log = log_of(f"nominal_candidate_f{suffix}{extra}_raw", setting, f"{arm}_00.sklog.npz")
+                q = joint_angles_at(log, times)
+                for joint in range(2):
+                    axes[joint, column].plot(
+                        times, q[:, joint], color=color, linestyle=line, linewidth=1.3, label=f"{name}: arm, {how}"
+                    )
+                if arm == "replay":  # without the reference velocity, darker and on top
+                    task = log.times >= 0
+                    tau = log.channel("tau").reshape(len(log.times), -1)[task, 0]
+                    shade, width = (REPLAY_COLOR, 0.8) if not extra else (REPLAY_DARK_COLOR, 1.0)
+                    ax_torque.plot(log.times[task], tau, color=shade, linewidth=width, label=how)
+        for joint in range(2):
+            axes[joint, column].set_title(f"{title}: joint {joint + 1}", color=TEXT_COLOR, fontsize=9)
+        ax_torque.set_title(f"{title}: the replay's joint 1 torque", color=TEXT_COLOR, fontsize=9)
+        ax_torque.legend(frameon=False, labelcolor=TEXT_COLOR, fontsize=8, loc="upper right")
+        ax_torque.set_xlabel("time (s)", color=TEXT_COLOR)
+    for joint in range(2):
+        axes[joint, 0].set_ylabel(f"joint {joint + 1} (deg)", color=TEXT_COLOR)
+    axes[2, 0].set_ylabel("N m", color=TEXT_COLOR)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", ncol=5, frameon=False, labelcolor=TEXT_COLOR)
+    return fig
 
 
 # ---------------------------------------------------------------------------- tables
@@ -1083,6 +1214,52 @@ def print_tables() -> None:
                 worst = 1000 * max(r["final_distance_m"] for r in rows)
                 cells.append(f"{sum(r['success'] for r in rows)}/{len(rows)}; {settled}/{len(rows)}; {worst:.1f}")
             print(f"  {name}, ζ = {damping:g}: F {cells[0]} | replay {cells[1]}")
+
+    print("\n== 3.10 Joint PD with the reference velocity -> without it. Arrive and hold: F, the 7 examples; F, the")
+    print("offsets run | replay, the 7 examples; replay, the offsets run. Replay's peak torque (N m): nominal; mean of")
+    print("the offsets run. Nominal: arrival (s), F and replay; F's final distance to the target (mm)")
+    for label, suffix, setting, _, _ in ZERO_VELOCITY_SETTINGS:
+        cells = []
+        for extra in ("", ZERO_VELOCITY):
+            arms = {arm: example_rows(suffix + extra, setting, arm) for arm in ("esn", "replay")}
+            offsets = {
+                arm: [
+                    r
+                    for r in rows_of(f"offsets_candidate_f{suffix}{extra}_raw")
+                    if r["arm"] == arm and setting_of(r) == setting
+                ]
+                for arm in ("esn", "replay")
+            }
+            held = {arm: f"{sum(r['success'] for r in arms[arm])}/{len(arms[arm])}" for arm in arms}
+            held_offsets = {arm: f"{sum(r['success'] for r in rows)}/{len(rows)}" for arm, rows in offsets.items()}
+            cells.append(
+                f"F {held['esn']}, {held_offsets['esn']} | replay {held['replay']}, {held_offsets['replay']};"
+                f" {arms['replay'][0]['peak_torque_nm']:.1f}, {mean(offsets['replay'], 'peak_torque_nm'):.1f};"
+                f" {arms['esn'][0]['arrival_time_s']:.2f}, {arms['replay'][0]['arrival_time_s']:.2f},"
+                f" {1000 * arms['esn'][0]['final_distance_m']:.0f}"
+            )
+        print(f"  {label}: {cells[0]}  ->  {cells[1]}")
+    if ZERO_VELOCITY_CSV.exists():
+        print("\n== 3.10 Ringing of the 7 examples, mean (deg), joints 1, 2: with -> without the reference velocity")
+        print("(ratio; at the natural frequency, 1/sqrt(1 + 4 ζ²)); nominal: the farthest from the target in the")
+        print("hold (mm), arm (its reference)")
+        rows = read_csv(ZERO_VELOCITY_CSV)
+        for label, _, _, _, damping in ZERO_VELOCITY_SETTINGS:
+            for arm in ("replay", "esn"):
+                given, zero = (
+                    next(r for r in rows if r["tracker"] == label and r["arm"] == arm and r["reference_velocity"] is v)
+                    for v in (True, False)
+                )
+                rings = [(given[f"ringing_joint{j}_deg"], zero[f"ringing_joint{j}_deg"]) for j in (1, 2)]
+                holds = [
+                    f"{1000 * r['nominal_hold_farthest_m']:.1f} ({1000 * r['nominal_reference_hold_farthest_m']:.1f})"
+                    for r in (given, zero)
+                ]
+                print(
+                    f"  {label}, {arm}: "
+                    + "; ".join(f"{a:.3f} -> {b:.3f} ({b / a:.2f})" for a, b in rings)
+                    + f" ({1 / np.sqrt(1 + 4 * damping**2):.2f}); hold: {holds[0]} -> {holds[1]}"
+                )
 
 
 if __name__ == "__main__":
