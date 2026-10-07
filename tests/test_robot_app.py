@@ -21,7 +21,7 @@ from skelarm import Skeleton
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
-from arm_esn_ctrl.tracking import EsnSource, TrackerConfig, track
+from arm_esn_ctrl.tracking import EsnSource, ReplaySource, TrackerConfig, track
 from tools.robot_app import RobotApp, build_parser, check_arguments, joint_values
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
@@ -65,6 +65,12 @@ def esn(demo_config):
     return trained
 
 
+@pytest.fixture(scope="module")
+def take(demo_config):
+    """A recorded demonstration to replay: demonstration 7's reach, sampled every reference period."""
+    return resample_joint_angles(simulate_reaches(demo_config)[1], ESN_CONFIG.dt)[1]
+
+
 def demo7_start(demo_config):
     return np.radians(demo_config["demonstrations"]["start_q"][1])
 
@@ -96,13 +102,14 @@ def left_click(x, y):
     )
 
 
-def test_the_launch_options_choose_the_mode(qapp, demo_config, esn):
+def test_the_launch_options_choose_the_mode(qapp, demo_config, esn, take):
     given = np.radians([25.0, 115.0])
 
     modes = {
         "esn": make_app(demo_config, esn=esn),
         "replay_from_start": make_app(demo_config),
         "replay_from_given": make_app(demo_config, given_q=given),
+        "replay_take": make_app(demo_config, given_q=given, take=take, name="take.sklog.npz"),
         "demonstrator": make_app(demo_config, demonstrator=True),
     }
 
@@ -112,6 +119,33 @@ def test_the_launch_options_choose_the_mode(qapp, demo_config, esn):
     assert "(25.0, 115.0) deg" in modes["replay_from_given"].mode_label.text()
     assert "computed torque, ω = 10 rad/s" in modes["replay_from_start"].mode_label.text()
     assert "demonstrator's own (time varying stiffness)" in modes["demonstrator"].mode_label.text()
+    assert "the take take.sklog.npz, replayed by time" in modes["replay_take"].mode_label.text()
+
+
+@pytest.mark.parametrize(
+    "tracker",
+    [COMPUTED_TORQUE, TrackerConfig("pd", 20.0, 0.02, damping=0.1, reference_velocity=False)],
+    ids=["computed torque", "joint PD underdamped without the reference velocity"],
+)
+def test_a_take_is_replayed_as_the_experiment_replays_it_without_a_demonstrator(qapp, demo_config, take, tracker):
+    config = {name: table for name, table in demo_config.items() if name != "controller"}  # no demonstrator
+    app = make_app(config, take=take, tracker=tracker)
+    start = app.skeleton.q.copy()
+
+    app.play()
+    app.pause()
+    steps(app, 100)
+
+    skeleton = Skeleton.from_toml(CONFIG)
+    skeleton.q = start
+    assert app.gains is not None
+    log = track(
+        skeleton, ReplaySource(take), tracker, app.gains, period=ESN_CONFIG.dt, warmup_steps=0, duration=1.0, dt=DT
+    )
+    assert app.run is not None and app.run.time == pytest.approx(1.0)
+    assert app.skeleton.q == pytest.approx(log.channel("q")[-1], abs=1e-12)
+    if not tracker.reference_velocity:
+        assert "Reference velocity: zero" in app.mode_label.text()
 
 
 def test_the_esn_mode_simulates_the_arm_as_the_experiment_does(qapp, demo_config, esn):
@@ -309,6 +343,10 @@ def test_space_plays_while_a_number_box_has_the_focus(qapp, demo_config, box):
         (["--law", "pd", "--omega", "10", "--kp", "100", "--kd", "10"], "either --omega or --kp and --kd"),
         (["--law", "pd", "--kp", "100"], "go together"),
         (["--demonstrator", "--kp", "100", "--kd", "10"], "does not use"),
+        (["--demonstrator", "--zero-reference-velocity"], "does not use"),
+        (["--law", "pd", "--kp", "100", "--kd", "10", "--damping", "0.1"], "with --omega"),
+        (["--law", "pd", "--omega", "20", "--replay", "take.npz", "--model", "esn.toml"], "excludes"),
+        (["--replay", "take.npz", "--demonstrator"], "excludes"),
     ],
 )
 def test_the_command_line_rejects_contradictions(arguments, complaint, capsys):
@@ -335,5 +373,7 @@ def test_the_command_line_accepts_each_mode():
         ["--law", "pd", "--omega", "20", "--pose", "29.4,88.2"],
         ["--demonstrator", "--pose", "29.4,88.2"],
         ["--law", "pd", "--kp", "100,20", "--kd", "5,1"],
+        ["--law", "pd", "--omega", "20", "--damping", "0.1", "--zero-reference-velocity", "--replay", "take.npz"],
+        ["--law", "pd", "--omega", "20", "--damping", "0.1", "--zero-reference-velocity", "--model", "esn.toml"],
     ):
         check_arguments(parser, parser.parse_args([str(CONFIG), *arguments]))

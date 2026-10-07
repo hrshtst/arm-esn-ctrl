@@ -18,6 +18,10 @@ The mode is fixed at launch:
   or ``--kp`` and ``--kd``) tracks it, as in ``experiments/robot_esn.py``. The ESN's warm-up, with the arm
   holding its start posture, is consumed at once when a run starts, so the run is
   shown from t = 0.
+- **Replay a take** (``--replay``): a recorded demonstration, such as a take taught
+  by hand, sampled every period (``--period``), and every run replays it from t = 0,
+  from wherever the arm was posed, as the replay of ``experiments/robot_esn.py``
+  does. The configuration needs no demonstrator.
 - **Replay from the start posture** (neither a model, a given posture, nor
   ``--demonstrator``): when a run starts, the demonstrator's reach is simulated
   from the arm's posture and the tracker tracks it, replayed by time.
@@ -27,6 +31,11 @@ The mode is fixed at launch:
   Posing the arm away from the given posture emulates an initial offset.
 - **Demonstrator** (``--demonstrator``): the demonstrator's own controller drives
   the arm, without a reference.
+
+With ``--omega``, ``--damping`` sets the damping ratio of the tracking error (1,
+critically damped, by default). ``--zero-reference-velocity`` gives the tracking law
+a zero reference velocity, so that its derivative term damps the arm's own velocity
+rather than the velocity error.
 
 External forces never act during the warm-up. The faint gray arm is the initial
 posture: the given posture, or else the start posture of the last run. When the
@@ -81,7 +90,7 @@ from skelarm import (
 from skelarm.canvas import TrailOverlay
 from skelarm.simulator import SimulatorCanvas
 
-from arm_esn_ctrl.demonstrations import SCENARIO_TABLES, resample_joint_angles, simulate_reaches
+from arm_esn_ctrl.demonstrations import SCENARIO_TABLES, load_joint_angles, resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.tracking import (
     LAWS,
@@ -106,6 +115,7 @@ _MODE_COLORS = {  # the reference's color in each mode, as in experiments/robot_
     "esn": QColor("#2a78d6"),
     "replay_from_start": QColor("#eb6834"),
     "replay_from_given": QColor("#eb6834"),
+    "replay_take": QColor("#eb6834"),
     "demonstrator": QColor("#52514e"),
 }
 _LAST_RUN_COLOR = QColor(82, 81, 78, 110)
@@ -249,7 +259,11 @@ class RobotApp(QMainWindow):
         A trained ESN to generate the reference (the ESN mode).
     given_q : NDArray[np.float64], optional
         A given initial posture (rad): the demonstrator's reach is simulated from it
-        and replayed (unless an ESN is given), and it is drawn as the initial posture.
+        and replayed (unless an ESN or a take is given), and it is drawn as the initial
+        posture.
+    take : NDArray[np.float64], optional
+        A recorded demonstration's joint angles (rad), sampled every ``period``, to
+        replay by time in every run (the take mode).
     demonstrator : bool, optional
         Drive the arm with the demonstrator's own controller, without a reference.
     period : float, optional
@@ -261,7 +275,7 @@ class RobotApp(QMainWindow):
     speed : float, optional
         Initial playback speed (task seconds per real second).
     name : str, optional
-        The model's name, shown in the side panel and the title.
+        The model's or the take's name, shown in the side panel and the title.
     """
 
     def __init__(
@@ -273,6 +287,7 @@ class RobotApp(QMainWindow):
         gains: tuple[NDArray[np.float64], NDArray[np.float64]] | None = None,
         esn: ReachingEsn | None = None,
         given_q: NDArray[np.float64] | None = None,
+        take: NDArray[np.float64] | None = None,
         demonstrator: bool = False,
         period: float = _DEFAULT_PERIOD,
         hold: float = 2.0,
@@ -288,14 +303,23 @@ class RobotApp(QMainWindow):
         if esn is not None and demonstrator:
             msg = "an ESN and the demonstrator's own controller cannot both drive the arm"
             raise ValueError(msg)
+        if take is not None and (esn is not None or demonstrator):
+            msg = "a take is replayed only without an ESN or the demonstrator's own controller"
+            raise ValueError(msg)
         if (tracker is None) != demonstrator:
             msg = "a tracker is needed exactly when the arm tracks a reference (not with the demonstrator)"
             raise ValueError(msg)
         if esn is not None and len(esn.center) != skeleton.num_joints:
             msg = f"the ESN generates {len(esn.center)} joint angles, but the robot has {skeleton.num_joints} joints"
             raise ValueError(msg)
-        if esn is None and any(name not in config for name in SCENARIO_TABLES):
-            msg = f"without an ESN, the configuration needs the demonstrator's tables: {', '.join(SCENARIO_TABLES)}"
+        if esn is None and take is None and any(name not in config for name in SCENARIO_TABLES):
+            msg = (
+                "without an ESN or a take, the configuration needs the demonstrator's tables:"
+                f" {', '.join(SCENARIO_TABLES)}"
+            )
+            raise ValueError(msg)
+        if take is not None and take.shape[1:] != (skeleton.num_joints,):
+            msg = f"the take has joint angles of shape {take.shape[1:]}, but the robot has {skeleton.num_joints} joints"
             raise ValueError(msg)
         self.skeleton = skeleton
         self.config = config
@@ -314,6 +338,8 @@ class RobotApp(QMainWindow):
             self.mode = "esn"
         elif demonstrator:
             self.mode = "demonstrator"
+        elif take is not None:
+            self.mode = "replay_take"
         elif self.given_q is not None:
             self.mode = "replay_from_given"
         else:
@@ -328,8 +354,12 @@ class RobotApp(QMainWindow):
             if np.any(kp <= 0.0) or np.any(kd < 0.0):
                 msg = "the tracker's kp must be positive and its kd not negative"
                 raise ValueError(msg)
-        # The given posture's reach is simulated once; replays from the start posture, at every run.
+        # The take, or the given posture's reach, simulated once, is replayed in every run; replays from the start
+        # posture are simulated at every run.
         self._given_reference: NDArray[np.float64] | None = None
+        if self.mode == "replay_take":
+            assert take is not None
+            self._given_reference = np.asarray(take, dtype=np.float64).copy()
         if self.mode == "replay_from_given":
             assert self.given_q is not None
             self._given_reference = self._demonstrator_reach(self.given_q)
@@ -588,6 +618,11 @@ class RobotApp(QMainWindow):
             )
         elif self.mode == "replay_from_start":
             reference = "the demonstrator's reach from each run's start posture, replayed by time"
+        elif self.mode == "replay_take":
+            reference = (
+                f"the take{f' {name}' if name else ''}, replayed by time from t = 0;"
+                " posing the arm away from its start emulates an initial offset"
+            )
         elif self.mode == "replay_from_given":
             assert self.given_q is not None
             given = ", ".join(f"{angle:.1f}" for angle in np.degrees(self.given_q))
@@ -612,6 +647,8 @@ class RobotApp(QMainWindow):
                 f" damping ratio {', '.join(f'{value:.2f}' for value in damping)}"
                 + (" (at the target posture)" if self.tracker_config.law == "pd" else "")
             )
+            if not self.tracker_config.reference_velocity:
+                controller += "\nReference velocity: zero (the derivative term damps the arm's own velocity)"
         return f"Reference: {reference}\nController: {controller}"
 
     def _refresh(self) -> None:
@@ -736,6 +773,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="natural frequency of the tracking error (rad/s), critically damped; or give --kp and --kd",
     )
     parser.add_argument(
+        "--damping",
+        type=float,
+        help="damping ratio of the tracking error with --omega (default 1, critically damped; less oscillates)",
+    )
+    parser.add_argument(
+        "--zero-reference-velocity",
+        action="store_true",
+        help="give the tracking law a zero reference velocity: its derivative term damps the arm's own velocity",
+    )
+    parser.add_argument(
         "--kp", help="the tracker's proportional gain instead of --omega: one value, or one per joint (comma-separated)"
     )
     parser.add_argument(
@@ -745,11 +792,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--demonstrator", action="store_true", help="drive the arm with the demonstrator's own controller instead"
     )
+    parser.add_argument(
+        "--replay", type=Path, help="a recorded take (.sklog.npz) to replay by time, such as a take taught by hand"
+    )
     parser.add_argument("--pose", help="a given initial posture: joint angles in degrees, such as 29.4,88.2")
     parser.add_argument(
         "--period",
         type=float,
-        help=f"period of the replayed reference without a model (s; default {_DEFAULT_PERIOD:g})",
+        help=f"period of the replayed reference or take without a model (s; default {_DEFAULT_PERIOD:g})",
     )
     parser.add_argument(
         "--acceleration-filter",
@@ -772,10 +822,15 @@ def check_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -
     """Reject combinations of arguments that contradict each other."""
     if args.model is not None and args.demonstrator:
         parser.error("--model and --demonstrator exclude each other: either the ESN or the demonstrator drives the arm")
-    gains = (args.omega, args.kp, args.kd)
-    if args.demonstrator and (args.law is not None or any(value is not None for value in gains)):
+    if args.replay is not None and (args.model is not None or args.demonstrator):
+        parser.error("--replay excludes --model and --demonstrator: the take is the reference")
+    gains = (args.omega, args.damping, args.kp, args.kd)
+    if args.demonstrator and (
+        args.law is not None or any(value is not None for value in gains) or args.zero_reference_velocity
+    ):
         parser.error(
-            "--law, --omega, --kp, and --kd set the tracker, which the demonstrator's own controller does not use"
+            "--law, --omega, --damping, --kp, --kd, and --zero-reference-velocity set the tracker,"
+            " which the demonstrator's own controller does not use"
         )
     if args.demonstrator:
         return
@@ -785,6 +840,8 @@ def check_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -
         parser.error("--kp and --kd go together")
     if (args.omega is None) == (args.kp is None):
         parser.error("give the tracker either --omega or --kp and --kd (required unless --demonstrator)")
+    if args.damping is not None and args.omega is None:
+        parser.error("--damping sets the damping ratio with --omega; with --kp and --kd, the gains set it")
     if args.period is not None and (args.model is not None or args.demonstrator):
         parser.error(
             "--period sets the replayed reference's period, which is used only without --model or --demonstrator"
@@ -821,10 +878,18 @@ def main() -> None:
     elif "demonstrations" in config:
         skeleton.q = np.radians(config["demonstrations"]["start_q"][0])  # a reachable, non-singular posture
     esn = None if args.model is None else ReachingEsn.load(args.model)
+    period = _DEFAULT_PERIOD if args.period is None else args.period
+    take = None if args.replay is None else load_joint_angles(args.replay, period)[1]
     tracker = None
     gains = None
     if not args.demonstrator:
-        tracker = TrackerConfig(args.law, args.omega, args.acceleration_filter)
+        tracker = TrackerConfig(
+            args.law,
+            args.omega,
+            args.acceleration_filter,
+            damping=1.0 if args.damping is None else args.damping,
+            reference_velocity=not args.zero_reference_velocity,
+        )
     if args.kp is not None:
         gains = (
             joint_values(parser, "--kp", args.kp, skeleton.num_joints),
@@ -840,12 +905,17 @@ def main() -> None:
             gains=gains,
             esn=esn,
             given_q=given_q,
+            take=take,
             demonstrator=args.demonstrator,
-            period=_DEFAULT_PERIOD if args.period is None else args.period,
+            period=period,
             hold=args.hold,
             stiffness=args.stiffness,
             speed=args.speed,
-            name=None if args.model is None else args.model.parent.name,
+            name=args.model.parent.name
+            if args.model is not None
+            else None
+            if args.replay is None
+            else args.replay.name,
         )
     except ValueError as error:
         parser.error(str(error))

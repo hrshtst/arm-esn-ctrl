@@ -45,13 +45,19 @@ uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --law
 uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --law pd --omega 20 --pose 29.4,88.2
 # The demonstrator's own controller, without a reference.
 uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml --demonstrator
+# A recorded take, such as one taught by hand, replayed by time; no demonstrator needed.
+uv run python tools/robot_app.py experiments/demonstrations/reach_manual_single.toml --law pd --omega 20 \
+    --replay reports/004-manual-demonstration/data/20261006-152823-reach_manual_single/demo_00.sklog.npz
 ```
 
 `$STORAGE` stands for the storage root, and `--law ct` is short for
-`--law computed_torque`. Instead of ω, which makes the tracking error critically
-damped, `--kp` and `--kd` set the gains directly (one value, or one per joint,
-such as `--kp 30,5 --kd 1,0.2`); a small `--kd` makes the tracking error
-oscillate. The reference generator and the tracker are fixed at launch, and the
+`--law computed_torque`. With ω, the tracking error is critically damped unless
+`--damping` sets a smaller damping ratio, such as `--damping 0.1`. Instead of ω,
+`--kp` and `--kd` set the gains directly (one value, or one per joint, such as
+`--kp 30,5 --kd 1,0.2`); a small `--kd` makes the tracking error oscillate.
+`--zero-reference-velocity` gives the tracking law a zero reference velocity, so
+that its derivative term damps the arm's own velocity rather than the velocity
+error. The reference generator and the tracker are fixed at launch, and the
 side panel shows them, with the tracking error's natural frequency and damping
 ratio for each joint.
 
