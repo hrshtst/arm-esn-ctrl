@@ -4,7 +4,7 @@
 """Make the summary figures and tables of report 004.
 
     uv run python reports/004-manual-demonstration/make_figures.py
-    uv run python reports/004-manual-demonstration/make_figures.py --logs
+    uv run python reports/004-manual-demonstration/make_figures.py --logs --animations
 
 From the take in ``data/`` and the copies of the runs under ``results/``
 (configurations, run records, and per-run metrics), it draws into
@@ -23,14 +23,22 @@ are not kept in Git, from the runs under the storage root, and also draws
 ``candidates.png`` (the hand paths of the candidates, Section 3.5), ``dwell.png``
 (how candidate F settles at the target, Section 3.6), and ``pushes.png`` (candidate F
 pushed and held, Section 3.7), and writes ``candidates.csv``, ``dwell.csv``, and
-``pushes.csv``, from which their tables are printed (also without the option).
+``pushes.csv``, from which their tables are printed (also without the option). It
+also draws the joint angles of the examples, scenario by scenario, with the trackers
+critically damped (``example_<name>.png``, Section 3.8) and underdamped
+(``underdamped_<name>.png``, Section 3.9). With ``--animations``, it animates each
+example (``example_<name>.gif``, Section 3.8): the arms side by side, each rendered
+by skelarm's player.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -119,11 +127,51 @@ PUSH_COLORS = {
     "across (5 N)": "#eb6834",
 }
 DWELL_COLORS = ["#2a78d6", "#4a3aa7", "#eb6834", "#52514e"]
+UNDISTURBED_COLOR = "#9ec5f0"  # candidate F's undisturbed arm, under the disturbed one
+DISTURBANCE_COLOR = "#f0efec"
+# The examples, scenario by scenario (Sections 3.8 and 3.9): name, scenario, and start offset (deg) from the
+# demonstrated start, as in report 003.
+EXAMPLES = [
+    ("nominal", "nominal", (0.0, 0.0)),
+    ("offset ahead", "offsets", (10.0, -10.0)),  # roughly along the taught motion
+    ("offset across", "offsets", (-10.0, -10.0)),  # mostly across it
+    ("push across", "push_across", (0.0, 0.0)),
+    ("push forward", "push_forward", (0.0, 0.0)),
+    ("push backward", "push_backward", (0.0, 0.0)),
+    ("block", "block", (0.0, 0.0)),
+]
+# When each disturbance acts (task time, s), and what it is.
+SPANS = {"push_across": (4.32, 4.42), "push_forward": (4.32, 4.42), "push_backward": (4.32, 4.42), "block": (4.1, 4.6)}
+DISTURBANCES = {"push_across": "pushed (5 N)", "push_forward": "pushed (10 N)", "push_backward": "pushed (10 N)"}
+# The tracker settings of the examples' figures: label, configuration suffix, and setting directory.
+EXAMPLE_SETTINGS = [
+    ("computed torque, ω = 10 rad/s", "", "computed_torque_w10"),
+    ("joint PD, ω = 20 rad/s", "_pd_gains", "pd_w20"),
+    ("joint PD, ω = 40 rad/s", "_pd_gains", "pd_w40"),
+]
+UNDERDAMPED_SETTINGS = [
+    ("computed torque, ω = 10 rad/s, ζ = 0.1", "_damping", "computed_torque_w10_z0.1"),
+    ("joint PD, ω = 20 rad/s, ζ = 0.1", "_damping", "pd_w20_z0.1"),
+]
+DAMPINGS = [1.0, 0.5, 0.3, 0.1]
+EXAMPLE_END = 16.0  # the joint angles are drawn until this task time (s): the whole run
+# The animations of the examples: the panels (label, arm, configuration suffix, setting directory, label color),
+# the task times they cover (s), and their frame rate; a whole number of milliseconds per frame, so that GIFs play
+# in real time.
+ANIMATION_PANELS = [
+    ("F, joint PD 20 rad/s", "esn", "_pd_gains", "pd_w20", ESN_COLOR),
+    ("replay, joint PD 20 rad/s", "replay", "_pd_gains", "pd_w20", REPLAY_COLOR),
+    ("F, computed torque 10 rad/s", "esn", "", "computed_torque_w10", "#4a3aa7"),
+]
+ANIMATION_SPAN = (-0.2, 16.0)
+ANIMATION_FPS = 10.0
+ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--logs", action="store_true", help="also analyze the run logs in the storage root")
+    parser.add_argument("--animations", action="store_true", help="also export GIFs from the logs in the storage root")
     args = parser.parse_args()
 
     SUMMARY.mkdir(parents=True, exist_ok=True)
@@ -138,12 +186,18 @@ def main() -> None:
         figures["candidates.png"] = plot_candidates()
         figures["dwell.png"] = plot_dwell()
         figures["pushes.png"] = plot_pushes()
+        for name, scenario, offset in EXAMPLES:
+            figures[f"example_{slug(name)}.png"] = plot_example(name, scenario, offset, EXAMPLE_SETTINGS)
+            figures[f"underdamped_{slug(name)}.png"] = plot_example(name, scenario, offset, UNDERDAMPED_SETTINGS)
         write_candidates()
         write_dwell()
         write_pushes()
     for name, fig in figures.items():
         fig.savefig(SUMMARY / name, dpi=150)
     print_tables()
+    if args.animations:
+        for name, scenario, offset in EXAMPLES:
+            export_example_animation(name, scenario, offset)
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -704,6 +758,147 @@ def write_pushes() -> None:
     write_csv(PUSHES_CSV, out)
 
 
+# ---------------------------------------------------------------------------- the examples
+
+
+def slug(name: str) -> str:
+    return name.replace(" ", "_")
+
+
+def example_log_path(scenario: str, suffix: str, setting: str, arm: str, offset: tuple[float, float]) -> Path:
+    """The log of one arm in a robot run of candidate F, from the start at ``offset`` (deg)."""
+    stem = f"{scenario}_candidate_f{suffix}_raw"
+    start = next(int(r["start"]) for r in rows_of(stem) if r["arm"] == arm and offset_of(r["origin"]) == offset)
+    return resolve_run_path(f"results/{run_name(stem)}") / setting / f"{arm}_{start:02d}.sklog.npz"
+
+
+def joint_angles_at(log: StateLog, times: NDArray[np.float64], channel: str = "q") -> NDArray[np.float64]:
+    """A log's joint angles (deg), or its reference with channel "q_ref", at the given times."""
+    q = np.degrees(log.channel(channel).reshape(len(log.times), -1))
+    return np.column_stack([np.interp(times, log.times, q[:, j]) for j in range(q.shape[1])])
+
+
+def example_title(name: str, offset: tuple[float, float]) -> str:
+    """Where an example starts, for titles."""
+    if offset == (0.0, 0.0):
+        return f"{name}, from the demonstrated start"
+    return f"{name}: start offset by {offset[0]:+g}° in joint 1 and {offset[1]:+g}° in joint 2"
+
+
+def plot_example(name: str, scenario: str, offset: tuple[float, float], settings: list[tuple[str, str, str]]) -> Figure:
+    """The joint angles of one example over time, one column per tracker setting, one row per joint.
+
+    Each column draws candidate F's arm (solid) and its output, the reference it gives
+    the tracker (dashed); the replay's arm; and the take, which is the replay's
+    reference (thick gray). Under a disturbance, it also draws F's undisturbed arm from
+    the same start, and shades the disturbance.
+    """
+    take_log = StateLog.load(TAKE_RUN / "demo_00.sklog.npz")
+    times = np.arange(0.0, EXAMPLE_END + 1e-9, 0.01)
+    take = joint_angles_at(take_log, np.clip(times, 0.0, float(take_log.times[-1])))
+    fig = Figure(figsize=(5.4 * len(settings) + 1.0, 7.4), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(f"Joint angles over time: {example_title(name, offset)}", color="#0b0b0b")
+    axes = fig.subplots(2, len(settings), sharex=True, squeeze=False)
+    for column, (label, suffix, setting) in enumerate(settings):
+        esn = StateLog.load(example_log_path(scenario, suffix, setting, "esn", offset))
+        replay = StateLog.load(example_log_path(scenario, suffix, setting, "replay", offset))
+        lines = [(take, "the take (the replay's reference)", RECORDED_COLOR, "-", 4.0)]
+        if scenario in SPANS:
+            undisturbed = StateLog.load(example_log_path("nominal", suffix, setting, "esn", offset))
+            lines.append(
+                (joint_angles_at(undisturbed, times), "candidate F, undisturbed: arm", UNDISTURBED_COLOR, "-", 1.4)
+            )
+        lines += [
+            (joint_angles_at(replay, times), "replay: arm", REPLAY_COLOR, "-", 1.2),
+            (joint_angles_at(esn, times, "q_ref"), "candidate F: output (reference)", ESN_COLOR, "--", 1.6),
+            (joint_angles_at(esn, times), "candidate F: arm", ESN_COLOR, "-", 1.6),
+        ]
+        for joint in range(2):
+            ax = axes[joint, column]
+            style(ax)
+            if scenario in SPANS:
+                ax.axvspan(*SPANS[scenario], color=DISTURBANCE_COLOR, zorder=0)
+            for values, line_label, color, line, width in lines:
+                ax.plot(times, values[:, joint], color=color, linestyle=line, linewidth=width, label=line_label)
+            ax.set_title(f"{label}: joint {joint + 1}", color=TEXT_COLOR, fontsize=9)
+            if column == 0:
+                ax.set_ylabel(f"joint {joint + 1} (deg)", color=TEXT_COLOR)
+        axes[1, column].set_xlabel("time (s)", color=TEXT_COLOR)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", ncol=5, frameon=False, labelcolor=TEXT_COLOR)
+    return fig
+
+
+def export_example_animation(name: str, scenario: str, offset: tuple[float, float]) -> None:
+    """Animate an example: the arms of ANIMATION_PANELS side by side, each rendered by skelarm's player.
+
+    The player exports each arm's run as a GIF (``--export``); its frames, which the
+    GIF merges where the arm rests, are spread back over time, cropped to where the
+    arms move, labeled, and tiled into one GIF with the task time and the disturbance.
+    """
+    import tempfile
+
+    from PIL import Image, ImageDraw, ImageFont, ImageSequence
+
+    from arm_esn_ctrl.storage import REPO_ROOT
+
+    player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
+    frames, starts = [], []
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, (_, arm, suffix, setting, _) in enumerate(ANIMATION_PANELS):
+            path = example_log_path(scenario, suffix, setting, arm, offset)
+            exported = Path(tmp) / f"{i}.gif"
+            subprocess.run(
+                [sys.executable, str(player), str(path), "--export", str(exported), "--fps", f"{ANIMATION_FPS:g}"],
+                check=True,
+                capture_output=True,
+                env=os.environ | {"QT_QPA_PLATFORM": "offscreen"},  # render without a window
+            )
+            with Image.open(exported) as gif:
+                spread = []
+                for frame in ImageSequence.Iterator(gif):
+                    repeats = max(round(frame.info.get("duration", 1000.0 / ANIMATION_FPS) * ANIMATION_FPS / 1000.0), 1)
+                    spread += [np.asarray(frame.convert("RGB"))] * repeats
+            frames.append(np.array(spread))
+            starts.append(float(StateLog.load(path).times[0]))
+    ink = np.any([(f < 235).any(axis=3).any(axis=0) for f in frames], axis=0)
+    rows, cols = np.nonzero(ink)
+    margin = 24
+    top, bottom = int(max(rows.min() - margin, 0)), int(rows.max() + margin)
+    left, right = int(max(cols.min() - margin, 0)), int(cols.max() + margin)
+    width, height = right - left, bottom - top
+    header, label_height, gap = 44, 30, 8
+    font = ImageFont.load_default(size=20)
+    small = ImageFont.load_default(size=15)
+    images = []
+    for t in np.arange(ANIMATION_SPAN[0], ANIMATION_SPAN[1] + 1e-9, 1.0 / ANIMATION_FPS):
+        canvas = Image.new(
+            "RGB", (len(frames) * width + (len(frames) - 1) * gap, header + label_height + height), "white"
+        )
+        draw = ImageDraw.Draw(canvas)
+        status = ""
+        if scenario in SPANS and SPANS[scenario][0] <= t < SPANS[scenario][1]:
+            status = f"   {DISTURBANCES.get(scenario, 'blocked')}"
+        draw.text((10, 10), f"{example_title(name, offset)}   t = {t:+.1f} s{status}", fill="#0b0b0b", font=font)
+        for i, (label, _, _, _, color) in enumerate(ANIMATION_PANELS):
+            k = int(np.clip(round((t - starts[i]) * ANIMATION_FPS), 0, len(frames[i]) - 1))
+            x = i * (width + gap)
+            canvas.paste(Image.fromarray(frames[i][k][top:bottom, left:right]), (x, header + label_height))
+            draw.text((x + 8, header + 4), label, fill=color, font=small)
+        images.append(canvas)
+    # One palette for every frame, so that the GIF stores only what changes from frame to frame.
+    # It is learned from all the frames, so that brief colors, such as a push's arrow, keep theirs.
+    sample = Image.new("RGB", (images[0].width, len(images) * images[0].height))
+    for i, image in enumerate(images):
+        sample.paste(image, (0, i * images[0].height))
+    palette = sample.quantize(colors=128, method=Image.Quantize.MEDIANCUT)
+    images = [image.quantize(palette=palette, dither=Image.Dither.NONE) for image in images]
+    durations = [round(1000.0 / ANIMATION_FPS)] * (len(images) - 1) + [ANIMATION_HOLD_MS]
+    gif = SUMMARY / f"example_{slug(name)}.gif"
+    images[0].save(gif, save_all=True, append_images=images[1:], duration=durations, loop=0, optimize=True)
+    print(f"wrote {gif.name}: {len(images)} frames")
+
+
 # ---------------------------------------------------------------------------- tables
 
 
@@ -834,6 +1029,23 @@ def print_tables() -> None:
                 f" {1000 * r['largest_distance_from_taught_path_m']:.0f}; {1000 * r['farthest_from_target_m']:.0f};"
                 f" {r['peak_torque_nm']:.1f} | {r['replay_peak_torque_nm']:.1f}"
             )
+
+    print("\n== 3.9 Underdamped trackers, the 7 example runs of each arm (nominal, the two offsets, three pushes,")
+    print("block): arrive and hold; settle within the run; worst final distance (mm), for F | replay")
+    for law, name in (("computed_torque", "computed torque, ω = 10"), ("pd", "joint PD, ω = 20")):
+        for damping in DAMPINGS:
+            cells = []
+            for arm in ("esn", "replay"):
+                rows = [
+                    r
+                    for scenario in SCENARIOS
+                    for r in rows_of(f"{scenario}_candidate_f_damping_raw")
+                    if r["arm"] == arm and r["law"] == law and r["damping"] == damping
+                ]
+                settled = sum(np.isfinite(r["settling_time_s"]) for r in rows)
+                worst = 1000 * max(r["final_distance_m"] for r in rows)
+                cells.append(f"{sum(r['success'] for r in rows)}/{len(rows)}; {settled}/{len(rows)}; {worst:.1f}")
+            print(f"  {name}, ζ = {damping:g}: F {cells[0]} | replay {cells[1]}")
 
 
 if __name__ == "__main__":

@@ -41,6 +41,10 @@ arm.
   - *From the offsets,* it arrives and holds from all 169 starts with computed
     torque (ω = 10 rad/s) and with joint PD at ω = 20 and 40 rad/s, at 23–47 N m of
     peak torque, where the replay, which jumps to the take's start, needs 709–1418 N m.
+  - *From an offset start, it starts where the arm is.* Its first output is the
+    start posture itself; from an offset along the taught motion it skips the pause
+    and arrives in under 2 s, while the replay's reference jumps back to the take's
+    start (Section 3.8).
   - *Its reference adapts.* Held by the block, it waits; pushed forward or back
     along the reach, it arrives earlier or later, keeping within 6 mm of the taught
     path with joint PD at ω = 40 rad/s.
@@ -169,7 +173,7 @@ by its name anywhere under `results/`; place or link the copies there to rerun.
 | `sweep_*` (22) | `uv run python experiments/sweep_esn.py experiments/manual_demonstration_autonomous_reaching/<name>.toml` |
 | `grid_candidate_*`, `route_candidate_*` (12) | `uv run python experiments/{autonomous_esn,route_convergence}.py experiments/manual_demonstration_autonomous_reaching/<name>.toml` |
 | `<scenario>_<ESN>[_pd_gains\|_damping]_<take>` (90) | `uv run python experiments/robot_esn.py experiments/manual_demonstration_robot_tracking/<name>.toml` |
-| [`summary`](results/summary) | `uv run python reports/004-manual-demonstration/make_figures.py --logs` |
+| [`summary`](results/summary) | `uv run python reports/004-manual-demonstration/make_figures.py --logs --animations` |
 
 The `<scenario>` is `nominal`, `offsets`, `push_across`, `push_forward`,
 `push_backward`, or `block`; the `<ESN>` is `tuned` or `multi_demo_settings`
@@ -196,9 +200,12 @@ on the robot or in the interactive app also hold the trained ESN, and the
 candidates their maps (`grid.png`, `convergence.png`).
 [`make_figures.py`](make_figures.py) draws the figures of
 [`results/summary`](results/summary) and prints the tables of Section 3 from those
-copies; with `--logs`, it reads the runs' logs under the storage root, which are not
-kept in Git, to draw `candidates.png`, `dwell.png`, and `pushes.png` and write
-`candidates.csv`, `dwell.csv`, and `pushes.csv`.
+copies. With `--logs`, it reads the runs' logs under the storage root, which are not
+kept in Git, to draw `candidates.png`, `dwell.png`, `pushes.png`, and the joint
+angles of the examples of Sections 3.8 and 3.9 (`example_<name>.png`,
+`underdamped_<name>.png`), and to write `candidates.csv`, `dwell.csv`, and
+`pushes.csv`. With `--animations`, it exports the examples' animations of Section
+3.8 (`example_<name>.gif`), each arm rendered by skelarm's player.
 
 ## 3. Results
 
@@ -433,6 +440,216 @@ reach as it starts; F, which reaches about 2 s earlier, is then mid-reach.
   at ω = 20 rad/s arrives after every push at every damping ratio from 1 to 0.1,
   holding except after the forward push, where it briefly overshoots the goal's
   edge.
+
+### 3.8 Scenario by scenario: joint angles and animations
+
+One example of each robot scenario, from one start posture, as in report 003.
+
+- **Each figure:** the joint angles over time, at three tracker settings.
+  - *Columns:* computed torque at ω = 10 rad/s, and joint PD at ω = 20 and
+    40 rad/s, all critically damped. *Rows:* the joints.
+  - *Candidate F:* its arm (solid blue) and its output, the reference it gives the
+    tracker (dashed blue). Under a disturbance, also its undisturbed arm from the
+    same start (light blue).
+  - *The replay:* its arm (orange); its reference is the take (thick gray).
+  - *A disturbance* is shaded.
+- **Each animation:** three arms side by side on one task clock, each rendered by
+  skelarm's player: candidate F with joint PD at ω = 20 rad/s, the replay with the
+  same tracker, and candidate F with computed torque at ω = 10 rad/s.
+  - *Markers:* the purple dot is the target, and the red arrow the force at the tip.
+  - *The ESN's output* is not drawn in the animations; the figures show it.
+- **F's output lies on its arm** within 0.6° in the undisturbed runs and under the
+  block; the pushes open gaps of up to 1.1° with joint PD and 4.1° with computed
+  torque, as the arm is pushed away from F's output.
+
+#### Nominal
+
+![Animation: nominal](results/summary/example_nominal.gif)
+
+![Joint angles: nominal](results/summary/example_nominal.png)
+
+No disturbance, from the demonstrated start.
+
+- **F follows the take's grab move** (the dip of joint 1 at 0.8 s), then creeps
+  forward and makes its reach between about 3 and 5 s. It arrives at 5.8–6.4 s,
+  0.9–1.5 s before the take, and holds.
+- **The replay's arm tracks the take's pixel steps,** and holds 5.9 mm from the
+  target; it fails the hold on the take's correction (Section 3.6).
+
+#### Offset ahead: (+10°, −10°)
+
+![Animation: offset ahead](results/summary/example_offset_ahead.gif)
+
+![Joint angles: offset ahead](results/summary/example_offset_ahead.png)
+
+The start offset by +10° in joint 1 and −10° in joint 2, roughly along the taught
+motion.
+
+- **F starts where the arm is.** Its first output is the start posture itself,
+  (28.3°, 109.9°), with no jump; it treats the start as a point further along the
+  taught motion, skips the pause, and goes straight to the end posture, arriving at
+  1.8–2.0 s.
+- **The replay's reference jumps back** to the take's start (18.2°, 119.9°) at
+  t = 0. Its arm follows with a yank, 5–7° behind its reference at first, and then
+  replays the take, arriving at 7.3 s.
+
+#### Offset across: (−10°, −10°)
+
+![Animation: offset across](results/summary/example_offset_across.gif)
+
+![Joint angles: offset across](results/summary/example_offset_across.png)
+
+The start offset by −10° in both joints, mostly across the taught motion.
+
+- **F returns gradually, then reaches.** Its output starts at the start posture
+  (8.5°, 110.5°). Joint 2 first rises by 4–6°, toward the taught start, while joint
+  1 climbs; then both head to the end posture. It arrives at 2.6–2.9 s.
+- **The replay yanks the arm back** to the take's start, up to 8.6° behind its
+  reference, and replays the take.
+
+#### Push across the reach (5 N)
+
+![Animation: push across](results/summary/example_push_across.gif)
+
+![Joint angles: push across](results/summary/example_push_across.png)
+
+A 5 N push at the tip for 0.1 s at 4.32 s (shaded), across the reach.
+
+- **With joint PD at ω = 40 rad/s,** the push bends F's reach by about 2°, and F
+  goes on, arriving at 6.3 s, 0.4 s later than undisturbed.
+- **With joint PD at ω = 20 rad/s,** the push folds the elbow to 133° and carries
+  joint 1 back to about 15°, near the start. F's output goes with the arm and
+  lingers near the start, and F reaches again in earnest only from about 12 s,
+  arriving at 14.3 s.
+- **With computed torque,** the elbow folds to 151°, and the arm and F's output
+  oscillate together for about 3 s before F re-reaches from near the start,
+  arriving at 12.5 s.
+- **The replay** is knocked off the take briefly and keeps its schedule.
+
+#### Push forward along the reach (10 N)
+
+![Animation: push forward](results/summary/example_push_forward.gif)
+
+![Joint angles: push forward](results/summary/example_push_forward.png)
+
+A 10 N push at the tip for 0.1 s at 4.32 s (shaded), along the reach toward the
+target.
+
+- **With joint PD, F skips ahead.** Its output speeds up with the pushed arm, and it
+  arrives earlier: by 1.2 s at ω = 20 rad/s, where joint 1 passes the end posture
+  by 1.1° and the hand briefly leaves the goal, and by 0.3 s at ω = 40 rad/s.
+- **With computed torque, the arm swings past the end posture,** by 24° in joint 2
+  and 14° in joint 1, and rings for about 2 s before it holds, from 6.1 s.
+- **The replay** keeps its schedule.
+
+#### Push backward along the reach (10 N)
+
+![Animation: push backward](results/summary/example_push_backward.gif)
+
+![Joint angles: push backward](results/summary/example_push_backward.png)
+
+A 10 N push at the tip for 0.1 s at 4.32 s (shaded), along the reach away from the
+target.
+
+- **With joint PD at ω = 40 rad/s,** F's reach dips, and it goes on, arriving
+  0.27 s later than undisturbed.
+- **With joint PD at ω = 20 rad/s, F starts over.** The push sets the arm back to
+  about the start posture (joint 1 from 26° to 18.5°, joint 2 from 113° to 119°).
+  F's output stays with it there, waits as it did at the start, and reaches again
+  from about 7 s, arriving at 9.9 s.
+- **With computed torque, the arm swings back past the start:** joint 1 to −2° and
+  joint 2 to 145°, F's output with it. F then re-reaches, overshoots the end posture,
+  and settles by 7.4 s.
+
+#### Block
+
+![Animation: block](results/summary/example_block.gif)
+
+![Joint angles: block](results/summary/example_block.png)
+
+The tip held from 4.1 s to 4.6 s (shaded), then let go.
+
+- **F's output waits with the held arm,** within 0.2°: both stay flat while the tip
+  is held, then resume. F arrives 0.6–0.8 s later than undisturbed (6.5 s with
+  computed torque, 7.1 s and 6.5 s with joint PD at ω = 20 and 40 rad/s), and holds.
+  In the animation, its holding force (the red arrow) stays small.
+- **The replay's reference, the take, runs on.** Its held arm falls 4–5° behind,
+  and after the release it is yanked to catch up.
+
+### 3.9 Underdamped trackers
+
+Every robot scenario ran again with the tracker underdamped, at damping ratios
+ζ = 1, 0.5, 0.3, and 0.1, with computed torque at ω = 10 rad/s and joint PD at
+ω = 20 rad/s, from the demonstrated start, except for the offsets, which start from
+the two example offsets of Section 3.8: seven runs of each arm per tracker setting.
+
+Of the 7 runs of each arm (candidate F / replay):
+
+| Tracker | ζ | Arrive and hold | Settle within the run | Worst final distance (mm) |
+| --- | ---: | --- | --- | --- |
+| computed torque, ω = 10 | 1 | 6 / 0 | 7 / 7 | 5.9 / 5.9 |
+| | 0.5 | 4 / 0 | 5 / 7 | 619 / 5.9 |
+| | 0.3 | 1 / 0 | 4 / 7 | 1376 / 5.9 |
+| | 0.1 | 1 / 0 | 0 / 7 | 2866 / 6.0 |
+| joint PD, ω = 20 | 1 | 6 / 0 | 7 / 7 | 5.9 / 5.9 |
+| | 0.5 | 6 / 0 | 7 / 7 | 5.9 / 5.9 |
+| | 0.3 | 6 / 0 | 7 / 7 | 5.9 / 5.9 |
+| | 0.1 | 6 / 0 | 7 / 7 | 6.1 / 6.0 |
+
+- **With computed torque, F and its tracker become unstable together.** F is
+  driven by the measured posture, so the tracker's ringing comes back through F's
+  output, which rings with the arm. As ζ falls, fewer runs settle, and at ζ = 0.1
+  none does: the arm swings away, ending up to 2.9 m from the target.
+- **With joint PD at ω = 20 rad/s, F settles at every damping ratio,** with no
+  visible ringing. Its one miss at each ζ is the forward push's brief overshoot of
+  the goal's edge (Section 3.7); with computed torque at ζ = 1, it is the backward
+  push.
+- **The replay settles at every damping ratio,** ringing on the take's pixel steps
+  and after its yank from the offsets, but never passes the hold: its holds fail on
+  the take's correction (Section 3.6).
+
+![Underdamped: nominal](results/summary/underdamped_nominal.png)
+
+Nominal, ζ = 0.1. With computed torque, F arrives at 5.8 s and holds for its 2 s,
+but the oscillation grows from about 8 s until the arm swings by tens of degrees
+(joint 2 up to 150° at 15.8 s); F's output rings with it. With joint PD, F settles
+smoothly; the replay's arm rings on the take's steps.
+
+![Underdamped: offset ahead](results/summary/underdamped_offset_ahead.png)
+
+Offset ahead, (+10°, −10°), ζ = 0.1. With computed torque, the arm rings around the
+end posture from its arrival at 1.8 s, and from about 10 s it spins: the joint
+angles wrap through ±180°. With joint PD, F's return is as when critically damped,
+and the replay's yank back to the take's start rings.
+
+![Underdamped: offset across](results/summary/underdamped_offset_across.png)
+
+Offset across, (−10°, −10°), ζ = 0.1. With computed torque, the arm never arrives
+and ends 2.9 m from the target; with joint PD, F arrives at 3.0 s and holds.
+
+![Underdamped: push across](results/summary/underdamped_push_across.png)
+
+Push across, ζ = 0.1. With computed torque, the push sets off an oscillation that
+grows until the arm spins, its joint angles wrapping through ±180° from about 8 s;
+with joint PD, F re-reaches as when critically damped, arriving at 13.0 s.
+
+![Underdamped: push forward](results/summary/underdamped_push_forward.png)
+
+Push forward, 10 N, ζ = 0.1. With computed torque, the arm swings away; with joint
+PD, F skips ahead and arrives 1.2 s earlier than undisturbed, briefly passing the
+goal's edge.
+
+![Underdamped: push backward](results/summary/underdamped_push_backward.png)
+
+Push backward, 10 N, ζ = 0.1. With computed torque, the arm swings away; with joint
+PD, F starts over from about the start posture and arrives at 11.8 s.
+
+![Underdamped: block](results/summary/underdamped_block.png)
+
+Block, ζ = 0.1. With computed torque, F waits with the held arm and arrives at
+6.5 s, but its ringing grows from about 11 s until the arm swings away near the end,
+1.4 m from the target, as F's undisturbed arm also does; with joint PD, F waits with
+the held arm and arrives at 7.2 s.
 
 ## 4. Observations
 
