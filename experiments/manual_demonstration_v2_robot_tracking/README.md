@@ -28,6 +28,11 @@ are marked `EDIT` (`grep -n EDIT <file>`); the values are report 004's.
 uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<copy>.toml
 ```
 
+Besides the metrics and the figures of report 004's runs, each run draws
+`joints.png`: the joint angles over time from the first start posture, for each
+tracker setting, of the taught motion, the ESN's output, the arm driven by the
+ESN, and the arm replaying the take.
+
 Report 004 named its copies `<scenario>_<ESN>[_pd_gains|_damping][_zero_velocity]_raw.toml`:
 
 | Suffix | `[tracker]` |

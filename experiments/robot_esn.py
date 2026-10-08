@@ -42,6 +42,8 @@ start posture, and the run directory receives:
 - ``timeline.png``: the hand's distance to the target, the progress along the
   demonstrated path of the arm and of its reference, and the joint torque over
   time, from the first start posture;
+- ``joints.png``: the joint angles over time from the first start posture: the
+  demonstrated motion, the ESN's output (its reference), and the arms;
 - ``grid.png``, with an ``[evaluation.start_grid]``: maps over the start offsets
   of the outcome, the path distance, the training path ratio, the peak reference
   speed, the peak torque, and the tracking error, for each tracker setting.
@@ -206,6 +208,7 @@ def main() -> None:
     )
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
     plot_timeline(run_dir, setup, settings, span, title).savefig(run_dir / "timeline.png", dpi=150)
+    plot_joints(run_dir, setup, settings, span, title).savefig(run_dir / "joints.png", dpi=150)
     if "start_grid" in evaluation:
         plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
@@ -535,13 +538,7 @@ def plot_timeline(
     fig.suptitle(f"{title}, from {setup.starts[0].origin}", color="#0b0b0b")
     axes = np.asarray(fig.subplots(3 * len(rows), columns, sharex=True)).reshape(3 * len(rows), columns)
     start_q = setup.starts[0].q
-    if setup.demonstrator_logs:
-        reference = setup.demonstrator_logs[0]
-        ref_times, ref_q = reference.times, reference.channel("q").reshape(len(reference.times), -1)
-        ref_label = "demonstrator, undisturbed"
-    else:  # the taught motion
-        ref_q = setup.demos[nearest_demonstration(start_q, setup.demos)]
-        ref_times, ref_label = (setup.times[1] - setup.times[0]) * np.arange(len(ref_q)), "taught motion"
+    ref_times, ref_q, ref_label = demonstrated_motion(setup)
     ref_hand = endpoint_positions(setup.skeleton, ref_q)
     demonstrator = run_dir / "demonstrator_00.sklog.npz"
     for row, law_settings in enumerate(rows):
@@ -593,6 +590,84 @@ def plot_timeline(
     labels.append("its reference (progress)")
     ncol = 4 if columns > 2 else columns  # a narrow figure wraps the legend
     fig.legend(handles, labels, loc="outside lower center", ncol=ncol, frameon=False, labelcolor=TEXT_COLOR)
+    return fig
+
+
+def demonstrated_motion(setup: Setup) -> tuple[NDArray[np.float64], NDArray[np.float64], str]:
+    """The motion the runs from the first start are compared with: its times, joint angles, and label.
+
+    It is the demonstrator's undisturbed reach from that start, or, without a
+    demonstrator, the taught motion nearest to it.
+    """
+    if setup.demonstrator_logs:
+        reference = setup.demonstrator_logs[0]
+        return reference.times, reference.channel("q").reshape(len(reference.times), -1), "demonstrator, undisturbed"
+    q = setup.demos[nearest_demonstration(setup.starts[0].q, setup.demos)]
+    return (setup.times[1] - setup.times[0]) * np.arange(len(q)), q, "taught motion"
+
+
+def plot_joints(
+    run_dir: Path, setup: Setup, settings: list[Setting], span: tuple[float, float] | None, title: str
+) -> Figure:
+    """Plot the joint angles over time from the first start: one column per tracker setting, one row per joint.
+
+    Each panel draws the demonstrated motion (thick gray), the ESN's output, the
+    reference it gives the tracker (dashed), the arm driven by the ESN, the arm
+    replaying the demonstration by time, and the demonstrator's arm when there is
+    one. The shaded band is when the disturbance acts.
+    """
+    rows = by_law(settings)
+    columns = len(rows[0])
+    n_joints = setup.skeleton.num_joints
+    width = max(4.6 * columns + 1.0, 9.0)  # wide enough for the title with a single column
+    fig = Figure(figsize=(width, 2.6 * n_joints * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(f"{title}: joint angles, from {setup.starts[0].origin}", color="#0b0b0b")
+    axes = np.asarray(fig.subplots(n_joints * len(rows), columns, sharex=True)).reshape(n_joints * len(rows), columns)
+    ref_times, ref_q, ref_label = demonstrated_motion(setup)
+    demonstrator = run_dir / "demonstrator_00.sklog.npz"
+    for row, law_settings in enumerate(rows):
+        for col, setting in enumerate(law_settings):
+            logs = {arm: StateLog.load(run_dir / setting.name / f"{arm}_00.sklog.npz") for arm in ("esn", "replay")}
+            if demonstrator.exists():
+                logs["demonstrator"] = StateLog.load(demonstrator)
+            for joint in range(n_joints):
+                ax = axes[n_joints * row + joint, col]
+                style(ax)
+                if span is not None:
+                    ax.axvspan(*span, color=DISTURBANCE_COLOR, zorder=0)
+                ax.plot(
+                    ref_times,
+                    np.degrees(ref_q[:, joint]),
+                    color=ARM_COLORS["demonstrator"],
+                    linewidth=4,
+                    alpha=0.3,
+                    label=ref_label,
+                )
+                esn = logs["esn"]
+                ax.plot(
+                    esn.times,
+                    np.degrees(esn.channel("q_ref").reshape(len(esn.times), -1)[:, joint]),
+                    color=ARM_COLORS["esn"],
+                    linewidth=1.3,
+                    linestyle="--",
+                    label="ESN output (its reference)",
+                )
+                for arm in [arm for arm in ARMS if arm in logs]:
+                    log = logs[arm]
+                    ax.plot(
+                        log.times,
+                        np.degrees(log.channel("q").reshape(len(log.times), -1)[:, joint]),
+                        color=ARM_COLORS[arm],
+                        linewidth=1.3,
+                        label=ARM_LABELS[arm],
+                    )
+                ax.set_xlim(-0.3, float(setup.times[-1]))
+                ax.set_title(f"{setting.label}: joint {joint + 1}", color=TEXT_COLOR, fontsize=9)
+                if col == 0:
+                    ax.set_ylabel(f"joint {joint + 1} (deg)", color=TEXT_COLOR)
+            axes[n_joints * row + n_joints - 1, col].set_xlabel("time (s)", color=TEXT_COLOR, fontsize=8)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", ncol=2, frameon=False, labelcolor=TEXT_COLOR)
     return fig
 
 
