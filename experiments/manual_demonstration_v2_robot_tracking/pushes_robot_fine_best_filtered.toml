@@ -9,10 +9,10 @@
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/pushes_robot_fine_best_filtered.toml
 #
-# The ESN and the take arrive at about 9.6 to 10 s; four pushes strike the reach,
-# and one the arm held at the target. The forces are a start: about 0.5 N along the
-# reach and 5 N across it strike this arm about as hard, for its size, as report
-# 004's 10 N and 5 N pushes struck its arm.
+# The ESN and the take arrive at about 9.6 to 10 s; three pushes of 0.2 s, tuned by
+# hand, strike the reach twice, nearly backward at 4 s and nearly across at 8 s, and
+# the arm held at the target once, nearly across the other way at 13 s. Each is
+# turned 10 deg from the reach's backward or across directions.
 
 [esn]
 # A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
@@ -39,37 +39,23 @@ start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
 # `angle_deg` counterclockwise from the direction toward the target (0 forward, 90
 # across, 180 backward), fixed for the run by the start posture.
 
-[[disturbance]]  # forward, along the reach toward the target
+[[disturbance]]  # nearly backward: 10 deg off it, toward clockwise across
 type = "push"
-force = 0.5            # EDIT: N
-onset = 2.0            # EDIT: task time (s)
-duration = 0.1         # s
-angle_deg = 0.0        # deg from the direction toward the target
-
-[[disturbance]]  # across the reach, counterclockwise
-type = "push"
-force = 5.0            # EDIT: N
+force = 4.0            # EDIT: N
 onset = 4.0            # EDIT: task time (s)
-duration = 0.1         # s
-angle_deg = 90.0       # deg from the direction toward the target
+duration = 0.2         # s
+angle_deg = -170.0     # deg from the direction toward the target
 
-[[disturbance]]  # backward, along the reach away from the target
-type = "push"
-force = 0.5            # EDIT: N
-onset = 6.0            # EDIT: task time (s)
-duration = 0.1         # s
-angle_deg = 180.0      # deg from the direction toward the target
-
-[[disturbance]]  # across the reach, clockwise
+[[disturbance]]  # nearly across, counterclockwise: 10 deg off it, toward the target
 type = "push"
 force = 5.0            # EDIT: N
 onset = 8.0            # EDIT: task time (s)
-duration = 0.1         # s
-angle_deg = -90.0      # deg from the direction toward the target
+duration = 0.2         # s
+angle_deg = 80.0       # deg from the direction toward the target
 
-[[disturbance]]  # across, after the arrival and its hold window
+[[disturbance]]  # nearly across, clockwise, after the hold: 10 deg off it, toward the target
 type = "push"
-force = 5.0            # EDIT: N
+force = 4.0            # EDIT: N
 onset = 13.0           # EDIT: task time (s)
-duration = 0.1         # s
-angle_deg = 90.0       # deg from the direction toward the target
+duration = 0.2         # s
+angle_deg = -80.0      # deg from the direction toward the target
