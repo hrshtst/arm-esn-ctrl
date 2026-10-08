@@ -64,6 +64,7 @@ from numpy.typing import NDArray
 from arm_esn_ctrl.autonomous import Start, start_postures
 from arm_esn_ctrl.demonstrations import load_joint_angles
 from arm_esn_ctrl.esn import ReachingEsn
+from arm_esn_ctrl.states import teacher_forced_states
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import nearest_demonstration
 
@@ -144,19 +145,6 @@ def main() -> None:
         run_dir / "convergence.png", dpi=150
     )
     print(f"\nWrote the results to {run_dir}")
-
-
-def teacher_forced_states(esn: ReachingEsn, q: NDArray[np.float64]) -> NDArray[np.float64]:
-    """The reservoir states while the demonstration ``q`` is fed in after the warm-up, as in training.
-
-    One state per input: the held start posture for the warm-up, then every sample.
-    """
-    esn.reset()
-    states = []
-    for posture in [q[0]] * esn.config.warmup_steps + list(q):
-        esn.step(posture)
-        states.append(esn.state())
-    return np.array(states)
 
 
 def autonomous_states(esn: ReachingEsn, start_q: NDArray[np.float64], n_steps: int) -> NDArray[np.float64]:
