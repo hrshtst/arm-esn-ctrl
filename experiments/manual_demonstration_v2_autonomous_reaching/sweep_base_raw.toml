@@ -1,0 +1,56 @@
+# BASE: copy this file to a new name, such as sweep_main_ridge_<ridge>_raw.toml, and
+# edit the copy. Lines marked EDIT are the ones to set.
+#
+# Stage 1 on the remade arm (v2): sweep the ESN's settings, trained on the take
+# taught by hand, and rank them.
+#
+#   uv run python experiments/sweep_esn.py experiments/manual_demonstration_v2_autonomous_reaching/<copy>.toml
+#
+# Every combination runs from the grid of start postures below and is ranked by
+# robustness: the fewest runs that fail to arrive and hold, then the fewest swings,
+# runs whose hand strays from the taught path by more than max_detour beyond where
+# it started, then the fewest first steps over max_first_step. runs.csv keeps every
+# run's detour and first step, for other thresholds.
+#
+# [sweep] names up to three [esn] keys, each with its values. The values here are
+# report 004's first sweep of the three main parameters, at one ridge; report 004
+# then swept the ridge and the warm-up (ridge = [1e-8, 1e-6, 1e-4, 1e-2, 1.0, 10.0,
+# 100.0] and warmup = [0.0, 0.25, 0.5, 1.0, 2.0, 4.0]), and finally around the best.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml.
+run = "results/demonstrations/YYYYMMDD-HHMMSS-reach_manual_v2"  # EDIT: the import's run
+train = ["demo_00.sklog.npz"]  # the take as recorded
+
+[esn]
+# The settings not swept; a swept key's value here is replaced by each swept value.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # EDIT: the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400        # EDIT
+spectral_radius = 1.05
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.7
+input_scaling = 0.3
+bias = true
+ridge = 1e-2           # EDIT
+seed = 0               # also seeds the teacher noise
+teacher_noise_deg = 0.0  # no teacher noise
+teacher_copies = 1
+
+[sweep]
+# EDIT: the first two are the heatmap axes (x, then y); each value of the third gets its own column.
+leak_rate = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5]
+spectral_radius = [0.3, 0.6, 0.9, 1.2, 1.5]
+input_scaling = [0.03, 0.1, 0.3, 1.0, 3.0]
+
+[ranking]
+max_detour = 0.05      # EDIT: m: a run that strays from the taught path by more than this beyond where it started swings
+max_first_step = 0.03  # EDIT: m: a first step longer than this is a jump, not a mild return
+
+[evaluation]
+duration = 16.0        # EDIT: autonomous run (s): the take's length and about 1 s more
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # EDIT: the demonstrated start offset by -span to span deg in each joint
+step_deg = 5.0         # EDIT: (49 start postures with 15 and 5)

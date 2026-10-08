@@ -48,6 +48,11 @@ uv run python third_party/skelarm/tools/trajectory_recorder.py \
     --multi-take --output storage/data/taught_reach/reach.sklog.npz --show-past-trails
 ```
 
+`reach_manual_single.toml` (report 004) and `reach_manual_v2.toml` (its remade arm,
+start posture, and target) each describe one take taught by hand: their headers
+give the commands to record it and to import it into a demonstration run with
+`experiments/import_demonstrations.py`.
+
 ## Runs
 
 Under `results/demonstrations/` in the storage:

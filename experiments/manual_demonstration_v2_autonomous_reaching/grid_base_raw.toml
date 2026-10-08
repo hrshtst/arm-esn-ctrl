@@ -1,0 +1,41 @@
+# BASE: copy this file to a new name, such as grid_<settings>_raw.toml, and edit the
+# copy. Lines marked EDIT are the ones to set.
+#
+# Stage 1 on the remade arm (v2): an ESN trained on the take taught by hand, run on
+# its own from a grid of start postures around the demonstrated one.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_autonomous_reaching/<copy>.toml
+#
+# The ESN settings here are candidate F's (report 004). Report 004's other starting
+# points, as [esn] values:
+# - report 003's first settings: ridge 1, leak rate 0.3, input scaling 1, 300 neurons,
+#   spectral radius 0.5, warm-up 1 s;
+# - those for eight demonstrations: ridge 1e-6, leak rate 0.05, input scaling 0.1,
+#   600 neurons, spectral radius 1.3, warm-up 0.25 s;
+# - report 003's tuned settings: ridge 10, leak rate 0.2, input scaling 3, 400
+#   neurons, spectral radius 0.3, warm-up 1 s.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml.
+run = "results/demonstrations/YYYYMMDD-HHMMSS-reach_manual_v2"  # EDIT: the import's run
+train = ["demo_00.sklog.npz"]  # EDIT: the take as recorded; ["demo_00_filtered.sklog.npz"] for it filtered
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # EDIT: the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400        # EDIT
+spectral_radius = 1.05  # EDIT
+sparsity = 0.1         # fraction of nonzero reservoir connections
+leak_rate = 0.7        # EDIT
+input_scaling = 0.3    # EDIT
+bias = true
+ridge = 1e-2           # EDIT
+seed = 0
+
+[evaluation]
+duration = 16.0        # EDIT: autonomous run (s): the take's length and about 1 s more
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # EDIT: the demonstrated start offset by -span to span deg in each joint
+step_deg = 2.5         # EDIT: (169 start postures with 15 and 2.5)

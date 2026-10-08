@@ -1,0 +1,25 @@
+# BASE: copy this file to a new name, such as warmup_<settings>_raw.toml, and edit
+# the copy. Lines marked EDIT are the ones to set.
+#
+# Stage 1 on the remade arm (v2): a trained ESN run with other warm-ups. A warm-up
+# longer by some time makes an ESN that times its reach from the reset arrive
+# earlier by that time; one that times its reach from the end of the warm-up arrives
+# as before.
+#
+#   uv run python experiments/warmup_esn.py experiments/manual_demonstration_v2_autonomous_reaching/<copy>.toml
+
+[esn]
+# The trained ESN: esn.toml of a run of experiments/autonomous_esn.py, relative to
+# the storage root. Its run directory names the demonstration it was trained on.
+model = "results/manual_demonstration_v2_autonomous_reaching/YYYYMMDD-HHMMSS-grid_<settings>_raw/esn.toml"  # EDIT
+
+[warmup]
+# Warm-ups to run with (s); the trained one is added if missing.
+durations = [0.0, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 2.5]
+
+[evaluation]
+duration = 16.0        # EDIT: autonomous run (s): the take's length and about 1 s more
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # EDIT: the start offsets of the grid run: -span to span deg in each joint
+step_deg = 2.5         # EDIT

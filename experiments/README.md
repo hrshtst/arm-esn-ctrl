@@ -18,7 +18,11 @@ experiments/
 ├── single_demonstration_autonomous_reaching/
 ├── single_demonstration_robot_tracking/
 ├── multi_demonstration_autonomous_reaching/
-└── multi_demonstration_robot_tracking/
+├── multi_demonstration_robot_tracking/
+├── manual_demonstration_autonomous_reaching/
+├── manual_demonstration_robot_tracking/
+├── manual_demonstration_v2_autonomous_reaching/
+└── manual_demonstration_v2_robot_tracking/
 ```
 
 | Experiment | What it studies | Runners | Report |
@@ -28,6 +32,10 @@ experiments/
 | [single_demonstration_robot_tracking](single_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | `robot_esn.py` | [003](../reports/003-single-demonstration/README.md) |
 | [multi_demonstration_autonomous_reaching](multi_demonstration_autonomous_reaching/README.md) | an ESN trained on eight demonstrations, run on its own (Stage 1) | `autonomous_esn.py`, `sweep_esn.py` | [001](../reports/001-autonomous-reaching/README.md) |
 | [multi_demonstration_robot_tracking](multi_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | `robot_esn.py` | [002](../reports/002-esn-reference-on-the-robot/README.md) |
+| [manual_demonstration_autonomous_reaching](manual_demonstration_autonomous_reaching/README.md) | an ESN trained on one take taught by hand, run on its own (Stage 1) | `import_demonstrations.py`, `autonomous_esn.py`, `reservoir_states.py`, `sweep_esn.py`, `warmup_esn.py`, `route_convergence.py` | [004](../reports/004-manual-demonstration/README.md) |
+| [manual_demonstration_robot_tracking](manual_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | `robot_esn.py` | [004](../reports/004-manual-demonstration/README.md) |
+| [manual_demonstration_v2_autonomous_reaching](manual_demonstration_v2_autonomous_reaching/README.md) | as manual-demonstration autonomous reaching, on a remade arm with its own start posture and target (base configurations) | the same | |
+| [manual_demonstration_v2_robot_tracking](manual_demonstration_v2_robot_tracking/README.md) | as manual-demonstration robot tracking, on that arm (base configurations) | `robot_esn.py` | |
 
 Run a configuration with its runner:
 

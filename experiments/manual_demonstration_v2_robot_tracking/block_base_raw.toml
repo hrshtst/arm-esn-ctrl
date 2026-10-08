@@ -1,0 +1,53 @@
+# BASE: copy this file to a new name, such as block_<ESN>_raw.toml (or
+# block_<ESN>_pd_gains_raw.toml, _damping_raw.toml, ...), and edit the copy. Lines
+# marked EDIT are the ones to set.
+#
+# Stage 2 on the remade arm (v2): a trained ESN generates the reference of the
+# simulated arm, driven by the arm's measured posture, and a tracker follows it; the
+# take it was trained on is replayed by time for comparison. The scenario: the tip
+# held by a stiff spring-damper, then let go.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<copy>.toml
+#
+# The disturbances strike the take where report 003's struck its scripted reach: the
+# block when the take's hand is 3.4 % of the way to the target, the pushes at 9.9 %
+# (in report 004, 4.10 s and 4.32 s, after the take's pause). Find those times on
+# the new take, or choose others.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_autonomous_reaching/YYYYMMDD-HHMMSS-grid_<settings>_raw/esn.toml"  # EDIT
+
+[tracker]
+# Tracking laws: "computed_torque" (cancels the arm's dynamics) or "pd" (joint PD).
+laws = ["computed_torque", "pd"]  # EDIT
+# Natural frequencies of the tracking error (rad/s): a list for every law, or a
+# table with a list for each law, such as
+# omegas = { computed_torque = [10.0], pd = [20.0] }. Computed torque:
+# kp = omega^2, kd = 2 zeta omega. Joint PD: the same, scaled by each joint's
+# inertia at the posture where the reach ends. Report 004's variants: _pd_gains,
+# laws = ["pd"] and omegas = [10.0, 20.0, 40.0]; _damping, omegas as the table above
+# and dampings = [1.0, 0.5, 0.3, 0.1]. Sweep either the natural frequencies or the
+# damping ratios, not both.
+omegas = [10.0]  # EDIT
+dampings = [1.0]  # EDIT: damping ratios of the tracking error: 1 is critically damped, less oscillates
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+# EDIT: false gives the tracking laws a zero reference velocity, so that the
+# derivative term damps the arm's own velocity rather than the velocity error
+# (report 004's _zero_velocity runs).
+reference_velocity = true
+
+[evaluation]
+duration = 16.0        # EDIT: task (s), after the warm-up: the take's length and about 1 s more
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+effort_window = [4.1, 5.1]  # EDIT: torque, effort, and force are measured from the block's onset for 1 s (s)
+
+[disturbance]
+type = "block"
+onset = 4.1            # EDIT: task time when the tip is gripped (s)
+release = 4.6          # EDIT: task time when it is let go (s)
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m

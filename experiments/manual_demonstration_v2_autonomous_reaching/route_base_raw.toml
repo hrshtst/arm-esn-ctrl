@@ -1,0 +1,16 @@
+# BASE: copy this file to a new name, such as route_<settings>_raw.toml, and edit the
+# copy. Lines marked EDIT are the ones to set.
+#
+# Stage 1 on the remade arm (v2): how the runs of an ESN from a grid of start
+# postures (a run of experiments/autonomous_esn.py) gather onto a common route,
+# regardless of timing.
+#
+#   uv run python experiments/route_convergence.py experiments/manual_demonstration_v2_autonomous_reaching/<copy>.toml
+
+[runs]
+# A run directory of experiments/autonomous_esn.py, relative to the storage root.
+grid = "results/manual_demonstration_v2_autonomous_reaching/YYYYMMDD-HHMMSS-grid_<settings>_raw"  # EDIT
+
+[convergence]
+step = 0.1             # s: the hand paths are compared at this period
+join_distance = 0.02   # m: a run has joined the common route once its spread stays below this
