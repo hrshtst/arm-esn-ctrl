@@ -9,10 +9,10 @@
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<copy>.toml
 #
-# The disturbances strike the take where report 003's struck its scripted reach: the
-# block when the take's hand is 3.4 % of the way to the target (1.15 s), the pushes
-# at 9.9 % (1.94 s). The take (20261008-170034-reach_manual_v2) starts moving at
-# 0.64 s and arrives at 9.64 s.
+# The block holds the tip for 1 s in mid-reach, from 4.5 s, when the take's hand is
+# 32 % of the way to the target and moving, to 5.5 s (44 %); the pushes strike the
+# take where report 003's struck its scripted reach, at 9.9 % (1.94 s). The take
+# (20261008-170034-reach_manual_v2) starts moving at 0.64 s and arrives at 9.64 s.
 
 [esn]
 # A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
@@ -43,11 +43,11 @@ reference_velocity = true
 duration = 20.0        # EDIT: task (s), after the warm-up; the take lasts 18.5 s
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
-effort_window = [1.15, 2.15]  # EDIT: torque, effort, and force are measured from the block's onset for 1 s (s)
+effort_window = [4.5, 6.0]  # EDIT: torque, effort, and force are measured from the block's onset to 0.5 s after its release (s)
 
 [disturbance]
 type = "block"
-onset = 1.15           # EDIT: task time when the tip is gripped (s)
-release = 1.65         # EDIT: task time when it is let go (s)
+onset = 4.5            # EDIT: task time when the tip is gripped (s)
+release = 5.5          # EDIT: task time when it is let go (s)
 stiffness = 20000.0    # N/m
 damping = 100.0        # N s/m

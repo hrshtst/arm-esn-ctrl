@@ -1,8 +1,8 @@
 # Stage 2 on the remade arm (v2), the validation of the ESN chosen by the sweeps on
 # the robot (grid_robot_final_filtered.toml: leak rate 0.03, spectral radius 0.99,
-# input scaling 2, seed 4): the tip held by a stiff spring-damper
-# from 1.15 s, when the take's hand is 3.4 % of the way to the target, to 1.65 s,
-# then let go, from the demonstrated start.
+# input scaling 2, seed 4): the tip held by a stiff spring-damper for 1 s, from
+# 4.5 s, when the take's hand is 32 % of the way to the target and moving, to 5.5 s
+# (44 %), then let go, from the demonstrated start.
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/block_robot_final_filtered.toml
 
@@ -25,11 +25,11 @@ reference_velocity = false
 duration = 22.0        # task (s), after the warm-up, as in the sweeps; the take lasts 18.5 s
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
-effort_window = [1.15, 2.15]  # torque, effort, and force are measured from the block's onset for 1 s (s)
+effort_window = [4.5, 6.0]  # torque, effort, and force are measured from the block's onset to 0.5 s after its release (s)
 
 [disturbance]
 type = "block"
-onset = 1.15           # task time when the tip is gripped (s)
-release = 1.65         # task time when it is let go (s)
+onset = 4.5            # task time when the tip is gripped (s)
+release = 5.5          # task time when it is let go (s)
 stiffness = 20000.0    # N/m
 damping = 100.0        # N s/m

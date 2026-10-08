@@ -72,7 +72,8 @@ The ESN the sweeps chose (leak rate 0.03, spectral radius 0.99, input scaling 2,
 seed 4) is trained by `grid_robot_final_filtered.toml` of the autonomous
 experiment, and `{nominal,block,offsets}_robot_final_filtered.toml` validate it on
 the robot (stage 5) with the same tracker: undisturbed from the demonstrated start,
-the tip held from 1.15 s to 1.65 s, and from the 49 starts of the grid every 5 deg.
+the tip held for 1 s in mid-reach, from 4.5 s to 5.5 s, and from the 49 starts of the grid
+every 5 deg.
 `{nominal,block,offsets}_robot_fine_best_filtered.toml` validate the best ESN of the
 finer sweep (`grid_robot_fine_best_filtered.toml`: leak rate 0.05, seed 0) alike.
 `pushes_robot_{final,fine_best}_filtered.toml` push both ESNs' arms three times
@@ -117,7 +118,8 @@ damping = 100.0        # N s/m
 - `[evaluation] duration`: the take's length and about 1 s more.
 - The disturbances' times (`onset`, `release`, `effort_window`): report 004 struck
   the take where report 003 struck its scripted reach, the block when the take's
-  hand was 3.4% of the way to the target and the pushes at 9.9%.
+  hand was 3.4% of the way to the target and the pushes at 9.9%. The v2 block holds
+  the tip for 1 s in mid-reach instead, from 4.5 s (32%) to 5.5 s (44%).
 - The push forces and the trackers' natural frequencies, if the new arm is much
   heavier or lighter: joint PD scales its gains by the arm's inertia, but a push of
   a given force moves a lighter arm farther.
