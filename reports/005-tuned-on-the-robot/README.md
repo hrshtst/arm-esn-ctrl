@@ -453,9 +453,29 @@ The robot runs do not store the ESN's reservoir states.
 runs' logs: the trained ESN keeps its weights, and a run's log keeps every posture
 the ESN was given, from the reset at the warm-up's start (−1 s). The script
 refuses a log whose reference the recomputed ESN does not reproduce within
-1e-8 rad; every one here passes. The figures
-([run](results/20261009-012157-states_robot_fine_best_filtered)) draw the chosen ESN's states beneath its states while the take is
-fed in as in training (thick gray), with the warm-up and the disturbances shaded.
+1e-8 rad; every one here passes.
+
+The figures ([run](results/20261009-012157-states_robot_fine_best_filtered)) draw
+two sequences of the chosen ESN's states, with the warm-up and the disturbances
+shaded. Both come from the same trained ESN, reset, then warmed up for 1 s; they
+differ only in what it is fed every 10 ms:
+
+- **The take fed in, as in training** (thick gray): the take's start posture held
+  through the warm-up, then the take's joint angles, filtered at 2 Hz, sample by
+  sample (teacher forcing). The ESN's outputs change nothing: it is always fed the
+  take's next posture. These are the states training builds, and the readout was
+  fitted to map them, after the warm-up, to the take's next posture. They show
+  where the states would be if the arm moved exactly as in the take.
+- **The ESN driving the robot** (blue): the arm's measured joint angles. During the
+  warm-up, the arm holds its start posture, which may be offset from the take's;
+  then it moves where the tracker takes it, following the ESN's own outputs, in a
+  loop: ESN, tracker, arm, ESN. Wherever the arm's motion differs from the take, by
+  an offset start, the tracker's lag, the block, or a push, the blue states part
+  from the gray.
+
+From the demonstrated start, both are fed the same held posture through the
+warm-up, so they coincide exactly until the task starts. Neither is the ESN on its
+own (Stage 1), which is fed its own previous output.
 
 #### Eight neurons over the whole run
 
