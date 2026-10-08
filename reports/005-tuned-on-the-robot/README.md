@@ -164,7 +164,7 @@ record (`run.toml`) gives its commit:
 | `a893294` | the chosen ESN from the offsets |
 | `b9b16dd` | the chosen ESN undisturbed and pushed, with `torques.png` |
 | `513ad39` | the chosen ESN under the block, for 1 s in mid-reach |
-| `a8ae1d1` | the chosen ESN's reservoir states in those runs |
+| `88a5533` | the chosen ESN's reservoir states in those runs |
 
 All runs are deterministic. Each run directory here holds its configuration, its
 run record, and its metrics (`metrics.csv`, or `sweep.csv` and `runs.csv` with the
@@ -454,17 +454,38 @@ runs' logs: the trained ESN keeps its weights, and a run's log keeps every postu
 the ESN was given, from the reset at the warm-up's start (−1 s). The script
 refuses a log whose reference the recomputed ESN does not reproduce within
 1e-8 rad; every one here passes. The figures
-([run](results/20261009-010912-states_robot_fine_best_filtered)) draw the chosen ESN's states beneath its states while the take is
+([run](results/20261009-012157-states_robot_fine_best_filtered)) draw the chosen ESN's states beneath its states while the take is
 fed in as in training (thick gray), with the warm-up and the disturbances shaded.
+
+#### Eight neurons over the whole run
+
+![Neurons over the whole run, joint PD](results/20261009-012157-states_robot_fine_best_filtered/neurons_pd_w20_z0.1.png)
+
+![Neurons over the whole run, computed torque](results/20261009-012157-states_robot_fine_best_filtered/neurons_computed_torque_w20_z0.1.png)
+
+Eight of the 400 neurons, picked at random (seed 0), from the reset to the run's
+end. Most of them switch between plateaus near ±1 during the reach and settle once
+the arm holds at the target.
+
+- **Undisturbed,** each neuron follows the take's states, slightly behind them
+  late in the reach, as the arm arrives 0.4 s after the take.
+- **Under the block,** the states hold still while the tip is held, then resume
+  the take's course about 1 s late.
+- **Each push** makes them swing and settle back within a few seconds; with
+  computed torque, after the push at 13 s, neurons 122 and 250 swing the farthest,
+  for about 4 s, as the arm wanders.
+- **From (+15°, +15°),** they join the take's course early and stay about 1 s
+  ahead of it to the end of the reach.
+- **From (0°, −10°),** they hold constant from the warm-up's end to the run's end.
 
 #### The warm-up
 
-![Neurons, joint PD](results/20261009-010912-states_robot_fine_best_filtered/neurons_pd_w20_z0.1.png)
+![Neurons over the warm-up, joint PD](results/20261009-012157-states_robot_fine_best_filtered/neurons_warmup_pd_w20_z0.1.png)
 
-![Neurons, computed torque](results/20261009-010912-states_robot_fine_best_filtered/neurons_computed_torque_w20_z0.1.png)
+![Neurons over the warm-up, computed torque](results/20261009-012157-states_robot_fine_best_filtered/neurons_warmup_computed_torque_w20_z0.1.png)
 
-Eight of the 400 neurons, picked at random (seed 0), over the warm-up and the
-task's first 3 s. The two trackers give the same warm-up: the arm holds its start
+The same neurons over the warm-up and the task's first 3 s, for the undisturbed
+run and the offset starts. The two trackers give the same warm-up: the arm holds its start
 posture either way.
 
 - **From the demonstrated start,** the warm-up brings every neuron onto the take's
@@ -478,13 +499,13 @@ posture either way.
 
 #### The principal components
 
-![Principal components over time, joint PD](results/20261009-010912-states_robot_fine_best_filtered/pca_pd_w20_z0.1.png)
+![Principal components over time, joint PD](results/20261009-012157-states_robot_fine_best_filtered/pca_pd_w20_z0.1.png)
 
-![Principal components over time, computed torque](results/20261009-010912-states_robot_fine_best_filtered/pca_computed_torque_w20_z0.1.png)
+![Principal components over time, computed torque](results/20261009-012157-states_robot_fine_best_filtered/pca_computed_torque_w20_z0.1.png)
 
-![Planes of the principal components, joint PD](results/20261009-010912-states_robot_fine_best_filtered/pca_planes_pd_w20_z0.1.png)
+![Planes of the principal components, joint PD](results/20261009-012157-states_robot_fine_best_filtered/pca_planes_pd_w20_z0.1.png)
 
-![Planes of the principal components, computed torque](results/20261009-010912-states_robot_fine_best_filtered/pca_planes_computed_torque_w20_z0.1.png)
+![Planes of the principal components, computed torque](results/20261009-012157-states_robot_fine_best_filtered/pca_planes_computed_torque_w20_z0.1.png)
 
 The principal components are those of all five runs' states with both trackers,
 warm-up included, so that every figure shares them: PC1, PC2, and PC3 hold
