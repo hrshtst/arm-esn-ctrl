@@ -10,7 +10,7 @@ import pytest
 from skelarm import Skeleton
 
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach, simulate_reaches
-from arm_esn_ctrl.disturbances import Block, make_disturbance
+from arm_esn_ctrl.disturbances import Block, Disturbances, disturbance_spans, make_disturbance
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import ReplaySource, TrackerConfig, track, tracking_gains
 
@@ -72,6 +72,72 @@ def test_a_push_acts_along_the_reach_forward_or_backward():
     assert forward(0.45, arm) == pytest.approx([-5.0, 0.0])  # toward the target
     assert backward(0.45, arm) == pytest.approx([5.0, 0.0])
     assert across(0.45, arm) == pytest.approx(default(0.45, arm))
+
+
+def test_an_angle_turns_the_push_counterclockwise_from_the_reach():
+    start_hand = np.array([0.5, 1.2])  # the reach goes in -x
+    arm = Skeleton.from_toml(CONFIG)
+    for angle, word in ((0.0, "forward"), (90.0, "across"), (180.0, "backward")):
+        by_angle = make_disturbance(PUSH | {"angle_deg": angle}, start_hand, TARGET)
+        by_word = make_disturbance(PUSH | {"direction": word}, start_hand, TARGET)
+        assert by_angle is not None and by_word is not None
+        assert by_angle(0.45, arm) == pytest.approx(by_word(0.45, arm))
+
+    thirty = make_disturbance(PUSH | {"angle_deg": 30.0}, start_hand, TARGET)
+
+    assert thirty is not None
+    assert thirty(0.45, arm) == pytest.approx(5.0 * np.array([-np.cos(np.radians(30.0)), -np.sin(np.radians(30.0))]))
+
+
+def test_a_push_takes_a_direction_or_an_angle_not_both():
+    with pytest.raises(ValueError, match="not both"):
+        make_disturbance(PUSH | {"direction": "forward", "angle_deg": 0.0}, np.array([0.5, 1.2]), TARGET)
+
+
+def test_several_disturbances_act_each_at_its_time_and_add_up():
+    start_hand = np.array([0.5, 1.2])  # the reach goes in -x
+    arm = Skeleton.from_toml(CONFIG)
+    pushes = [
+        PUSH | {"onset": 0.2, "angle_deg": 0.0},
+        PUSH | {"onset": 0.4, "angle_deg": 90.0},
+        PUSH | {"onset": 0.45, "force": 2.0, "angle_deg": 0.0},
+    ]
+
+    force = make_disturbance(pushes, start_hand, TARGET)
+
+    assert isinstance(force, Disturbances)
+    assert force(0.25, arm) == pytest.approx([-5.0, 0.0])
+    assert force(0.42, arm) == pytest.approx([0.0, -5.0])
+    assert force(0.47, arm) == pytest.approx([-2.0, -5.0])  # two at once: they add up
+    assert force(0.6, arm) == pytest.approx([0.0, 0.0])
+
+
+def test_several_blocks_each_hold_the_tip_where_it_was():
+    windows = [(0.05, 0.15), (0.3, 0.4)]
+    blocks = make_disturbance(
+        [BLOCK | {"onset": onset, "release": release} for onset, release in windows], np.zeros(2), TARGET
+    )
+
+    log, hand = ramp_run(blocks)
+
+    assert isinstance(blocks, Disturbances)
+    held = [part.held for part in blocks.parts if isinstance(part, Block)]
+    assert len(held) == 2 and held[0] is not None and held[1] is not None
+    assert np.linalg.norm(held[1] - held[0]) > 0.05  # the arm moved on between the two
+    for (onset, release), point in zip(windows, held, strict=True):
+        window = (log.times >= onset + 0.002) & (log.times < release)
+        assert np.linalg.norm(hand[window] - point, axis=1).max() < 0.003
+
+
+def test_a_bad_disturbance_in_a_list_is_rejected_by_its_place():
+    with pytest.raises(ValueError, match="disturbance 2 of 2"):
+        make_disturbance([PUSH, {"type": "shake"}], np.zeros(2), TARGET)
+
+
+def test_the_spans_are_when_each_disturbance_acts():
+    assert disturbance_spans(None) == []
+    assert disturbance_spans(PUSH) == [pytest.approx((0.4, 0.5))]
+    assert disturbance_spans([PUSH, BLOCK]) == [pytest.approx((0.4, 0.5)), pytest.approx((0.1, 0.4))]
 
 
 def test_forces_act_on_the_task_clock():

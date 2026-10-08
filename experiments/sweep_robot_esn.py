@@ -142,7 +142,7 @@ def main() -> None:
                     dt=simulator["dt"],
                     enforce_limits=simulator.get("enforce_limits", True),
                 )
-                metrics = arm_metrics(log, i, setup, esn.config.dt, [0.0, duration], None)
+                metrics = arm_metrics(log, i, setup, esn.config.dt, [0.0, duration], [])
                 hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, duration))
                 runs.append(
                     {"setting": setting.name, "start": i, "origin": start.origin}

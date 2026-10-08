@@ -23,8 +23,9 @@ false`` (optional; the default is true), the tracking laws are given a zero
 reference velocity, so that their derivative term damps the arm's own velocity
 rather than the velocity error. Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
-t = 0. An optional ``[disturbance]`` table pushes or blocks all three arms alike
-(see :mod:`arm_esn_ctrl.disturbances`); start postures away from the demonstrated
+t = 0. An optional ``[disturbance]`` table, or several ``[[disturbance]]`` tables,
+push or block all three arms alike (see :mod:`arm_esn_ctrl.disturbances`): from the
+same start posture, the same forces at the same times. Start postures away from the demonstrated
 ones (``start_offsets_deg`` in ``[evaluation]``) make the initial-offset scenario.
 
 Every run is compared with the demonstrator's undisturbed reach from the same
@@ -71,7 +72,7 @@ from skelarm import Skeleton, StateLog
 
 from arm_esn_ctrl.autonomous import Reference, Run, Setup, load_setup, rms_degrees, run_metrics
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach
-from arm_esn_ctrl.disturbances import make_disturbance
+from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed, path_progress, path_rmse
 from arm_esn_ctrl.storage import resolve_run_path, start_run
@@ -115,7 +116,7 @@ def main() -> None:
     evaluation = config["evaluation"]
     setup = load_setup({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
     disturbance = config.get("disturbance")
-    span = disturbance_span(disturbance)
+    spans = disturbance_spans(disturbance)
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
     print(f"ESN {config['esn']['model']}, trained on {len(setup.demos)} demonstrations")
     print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
@@ -138,7 +139,7 @@ def main() -> None:
         rows.append(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
-            | arm_metrics(log, i, setup, esn.config.dt, window, span)
+            | arm_metrics(log, i, setup, esn.config.dt, window, spans)
         )
 
     tracker = config["tracker"]
@@ -191,7 +192,7 @@ def main() -> None:
                     {"law": law, "omega": omega, "damping": setting.damping, "arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm == "replay" else ""}
-                    | arm_metrics(log, i, setup, esn.config.dt, window, span)
+                    | arm_metrics(log, i, setup, esn.config.dt, window, spans)
                 )
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
@@ -207,8 +208,8 @@ def main() -> None:
         run_dir / "metrics.png", dpi=150
     )
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
-    plot_timeline(run_dir, setup, settings, span, title).savefig(run_dir / "timeline.png", dpi=150)
-    plot_joints(run_dir, setup, settings, span, title).savefig(run_dir / "joints.png", dpi=150)
+    plot_timeline(run_dir, setup, settings, spans, title).savefig(run_dir / "timeline.png", dpi=150)
+    plot_joints(run_dir, setup, settings, spans, title).savefig(run_dir / "joints.png", dpi=150)
     if "start_grid" in evaluation:
         plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
@@ -263,7 +264,7 @@ def posed(skeleton: Skeleton, q: NDArray[np.float64]) -> Skeleton:
 
 
 def arm_metrics(
-    log: StateLog, i: int, setup: Setup, period: float, window: list[float], span: tuple[float, float] | None
+    log: StateLog, i: int, setup: Setup, period: float, window: list[float], spans: list[tuple[float, float]]
 ) -> dict[str, Any]:
     """The metrics of one arm's run from start posture ``i``, compared with the demonstrator's undisturbed reach.
 
@@ -288,11 +289,12 @@ def arm_metrics(
     - ``peak_external_force_n``: the largest disturbance force at the tip (a
       block's holding force shows how hard the arm pushes against it);
 
-    and at the end of the disturbance (``span``, on the task clock):
+    and at the end of each disturbance (``spans``, when each acts on the task clock):
 
     - ``reference_lead``: how far the reference is ahead of the arm along the
       demonstrated path, as a fraction of the path (see :func:`progress`); NaN
-      without a disturbance.
+      without a disturbance. With several disturbances, ``reference_lead_1``,
+      ``reference_lead_2``, ... at the end of each, in the order configured.
 
     The demonstrator tracks no reference, so its tracking metrics are NaN.
     """
@@ -316,14 +318,18 @@ def arm_metrics(
     elif outside[-1] < len(distance) - 1:
         settling_time = float(setup.times[outside[-1] + 1])
     reference_speed = nan
-    lead = nan
+    leads = [nan] * len(spans)
     if tracked:
         q_ref = log.channel("q_ref")[task]
         reference_speed = float(np.degrees(np.abs(np.diff(q_ref, axis=0)).max() / np.diff(times[task]).min()))
-        if span is not None:
-            k = int(np.argmin(np.abs(times - span[1])))
+        for n, (_, end) in enumerate(spans):
+            k = int(np.argmin(np.abs(times - end)))
             ahead = progress(log.channel("q_ref")[k : k + 1], setup.starts[i].q, setup)
-            lead = float(ahead[0] - progress(log.channel("q")[k : k + 1], setup.starts[i].q, setup)[0])
+            leads[n] = float(ahead[0] - progress(log.channel("q")[k : k + 1], setup.starts[i].q, setup)[0])
+    if len(spans) > 1:
+        lead_metrics = {f"reference_lead_{n + 1}": lead for n, lead in enumerate(leads)}
+    else:
+        lead_metrics = {"reference_lead": leads[0] if leads else nan}
     reference_path_rmse = nan
     if tracked:
         reference_hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1], "q_ref"))
@@ -339,7 +345,7 @@ def arm_metrics(
         "peak_torque_nm": float(np.abs(tau[in_window]).max()),
         "effort_n2m2s": float(np.sum(tau[in_window] ** 2) * np.diff(times).mean()),
         "peak_external_force_n": float(np.linalg.norm(force[in_window], axis=1).max()),
-        "reference_lead": lead,
+        **lead_metrics,
     }
 
 
@@ -352,15 +358,6 @@ def progress(q: NDArray[np.float64], start_q: NDArray[np.float64], setup: Setup)
     arm stays with the arm's progress.
     """
     return path_progress(q, setup.demos[nearest_demonstration(start_q, setup.demos)])
-
-
-def disturbance_span(disturbance: dict[str, Any] | None) -> tuple[float, float] | None:
-    """When the disturbance acts on the task clock, or None without one."""
-    if disturbance is None:
-        return None
-    if disturbance["type"] == "push":
-        return disturbance["onset"], disturbance["onset"] + disturbance["duration"]
-    return disturbance["onset"], disturbance["release"]
 
 
 def print_summary(rows: list[dict[str, Any]], n_starts: int, window: list[float], reference: Reference) -> None:
@@ -533,13 +530,13 @@ def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str)
 
 
 def plot_timeline(
-    run_dir: Path, setup: Setup, settings: list[Setting], span: tuple[float, float] | None, title: str
+    run_dir: Path, setup: Setup, settings: list[Setting], spans: list[tuple[float, float]], title: str
 ) -> Figure:
     """Plot the hand's distance to the target, the progress, and the joint torque over time, from the first start.
 
     The progress along the demonstrated path (see :func:`progress`) is drawn for the
-    arms (solid) and for their references (dashed). The shaded band is when the
-    disturbance acts.
+    arms (solid) and for their references (dashed). The shaded bands are when the
+    disturbances act.
     """
     rows = by_law(settings)
     columns = len(rows[0])
@@ -558,7 +555,7 @@ def plot_timeline(
                 runs["demonstrator"] = load_hand(demonstrator, setup)
             for ax in (ax_distance, ax_progress, ax_torque):
                 style(ax)
-                if span is not None:
+                for span in spans:
                     ax.axvspan(*span, color=DISTURBANCE_COLOR, zorder=0)
             ax_distance.plot(
                 ref_times,
@@ -616,14 +613,14 @@ def demonstrated_motion(setup: Setup) -> tuple[NDArray[np.float64], NDArray[np.f
 
 
 def plot_joints(
-    run_dir: Path, setup: Setup, settings: list[Setting], span: tuple[float, float] | None, title: str
+    run_dir: Path, setup: Setup, settings: list[Setting], spans: list[tuple[float, float]], title: str
 ) -> Figure:
     """Plot the joint angles over time from the first start: one column per tracker setting, one row per joint.
 
     Each panel draws the demonstrated motion (thick gray), the ESN's output, the
     reference it gives the tracker (dashed), the arm driven by the ESN, the arm
     replaying the demonstration by time, and the demonstrator's arm when there is
-    one. The shaded band is when the disturbance acts.
+    one. The shaded bands are when the disturbances act.
     """
     rows = by_law(settings)
     columns = len(rows[0])
@@ -642,7 +639,7 @@ def plot_joints(
             for joint in range(n_joints):
                 ax = axes[n_joints * row + joint, col]
                 style(ax)
-                if span is not None:
+                for span in spans:
                     ax.axvspan(*span, color=DISTURBANCE_COLOR, zorder=0)
                 ax.plot(
                     ref_times,

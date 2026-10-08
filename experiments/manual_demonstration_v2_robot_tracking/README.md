@@ -80,6 +80,33 @@ neurons, and sparsity 0.05, and run 22 s with the tracker of
 `nominal_test_filtered.toml`: computed torque and joint PD at ω = 20 rad/s,
 ζ = 0.1, given a zero reference velocity.
 
+## Disturbances
+
+A run takes one `[disturbance]` table, or several `[[disturbance]]` tables whose
+forces add up, each a push or a block (see `src/arm_esn_ctrl/disturbances.py`). A
+push's direction is a word or an angle, `angle_deg`, counterclockwise from the
+direction toward the target (0 forward, 90 across, 180 backward). It is fixed for
+the run by the start posture, so that from the same start the ESN arm and the
+replay meet the same forces at the same times. With several disturbances,
+`metrics.csv` gives the reference's lead at the end of each (`reference_lead_1`,
+`reference_lead_2`, ...), and the figures shade each.
+
+```toml
+[[disturbance]]
+type = "push"
+force = 0.5            # N
+onset = 2.0            # s
+duration = 0.1         # s
+angle_deg = 30.0       # 30 deg counterclockwise from the direction toward the target
+
+[[disturbance]]
+type = "block"
+onset = 7.0
+release = 7.5
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m
+```
+
 ## What depends on the take and the arm
 
 - `[esn] model`: the trained ESN of a grid run of Stage 1.

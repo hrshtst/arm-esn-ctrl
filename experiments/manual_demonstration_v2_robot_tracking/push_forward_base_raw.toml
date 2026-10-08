@@ -45,6 +45,10 @@ hold = 2.0             # hold window after arrival (s): the hand must stay withi
 start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
 effort_window = [1.94, 2.94]  # EDIT: torque, effort, and force are measured from the push for 1 s (s)
 
+# One [disturbance] table, or several [[disturbance]] tables whose forces add up.
+# A push's direction is a word (direction = "forward", "across", or "backward") or an
+# angle (angle_deg, counterclockwise from the direction toward the target: 0 forward,
+# 90 across, 180 backward), not both; it is fixed for the run by the start posture.
 [disturbance]
 type = "push"
 force = 10.0           # EDIT: N (report 004: 10 N along the reach)
