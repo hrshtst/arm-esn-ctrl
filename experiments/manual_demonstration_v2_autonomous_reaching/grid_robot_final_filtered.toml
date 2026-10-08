@@ -1,0 +1,36 @@
+# Stage 1 on the remade arm (v2): the ESN chosen by the sweeps on the robot. Leak
+# rate 0.03, spectral radius 0.99, and input scaling 2 had the smallest mean and
+# spread of the worst path RMSE over ten random reservoirs in the seed check
+# (sweep_robot_seeds_filtered_lr0.03_sr0.99_is2.toml: 1.25 +- 0.37 mm); seed 4,
+# a reservoir that worked for every combination checked, gave 0.88 mm with the
+# tracker of nominal_test_filtered.toml from the demonstrated start. 400 neurons,
+# sparsity 0.05, ridge 1e-2, and a 1 s warm-up. Trained and run on its own here from
+# a grid of start postures, so that its ESN is saved for robot_esn.py and the robot
+# app.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_autonomous_reaching/grid_robot_final_filtered.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 0.99
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.03
+input_scaling = 2.0
+bias = true
+ridge = 1e-2
+seed = 4
+
+[evaluation]
+duration = 20.0        # autonomous run (s); the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint, every 5 deg (49 start postures)
+step_deg = 5.0
