@@ -53,33 +53,35 @@ cutoff_hz = 8.0
 [demonstrations]
 # The start posture: joint angles in degrees. Keep it the same as [initial] q.
 start_q = [
-  [18.2, 119.9],  # EDIT: the start posture (deg)
+  [30.0, 30.0],  # EDIT: the start posture (deg)
 ]
 
 [initial]
-q = [18.2, 119.9]  # EDIT: where the recorder starts the take: the start posture above (deg)
+q = [30.0, 30.0]  # EDIT: where the recorder starts the take: the start posture above (deg)
 
-# Two-link planar arm.
+# Two-link planar arm. The masses and inertias keep the proportions of report 004's
+# arm: 1 kg per meter of link, and an inertia about the center of mass of 0.1 m L^2
+# (a uniform rod's would be m L^2 / 12), with the center of mass at the middle.
 [skeleton]
 base_length = 0.0  # EDIT: the base link (m)
 
 [[skeleton.link]]
-length = 1.0               # EDIT: m
-mass = 1.0                 # EDIT: kg
-inertia = 0.1              # EDIT: about the center of mass (kg m^2)
-com = [0.5, 0.0]           # EDIT: the center of mass, along and across the link (m)
+length = 0.5               # EDIT: m
+mass = 0.5                 # EDIT: kg
+inertia = 0.0125           # EDIT: about the center of mass (kg m^2)
+com = [0.25, 0.0]          # EDIT: the center of mass, along and across the link (m)
 limits = [-180.0, 180.0]   # EDIT: joint limits (deg)
 
 [[skeleton.link]]
-length = 0.8               # EDIT: m
-mass = 0.8                 # EDIT: kg
-inertia = 0.05             # EDIT: kg m^2
-com = [0.4, 0.0]           # EDIT: m
+length = 0.4               # EDIT: m
+mass = 0.4                 # EDIT: kg
+inertia = 0.0064           # EDIT: kg m^2
+com = [0.2, 0.0]           # EDIT: m
 limits = [-180.0, 180.0]   # EDIT: deg
 
 [task]
 type = "reaching"
-target = { pos = [0.0, 1.2], tolerance = 0.02 }  # EDIT: the hand goal (m) and its radius (m)
+target = { pos = [-0.6, 0.4], tolerance = 0.02 }  # EDIT: the hand goal (m) and its radius (m)
 duration = 4.0  # skelarm's run length for this task (s); the recorder does not use it
 
 [simulator]
