@@ -42,6 +42,31 @@ Report 004 named its copies `<scenario>_<ESN>[_pd_gains|_damping][_zero_velocity
 | `_damping` | `omegas = { computed_torque = [10.0], pd = [20.0] }`, `dampings = [1.0, 0.5, 0.3, 0.1]`; its `offsets` from `[[10.0, -10.0], [-10.0, -10.0]]` only |
 | `_zero_velocity` | as `_pd_gains` or `_damping` with joint PD only, and `reference_velocity = false` |
 
+## ESN sweeps on the robot
+
+[`sweep_robot_esn.py`](../sweep_robot_esn.py) tunes the ESN by how the robot follows
+the taught path with it, rather than by its autonomous runs: every combination of
+the swept `[esn]` values is trained on the take and generates the reference of the
+arm from the demonstrated start, with each tracker setting, undisturbed. The
+combinations are ranked by their failed runs (never arriving, leaving the goal, or
+holding under 2 s), then by the worst path RMSE of their runs from the taught
+motion, regardless of timing (`taught_path_rmse_m`): arriving late or moving
+slowly costs nothing.
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/sweep_robot_main_lr0.7_filtered.toml
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `sweep_robot_baseline_filtered.toml` | stage 0: `grid_test_filtered.toml`'s settings alone |
+| `sweep_robot_main_lr{0.1,0.2,0.3,0.5,0.7,1}_filtered.toml` | stage 1: input scaling 0.03–1.5 × spectral radius 0.5–0.99, one leak rate each |
+
+All train on the take filtered at 2 Hz, with ridge 1e-2, a 1 s warm-up, 400
+neurons, and sparsity 0.05, and run 22 s with the tracker of
+`nominal_test_filtered.toml`: computed torque and joint PD at ω = 20 rad/s,
+ζ = 0.1, given a zero reference velocity.
+
 ## What depends on the take and the arm
 
 - `[esn] model`: the trained ESN of a grid run of Stage 1.
