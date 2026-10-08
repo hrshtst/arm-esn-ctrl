@@ -39,7 +39,8 @@ start posture, and the run directory receives:
 - ``metrics.csv``: the metrics of every run (see :func:`arm_metrics`);
 - ``metrics.png``: those metrics against the natural frequency (or the damping
   ratio, if that is what varies), for each law;
-- ``paths.png``: the hand paths of every run;
+- ``paths.png``: the hand paths of every run, with faint postures of the arm driven
+  by the ESN from the first start posture (the first, the last, and three between);
 - ``timeline.png``: the hand's distance to the target, the progress along the
   demonstrated path of the arm and of its reference, and the joint torque over
   time, from the first start posture;
@@ -75,6 +76,7 @@ from skelarm import Skeleton, StateLog
 from arm_esn_ctrl.autonomous import Reference, Run, Setup, load_setup, rms_degrees, run_metrics
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach
 from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
+from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed, path_progress, path_rmse
 from arm_esn_ctrl.storage import resolve_run_path, start_run
@@ -495,10 +497,15 @@ def by_law(settings: list[Setting]) -> list[list[Setting]]:
 
 
 def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str) -> Figure:
-    """Plot the hand paths of every run, over the demonstrator's undisturbed reaches (or the taught motion)."""
+    """Plot the hand paths of every run, over the demonstrator's undisturbed reaches (or the taught motion).
+
+    Faint postures of the arm driven by the ESN from the first start (the first, the
+    last, and three between them, spread along its path) show where the arm was.
+    """
     rows = by_law(settings)
     columns = len(rows[0])
-    fig = Figure(figsize=(3.2 * columns, 3.3 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    width = max(3.2 * columns, 4.8)  # wide enough for the arm with a single column
+    fig = Figure(figsize=(width, 3.3 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
     axes = fig.subplots(len(rows), columns, sharex=True, sharey=True, squeeze=False)
     n_starts = len(setup.starts)
@@ -523,6 +530,9 @@ def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str)
                 for i in range(n_starts):
                     _, hand, _ = load_hand(run_dir / setting.name / f"{arm}_{i:02d}.sklog.npz", setup)
                     ax.plot(*hand.T, color=ARM_COLORS[arm], linewidth=1.2, label=ARM_LABELS[arm] if i == 0 else None)
+            _, hand, log = load_hand(run_dir / setting.name / "esn_00.sklog.npz", setup)
+            q = log.channel("q").reshape(len(log.times), -1)
+            draw_postures(ax, setup.skeleton, q[spread_along_path(hand)])
             ax.plot(*setup.target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
             ax.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
             ax.set_aspect("equal")
@@ -602,30 +612,36 @@ def plot_timeline(
     return fig
 
 
-def demonstrated_motion(setup: Setup) -> tuple[NDArray[np.float64], NDArray[np.float64], str]:
-    """The motion the runs from the first start are compared with: its times, joint angles, and label.
+def demonstrated_motion(setup: Setup, start: int = 0) -> tuple[NDArray[np.float64], NDArray[np.float64], str]:
+    """The motion the runs from start posture ``start`` are compared with: its times, joint angles, and label.
 
     It is the demonstrator's undisturbed reach from that start, or, without a
     demonstrator, the taught motion nearest to it.
     """
     if setup.demonstrator_logs:
-        reference = setup.demonstrator_logs[0]
+        reference = setup.demonstrator_logs[start]
         return reference.times, reference.channel("q").reshape(len(reference.times), -1), "demonstrator, undisturbed"
-    q = setup.demos[nearest_demonstration(setup.starts[0].q, setup.demos)]
+    q = setup.demos[nearest_demonstration(setup.starts[start].q, setup.demos)]
     return (setup.times[1] - setup.times[0]) * np.arange(len(q)), q, "taught motion"
 
 
 def plot_joints(
-    run_dir: Path, setup: Setup, settings: list[Setting], spans: list[tuple[float, float]], title: str
+    run_dir: Path,
+    setup: Setup,
+    settings: list[Setting],
+    spans: list[tuple[float, float]],
+    title: str,
+    start: int = 0,
 ) -> Figure:
-    """Plot the joint angles over time from the first start: one column per tracker setting, one row per joint.
+    """Plot the joint angles over time from start posture ``start`` (the first by default): one column per tracker
+    setting, one row per joint.
 
     Each panel draws the demonstrated motion (thick gray), the ESN's output, the
     reference it gives the tracker (dashed), the arm driven by the ESN, the arm
     replaying the demonstration by time, and the demonstrator's arm when there is
     one. The shaded bands are when the disturbances act.
     """
-    ref_times, ref_q, ref_label = demonstrated_motion(setup)
+    ref_times, ref_q, ref_label = demonstrated_motion(setup, start)
 
     def draw(ax: Axes, logs: dict[str, StateLog], joint: int) -> None:
         ax.plot(
@@ -650,13 +666,20 @@ def plot_joints(
             q = np.degrees(log.channel("q").reshape(len(log.times), -1)[:, joint])
             ax.plot(log.times, q, color=ARM_COLORS[arm], linewidth=1.3, label=ARM_LABELS[arm])
 
-    return per_joint_figure(run_dir, setup, settings, spans, f"{title}: joint angles", draw, "joint {joint} (deg)")
+    angles = f"{title}: joint angles"
+    return per_joint_figure(run_dir, setup, settings, spans, angles, draw, "joint {joint} (deg)", start)
 
 
 def plot_torques(
-    run_dir: Path, setup: Setup, settings: list[Setting], spans: list[tuple[float, float]], title: str
+    run_dir: Path,
+    setup: Setup,
+    settings: list[Setting],
+    spans: list[tuple[float, float]],
+    title: str,
+    start: int = 0,
 ) -> Figure:
-    """Plot the joint torques over time from the first start: one column per tracker setting, one row per joint.
+    """Plot the joint torques over time from start posture ``start`` (the first by default): one column per tracker
+    setting, one row per joint.
 
     Each panel draws the torque of the arm driven by the ESN, of the arm replaying
     the demonstration by time, and of the demonstrator's arm when there is one. The
@@ -669,7 +692,8 @@ def plot_torques(
             tau = log.channel("tau").reshape(len(log.times), -1)[:, joint]
             ax.plot(log.times, tau, color=ARM_COLORS[arm], linewidth=1.0, label=ARM_LABELS[arm])
 
-    return per_joint_figure(run_dir, setup, settings, spans, f"{title}: joint torques", draw, "joint {joint} (N m)")
+    torques = f"{title}: joint torques"
+    return per_joint_figure(run_dir, setup, settings, spans, torques, draw, "joint {joint} (N m)", start)
 
 
 def per_joint_figure(
@@ -680,8 +704,9 @@ def per_joint_figure(
     title: str,
     draw: Callable[[Axes, dict[str, StateLog], int], None],
     ylabel: str,
+    start: int = 0,
 ) -> Figure:
-    """A figure of one panel per tracker setting (columns, one row of panels per law) and joint, from the first start.
+    """A figure of one panel per tracker setting (columns, one row of panels per law) and joint, from start ``start``.
 
     ``draw(ax, logs, joint)`` draws a panel from the logs of the arms (``esn``,
     ``replay``, and ``demonstrator`` when there is one); ``ylabel`` names the joint's
@@ -692,12 +717,14 @@ def per_joint_figure(
     n_joints = setup.skeleton.num_joints
     width = max(4.6 * columns + 1.0, 9.0)  # wide enough for the title with a single column
     fig = Figure(figsize=(width, 2.6 * n_joints * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle(f"{title}, from {setup.starts[0].origin}", color="#0b0b0b")
+    fig.suptitle(f"{title}, from {setup.starts[start].origin}", color="#0b0b0b")
     axes = np.asarray(fig.subplots(n_joints * len(rows), columns, sharex=True)).reshape(n_joints * len(rows), columns)
-    demonstrator = run_dir / "demonstrator_00.sklog.npz"
+    demonstrator = run_dir / f"demonstrator_{start:02d}.sklog.npz"
     for row, law_settings in enumerate(rows):
         for col, setting in enumerate(law_settings):
-            logs = {arm: StateLog.load(run_dir / setting.name / f"{arm}_00.sklog.npz") for arm in ("esn", "replay")}
+            logs = {
+                arm: StateLog.load(run_dir / setting.name / f"{arm}_{start:02d}.sklog.npz") for arm in ("esn", "replay")
+            }
             if demonstrator.exists():
                 logs["demonstrator"] = StateLog.load(demonstrator)
             for joint in range(n_joints):
