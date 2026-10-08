@@ -273,9 +273,8 @@ def plot_sweep(
     names = list(sweep)
     x_name, y_name = names[0], names[1]
     panel_values = sweep[names[2]] if len(names) == 3 else [None]
-    fig = Figure(
-        figsize=(3.6 * len(panel_values) + 0.8, 3.2 * len(maps)), facecolor=SURFACE_COLOR, layout="constrained"
-    )
+    width = max(3.6 * len(panel_values) + 0.8, 8.0)  # wide enough for the title with a single column
+    fig = Figure(figsize=(width, 3.2 * len(maps)), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
     axes = fig.subplots(len(maps), len(panel_values), squeeze=False)
 
