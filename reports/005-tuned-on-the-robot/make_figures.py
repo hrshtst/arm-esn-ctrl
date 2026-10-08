@@ -27,7 +27,12 @@ the pushes, and the offset start of OFFSET (``<scenario>_joints.png`` and
 the taught path (``flexibility.png`` and ``flexibility.csv``, Section 3.8). With
 ``--animations``, it animates the undisturbed run, the block, the pushes, the
 offset start of OFFSET, and one from which the chosen ESN fails (``<name>.gif``),
-the arms side by side, each rendered by skelarm's player.
+the arms side by side, each rendered by skelarm's player. With ``--videos``, it
+exports every arm (the chosen ESN's and the replay's) with each tracker in those
+five runs as an MP4 for slides, with the player's side panel, into VIDEOS under
+the storage root, since they are not kept in Git.
+
+    uv run python reports/005-tuned-on-the-robot/make_figures.py --videos
 """
 
 from __future__ import annotations
@@ -56,7 +61,7 @@ from arm_esn_ctrl.disturbances import disturbance_spans
 from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
-from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path
+from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, storage_root
 
 REPORT = Path(__file__).resolve().parent
 RESULTS = REPORT / "results"
@@ -110,11 +115,18 @@ ANIMATION_SPAN = (-0.2, 17.0)
 ANIMATION_FPS = 10.0
 ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
 
+# The videos for slides: each animation's run, with every arm and tracker, named by these.
+VIDEOS = storage_root() / "reports" / REPORT.name / "videos"
+VIDEO_FPS = 30.0
+VIDEO_ARMS = {"esn": "chosen_esn", "replay": "replay"}
+VIDEO_TRACKERS = {"pd_w20_z0.1": "joint_pd", "computed_torque_w20_z0.1": "computed_torque"}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--logs", action="store_true", help="also analyze the run logs in the storage root")
     parser.add_argument("--animations", action="store_true", help="also export GIFs from the logs in the storage root")
+    parser.add_argument("--videos", action="store_true", help="also export MP4s for slides into the storage root")
     args = parser.parse_args()
 
     SUMMARY.mkdir(parents=True, exist_ok=True)
@@ -138,6 +150,8 @@ def main() -> None:
     if args.animations:
         for name, scenario, offset, title in ANIMATIONS:
             export_animation(name, scenario, offset, title)
+    if args.videos:
+        export_videos()
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -199,6 +213,11 @@ def setting_of(row: dict[str, Any]) -> str:
 def run_dir(stem: str) -> Path:
     """A run's directory under the storage root, with its logs."""
     return resolve_run_path(f"results/{run_name(stem)}")
+
+
+def start_of(stem: str, arm: str, offset: tuple[float, float]) -> int:
+    """The index of the start offset by ``offset`` (deg) from the demonstrated start, among a run's starts."""
+    return next(int(r["start"]) for r in rows_of(stem) if r["arm"] == arm and offset_of(r["origin"]) == offset)
 
 
 def robot_setup(stem: str) -> tuple[Setup, dict[str, Any]]:
@@ -396,7 +415,7 @@ def plot_runs(scenario: str, offset: tuple[float, float] = (0.0, 0.0)) -> tuple[
     setup, config = robot_setup(stem)
     settings = robot_esn.tracker_settings(config["tracker"])
     spans = disturbance_spans(config.get("disturbance"))
-    start = next(int(r["start"]) for r in rows_of(stem) if r["arm"] == "esn" and offset_of(r["origin"]) == offset)
+    start = start_of(stem, "esn", offset)
     title = f"The chosen ESN on the robot: {scenario}"
     directory = run_dir(stem)
     return (
@@ -500,6 +519,55 @@ def print_block() -> None:
 # ---------------------------------------------------------------------------- animations
 
 
+def player_export(log: Path, out: Path, fps: float, *, panel: bool = False) -> None:
+    """Render a run's log into ``out`` (a GIF or an MP4) with skelarm's player, without a window.
+
+    With ``panel``, each frame has the player's side panel: the time, the joint
+    angles, the tip, and the external force.
+    """
+    player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
+    command = [sys.executable, str(player), str(log), "--export", str(out), "--fps", f"{fps:g}"]
+    subprocess.run(
+        command + (["--panel"] if panel else []),
+        check=True,
+        capture_output=True,
+        env=os.environ | {"QT_QPA_PLATFORM": "offscreen"},  # render without a window
+    )
+
+
+def export_videos() -> None:
+    """Export each animation's run, with every arm and tracker, as an MP4 for slides into VIDEOS.
+
+    Each video is one arm's whole run, the warm-up included, rendered by skelarm's
+    player at VIDEO_FPS with its side panel. It is named
+    ``<scenario>_<arm>_<tracker>.mp4``, an offset start by its offset (deg), such
+    as ``offset_+15_+15_replay_joint_pd.mp4``; ``videos.csv`` lists each video's
+    scenario, arm, tracker, and log.
+    """
+    VIDEOS.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for _, scenario, offset, title in ANIMATIONS:
+        name = scenario if offset == (0.0, 0.0) else f"offset_{offset[0]:+g}_{offset[1]:+g}"
+        stem = stem_of(scenario)
+        for arm, arm_name in VIDEO_ARMS.items():
+            start = start_of(stem, arm, offset)
+            for setting, tracker in VIDEO_TRACKERS.items():
+                log = run_dir(stem) / setting / f"{arm}_{start:02d}.sklog.npz"
+                video = VIDEOS / f"{name}_{arm_name}_{tracker}.mp4"
+                player_export(log, video, VIDEO_FPS, panel=True)
+                rows.append(
+                    {
+                        "video": video.name,
+                        "scenario": title,
+                        "arm": ARMS[arm][0],
+                        "tracker": SETTINGS[setting],
+                        "log": str(log.relative_to(storage_root())),
+                    }
+                )
+    write_csv(VIDEOS / "videos.csv", rows)
+    print(f"wrote {len(rows)} videos to {VIDEOS}")
+
+
 def export_animation(
     name: str,
     scenario: str,
@@ -518,7 +586,6 @@ def export_animation(
 
     from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
-    player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
     stem = stem_of(scenario)
     with (RESULTS / run_name(stem) / "config.toml").open("rb") as f:
         disturbance = tomllib.load(f).get("disturbance")
@@ -527,15 +594,9 @@ def export_animation(
     frames, starts = [], []
     with tempfile.TemporaryDirectory() as tmp:
         for i, (_, setting, arm, _) in enumerate(PANELS):
-            start = next(int(r["start"]) for r in rows_of(stem) if r["arm"] == arm and offset_of(r["origin"]) == offset)
-            path = run_dir(stem) / setting / f"{arm}_{start:02d}.sklog.npz"
+            path = run_dir(stem) / setting / f"{arm}_{start_of(stem, arm, offset):02d}.sklog.npz"
             exported = Path(tmp) / f"{i}.gif"
-            subprocess.run(
-                [sys.executable, str(player), str(path), "--export", str(exported), "--fps", f"{ANIMATION_FPS:g}"],
-                check=True,
-                capture_output=True,
-                env=os.environ | {"QT_QPA_PLATFORM": "offscreen"},  # render without a window
-            )
+            player_export(path, exported, ANIMATION_FPS)
             with Image.open(exported) as gif:
                 spread = []
                 for frame in ImageSequence.Iterator(gif):

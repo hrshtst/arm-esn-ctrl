@@ -3,8 +3,9 @@
 
 """Where data and results are stored, and how each run is recorded.
 
-The storage root holds two directories: ``data/`` for demonstrations and
-``results/`` for run outputs. It is chosen in this order:
+The storage root holds ``data/`` for demonstrations, ``results/`` for run
+outputs, and ``reports/`` for what a report exports that is not kept in Git, such
+as videos. It is chosen in this order:
 
 1. the ``ARM_ESN_CTRL_STORAGE_ROOT`` environment variable, if it is set;
 2. otherwise, ``storage_root`` in ``storage.toml`` at the repository root;
