@@ -20,7 +20,7 @@
 [demonstrations]
 # A run directory of experiments/import_demonstrations.py, relative to the storage
 # root: the take of reach_manual_v2.toml.
-run = "results/demonstrations/20261008-164314-reach_manual_v2"
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
 train = ["demo_00.sklog.npz"]  # the take as recorded
 
 [esn]
