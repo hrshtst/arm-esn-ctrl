@@ -46,10 +46,20 @@ Report 004 named its copies `<scenario>_<ESN>[_pd_gains|_damping][_zero_velocity
 ## Reservoir states on the robot
 
 [`robot_states.py`](../robot_states.py) plots the reservoir states of an ESN while
-it drives the robot, for neurons picked at random, over its states while the take
-is fed in as in training. The runs do not store the states: they are recomputed
-from the runs' logs (`arm_esn_ctrl.states.run_states`), which keep every posture
-the ESN was given, and the ESN must reproduce each run's logged reference.
+it drives the robot, over its states while the take is fed in as in training. The
+runs do not store the states: they are recomputed from the runs' logs
+(`arm_esn_ctrl.states.run_states`), which keep every posture the ESN was given,
+from the reset at the warm-up's start, and the ESN must reproduce each run's
+logged reference. For each tracker setting, it draws:
+
+- `neurons_<setting>.png`: a few neurons picked at random (`[neurons] count` and
+  `seed`) over `[neurons] span`, such as the warm-up and the task's first seconds,
+  for the runs marked `neurons = true`: how the warm-up brings the states from the
+  reset to where the task starts;
+- `pca_<setting>.png` and `pca_planes_<setting>.png`: every run's states along the
+  first principal components (`[pca] n_components`) over the whole run, and in the
+  planes of pairs of them. The components are those of every run's states with
+  every tracker setting, warm-up included, so that all the figures share them.
 
 ```bash
 uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_tracking/states_robot_fine_best_filtered.toml
@@ -57,7 +67,7 @@ uv run python experiments/robot_states.py experiments/manual_demonstration_v2_ro
 
 | Configuration | Runs |
 | --- | --- |
-| `states_robot_fine_best_filtered.toml` | the chosen ESN (report 005) undisturbed, under the block, under the pushes, and from two offset starts, one that arrives (+15°, +15°) and one that fails (0°, −10°) |
+| `states_robot_fine_best_filtered.toml` | the chosen ESN (report 005) undisturbed, under the block, under the pushes, and from two offset starts, one that arrives (+15°, +15°) and one that fails (0°, −10°); the neurons of the undisturbed run and the offset starts, over the warm-up and the first 3 s |
 
 ## ESN sweeps on the robot
 

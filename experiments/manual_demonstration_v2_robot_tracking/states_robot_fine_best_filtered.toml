@@ -1,16 +1,22 @@
 # Stage 2 on the remade arm (v2): the reservoir states of the chosen ESN
 # (grid_robot_fine_best_filtered.toml: leak rate 0.05, spectral radius 0.99, input
 # scaling 2, seed 0) while it drives the robot in its validation runs (report 005),
-# for a few neurons picked at random, recomputed from the runs' logs, over its
-# states while the take is fed in as in training.
+# recomputed from the runs' logs, over its states while the take is fed in as in
+# training: a few neurons from the reset through the warm-up, and the principal
+# components of every run, warm-up included.
 #
 #   uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_tracking/states_robot_fine_best_filtered.toml
 
 [states]
-settings = ["pd_w20_z0.1", "computed_torque_w20_z0.1"]  # tracker settings, as the runs name them: one figure each
-count = 8              # neurons shown, picked at random
-seed = 0               # of the pick
-span = [-1.0, 18.5]    # time shown (s): from the warm-up's start to the take's end
+settings = ["pd_w20_z0.1", "computed_torque_w20_z0.1"]  # tracker settings, as the runs name them: figures for each
+
+[neurons]              # neurons_<setting>.png: the runs marked neurons = true
+count = 8              # how many neurons are picked at random
+seed = 0               # the seed of the pick
+span = [-1.0, 3.0]     # time shown (s): the warm-up, from the reset, and the task's first seconds
+
+[pca]                  # pca_<setting>.png and pca_planes_<setting>.png: every run, from the reset to its end
+n_components = 3       # components shown; they are fitted on every run with every tracker setting
 
 # The runs of experiments/robot_esn.py, relative to the storage root; they must share
 # their ESN. Each is shown from one start posture: its index among the run's starts
@@ -20,6 +26,7 @@ span = [-1.0, 18.5]    # time shown (s): from the warm-up's start to the take's 
 label = "undisturbed"
 path = "results/manual_demonstration_v2_robot_tracking/20261008-220759-nominal_robot_fine_best_filtered"
 start = 0
+neurons = true         # also in neurons_<setting>.png
 
 [[run]]
 label = "the tip held, 4.5 s to 5.5 s"
@@ -35,8 +42,10 @@ start = 0
 label = "an offset start that arrives"
 path = "results/manual_demonstration_v2_robot_tracking/20261008-203445-offsets_robot_fine_best_filtered"
 start = 48             # offset by +15 deg in both joints
+neurons = true
 
 [[run]]
 label = "an offset start that fails"
 path = "results/manual_demonstration_v2_robot_tracking/20261008-203445-offsets_robot_fine_best_filtered"
 start = 23             # offset by -10 deg in joint 2
+neurons = true
