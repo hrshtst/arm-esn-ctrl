@@ -31,7 +31,8 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot
 Besides the metrics and the figures of report 004's runs, each run draws
 `joints.png`: the joint angles over time from the first start posture, for each
 tracker setting, of the taught motion, the ESN's output, the arm driven by the
-ESN, and the arm replaying the take.
+ESN, and the arm replaying the take; and `torques.png`: the two arms' joint torques
+over time.
 
 Report 004 named its copies `<scenario>_<ESN>[_pd_gains|_damping][_zero_velocity]_raw.toml`:
 

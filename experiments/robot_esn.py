@@ -45,6 +45,7 @@ start posture, and the run directory receives:
   time, from the first start posture;
 - ``joints.png``: the joint angles over time from the first start posture: the
   demonstrated motion, the ESN's output (its reference), and the arms;
+- ``torques.png``: the arms' joint torques over time from the first start posture;
 - ``grid.png``, with an ``[evaluation.start_grid]``: maps over the start offsets
   of the outcome, the path distance, the training path ratio, the peak reference
   speed, the peak torque, and the tracking error, for each tracker setting.
@@ -57,6 +58,7 @@ from __future__ import annotations
 import argparse
 import csv
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -210,6 +212,7 @@ def main() -> None:
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
     plot_timeline(run_dir, setup, settings, spans, title).savefig(run_dir / "timeline.png", dpi=150)
     plot_joints(run_dir, setup, settings, spans, title).savefig(run_dir / "joints.png", dpi=150)
+    plot_torques(run_dir, setup, settings, spans, title).savefig(run_dir / "torques.png", dpi=150)
     if "start_grid" in evaluation:
         plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
@@ -622,14 +625,75 @@ def plot_joints(
     replaying the demonstration by time, and the demonstrator's arm when there is
     one. The shaded bands are when the disturbances act.
     """
+    ref_times, ref_q, ref_label = demonstrated_motion(setup)
+
+    def draw(ax: Axes, logs: dict[str, StateLog], joint: int) -> None:
+        ax.plot(
+            ref_times,
+            np.degrees(ref_q[:, joint]),
+            color=ARM_COLORS["demonstrator"],
+            linewidth=4,
+            alpha=0.3,
+            label=ref_label,
+        )
+        esn = logs["esn"]
+        ax.plot(
+            esn.times,
+            np.degrees(esn.channel("q_ref").reshape(len(esn.times), -1)[:, joint]),
+            color=ARM_COLORS["esn"],
+            linewidth=1.3,
+            linestyle="--",
+            label="ESN output (its reference)",
+        )
+        for arm in [arm for arm in ARMS if arm in logs]:
+            log = logs[arm]
+            q = np.degrees(log.channel("q").reshape(len(log.times), -1)[:, joint])
+            ax.plot(log.times, q, color=ARM_COLORS[arm], linewidth=1.3, label=ARM_LABELS[arm])
+
+    return per_joint_figure(run_dir, setup, settings, spans, f"{title}: joint angles", draw, "joint {joint} (deg)")
+
+
+def plot_torques(
+    run_dir: Path, setup: Setup, settings: list[Setting], spans: list[tuple[float, float]], title: str
+) -> Figure:
+    """Plot the joint torques over time from the first start: one column per tracker setting, one row per joint.
+
+    Each panel draws the torque of the arm driven by the ESN, of the arm replaying
+    the demonstration by time, and of the demonstrator's arm when there is one. The
+    shaded bands are when the disturbances act.
+    """
+
+    def draw(ax: Axes, logs: dict[str, StateLog], joint: int) -> None:
+        for arm in [arm for arm in ARMS if arm in logs]:
+            log = logs[arm]
+            tau = log.channel("tau").reshape(len(log.times), -1)[:, joint]
+            ax.plot(log.times, tau, color=ARM_COLORS[arm], linewidth=1.0, label=ARM_LABELS[arm])
+
+    return per_joint_figure(run_dir, setup, settings, spans, f"{title}: joint torques", draw, "joint {joint} (N m)")
+
+
+def per_joint_figure(
+    run_dir: Path,
+    setup: Setup,
+    settings: list[Setting],
+    spans: list[tuple[float, float]],
+    title: str,
+    draw: Callable[[Axes, dict[str, StateLog], int], None],
+    ylabel: str,
+) -> Figure:
+    """A figure of one panel per tracker setting (columns, one row of panels per law) and joint, from the first start.
+
+    ``draw(ax, logs, joint)`` draws a panel from the logs of the arms (``esn``,
+    ``replay``, and ``demonstrator`` when there is one); ``ylabel`` names the joint's
+    axis, with ``{joint}`` its number. The shaded bands are when the disturbances act.
+    """
     rows = by_law(settings)
     columns = len(rows[0])
     n_joints = setup.skeleton.num_joints
     width = max(4.6 * columns + 1.0, 9.0)  # wide enough for the title with a single column
     fig = Figure(figsize=(width, 2.6 * n_joints * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle(f"{title}: joint angles, from {setup.starts[0].origin}", color="#0b0b0b")
+    fig.suptitle(f"{title}, from {setup.starts[0].origin}", color="#0b0b0b")
     axes = np.asarray(fig.subplots(n_joints * len(rows), columns, sharex=True)).reshape(n_joints * len(rows), columns)
-    ref_times, ref_q, ref_label = demonstrated_motion(setup)
     demonstrator = run_dir / "demonstrator_00.sklog.npz"
     for row, law_settings in enumerate(rows):
         for col, setting in enumerate(law_settings):
@@ -641,36 +705,11 @@ def plot_joints(
                 style(ax)
                 for span in spans:
                     ax.axvspan(*span, color=DISTURBANCE_COLOR, zorder=0)
-                ax.plot(
-                    ref_times,
-                    np.degrees(ref_q[:, joint]),
-                    color=ARM_COLORS["demonstrator"],
-                    linewidth=4,
-                    alpha=0.3,
-                    label=ref_label,
-                )
-                esn = logs["esn"]
-                ax.plot(
-                    esn.times,
-                    np.degrees(esn.channel("q_ref").reshape(len(esn.times), -1)[:, joint]),
-                    color=ARM_COLORS["esn"],
-                    linewidth=1.3,
-                    linestyle="--",
-                    label="ESN output (its reference)",
-                )
-                for arm in [arm for arm in ARMS if arm in logs]:
-                    log = logs[arm]
-                    ax.plot(
-                        log.times,
-                        np.degrees(log.channel("q").reshape(len(log.times), -1)[:, joint]),
-                        color=ARM_COLORS[arm],
-                        linewidth=1.3,
-                        label=ARM_LABELS[arm],
-                    )
+                draw(ax, logs, joint)
                 ax.set_xlim(-0.3, float(setup.times[-1]))
                 ax.set_title(f"{setting.label}: joint {joint + 1}", color=TEXT_COLOR, fontsize=9)
                 if col == 0:
-                    ax.set_ylabel(f"joint {joint + 1} (deg)", color=TEXT_COLOR)
+                    ax.set_ylabel(ylabel.format(joint=joint + 1), color=TEXT_COLOR)
             axes[n_joints * row + n_joints - 1, col].set_xlabel("time (s)", color=TEXT_COLOR, fontsize=8)
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncol=2, frameon=False, labelcolor=TEXT_COLOR)
