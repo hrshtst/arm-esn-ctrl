@@ -1,6 +1,6 @@
 config = "experiments/manual_demonstration_v2_robot_tracking/block_robot_fine_best_filtered.toml"
 command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/block_robot_fine_best_filtered.toml"
-started = 2026-10-08 22:07:59+09:00
+started = 2026-10-08 22:48:13+09:00
 host = "delbosque"
-commit = "b9b16dded78df0d6b74a58d9c28975704fe471e1"
+commit = "513ad39957b8a883cf88b2ed0c19250b36a18e72"
 uncommitted_changes = false

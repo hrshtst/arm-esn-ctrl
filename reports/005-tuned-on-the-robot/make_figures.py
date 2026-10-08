@@ -11,7 +11,8 @@ From the take in ``data/`` and the copies of the runs under ``results/``
 ``results/summary``:
 
 - ``take.png``: the take, as recorded and filtered at 8 Hz and 2 Hz, as the ESN
-  sees it, every 10 ms (Section 3.1);
+  sees it, every 10 ms, with faint postures of the arm along the 2 Hz take (Section
+  3.1);
 - ``stage1.png``: the first sweep on the robot, the main parameters (Section 3.3);
 - ``stage3.png``: the finer sweep around the best of stage 1 (Section 3.5);
 - ``seeds.png``: the five best combinations, each with ten random reservoirs
@@ -21,12 +22,12 @@ and prints the tables of the report. With ``--logs``, it reads the runs' logs,
 which are not kept in Git, from the runs under the storage root, and also draws,
 with ``experiments/robot_esn.py``'s own functions, the joint angles and the joint
 torques of the chosen ESN's arm and the replay in the undisturbed run, the block,
-and the pushes (``<scenario>_joints.png`` and ``<scenario>_torques.png``, Section
-3.9), and how far the pushes carry each arm off the taught path
-(``flexibility.png`` and ``flexibility.csv``, Section 3.8). With
-``--animations``, it animates the undisturbed run, the block, the pushes, and an
-offset start (``<scenario>.gif``), the arms side by side, each rendered by
-skelarm's player.
+the pushes, and the offset start of OFFSET (``<scenario>_joints.png`` and
+``<scenario>_torques.png``, Section 3.9), and how far the pushes carry each arm off
+the taught path (``flexibility.png`` and ``flexibility.csv``, Section 3.8). With
+``--animations``, it animates the undisturbed run, the block, the pushes, the
+offset start of OFFSET, and one from which the chosen ESN fails (``<name>.gif``),
+the arms side by side, each rendered by skelarm's player.
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from skelarm import Skeleton, StateLog
 from arm_esn_ctrl.autonomous import Setup, load_setup
 from arm_esn_ctrl.demonstrations import endpoint_positions, resample_joint_angles, smooth_take
 from arm_esn_ctrl.disturbances import disturbance_spans
+from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path
@@ -70,6 +72,7 @@ ESNS = {
 }
 CHOSEN = "fine_best"
 SCENARIOS = ["nominal", "block", "offsets", "pushes"]
+OFFSET = (15.0, 15.0)  # the offset start (deg) shown: the largest from which the chosen ESN arrives and holds
 PUSH_TIMES = [(4.0, 4.2, 8.0), (8.0, 8.2, 12.0), (13.0, 13.2, 17.0)]  # each push: onset, end, and window end (s)
 BACK_WITHIN = 5.0  # mm: an arm is back on the taught path once it stays within this of it
 FLEXIBILITY_CSV = SUMMARY / "flexibility.csv"
@@ -84,6 +87,12 @@ SURFACE_COLOR = "#fcfcfb"
 DISTURBANCE_COLOR = "#f0efec"
 TAKE_COLORS = {"as recorded": "#a3a29d", "filtered at 8 Hz": "#eb6834", "filtered at 2 Hz": "#2a78d6"}
 
+# The panels' labels: the arm, then the tracker.
+CHOSEN_PD = f"{ESNS[CHOSEN]}\ntracker: joint PD"
+CHOSEN_CT = f"{ESNS[CHOSEN]}\ntracker: computed torque"
+FINAL_PD = f"{ESNS['final']}\ntracker: joint PD"
+REPLAY_PD = "replay of the take by time\ntracker: joint PD"
+
 # The animations: name, scenario, the start offset (deg) from the demonstrated start, the title, and the panels:
 # label, ESN tag, tracker setting, arm, and the label's color.
 ANIMATIONS = [
@@ -93,20 +102,20 @@ ANIMATIONS = [
         (0.0, 0.0),
         "undisturbed, from the demonstrated start",
         [
-            ("chosen ESN, joint PD", CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            ("replay, joint PD", CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
-            ("chosen ESN, computed torque", CHOSEN, "computed_torque_w20_z0.1", "esn", FINAL_COLOR),
+            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
+            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
+            (CHOSEN_CT, CHOSEN, "computed_torque_w20_z0.1", "esn", FINAL_COLOR),
         ],
     ),
     (
         "block",
         "block",
         (0.0, 0.0),
-        "the tip held from 1.15 s to 1.65 s",
+        "the tip held from 4.5 s to 5.5 s",
         [
-            ("chosen ESN, joint PD", CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            ("replay, joint PD", CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
-            ("chosen ESN, computed torque", CHOSEN, "computed_torque_w20_z0.1", "esn", FINAL_COLOR),
+            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
+            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
+            (CHOSEN_CT, CHOSEN, "computed_torque_w20_z0.1", "esn", FINAL_COLOR),
         ],
     ),
     (
@@ -115,20 +124,31 @@ ANIMATIONS = [
         (0.0, 0.0),
         "three pushes, at 4 s, 8 s, and 13 s",
         [
-            ("chosen ESN, joint PD", CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            ("seed-check ESN, joint PD", "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
-            ("replay, joint PD", CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
+            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
+            (FINAL_PD, "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
+            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
         ],
     ),
     (
         "offset",
         "offsets",
+        OFFSET,
+        "start offset by +15 deg in both joints (turned counterclockwise, the elbow more bent)",
+        [
+            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
+            (FINAL_PD, "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
+            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
+        ],
+    ),
+    (
+        "offset_failure",
+        "offsets",
         (0.0, -10.0),
         "start offset by -10 deg in joint 2 (the elbow straighter)",
         [
-            ("chosen ESN, joint PD", CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            ("seed-check ESN, joint PD", "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
-            ("replay, joint PD", CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
+            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
+            (FINAL_PD, "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
+            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
         ],
     ),
 ]
@@ -153,11 +173,14 @@ def main() -> None:
     if args.logs:
         for scenario in ("nominal", "block", "pushes"):
             figures[f"{scenario}_joints.png"], figures[f"{scenario}_torques.png"] = plot_runs(scenario)
+        figures["offset_joints.png"], figures["offset_torques.png"] = plot_runs("offsets", OFFSET)
         figures["flexibility.png"] = plot_flexibility()
         write_flexibility()
     for name, fig in figures.items():
         fig.savefig(SUMMARY / name, dpi=150)
     print_tables()
+    if args.logs:
+        print_block()
     if args.animations:
         for name, scenario, offset, title, panels in ANIMATIONS:
             export_animation(name, scenario, offset, title, panels)
@@ -281,11 +304,18 @@ def plot_take() -> Figure:
         color, width = TAKE_COLORS[label], 2.2 if label == "as recorded" else 1.2
         speed = np.linalg.norm(np.gradient(hand, DT, axis=0), axis=1)
         ax_path.plot(*hand.T, color=color, linewidth=width, label=label)
+        if label == "filtered at 2 Hz":
+            draw_postures(ax_path, skeleton, q[spread_along_path(hand)])
         ax_speed.plot(times, speed, color=color, linewidth=0.9 if label == "as recorded" else 1.2, label=label)
         ax_q1.plot(times, np.degrees(q[:, 0]), color=color, linewidth=width)
         ax_q2.plot(times, np.degrees(q[:, 1]), color=color, linewidth=width)
     ax_path.plot(*target, marker="+", markersize=14, color="#0b0b0b", markeredgewidth=1.5)
-    ax_path.set(title="Hand path (cross: the target)", xlabel="x (m)", ylabel="y (m)", aspect="equal")
+    ax_path.set(
+        title="Hand path, with the arm along the take (cross: the target)",
+        xlabel="x (m)",
+        ylabel="y (m)",
+        aspect="equal",
+    )
     ax_path.legend(frameon=False, labelcolor=TEXT_COLOR)
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="m/s", xlim=(0, 11), ylim=(0, 0.6))
     ax_q1.set(title="Joint 1", xlabel="time (s)", ylabel="deg", xlim=(0, 11))
@@ -401,24 +431,29 @@ def runner(name: str) -> Any:
     return module
 
 
-def plot_runs(scenario: str) -> tuple[Figure, Figure]:
-    """The joint angles and the joint torques of the chosen ESN's run of a scenario, by robot_esn.py's functions."""
+def plot_runs(scenario: str, offset: tuple[float, float] = (0.0, 0.0)) -> tuple[Figure, Figure]:
+    """The joint angles and the joint torques of the chosen ESN's run of a scenario, by robot_esn.py's functions.
+
+    The run is the one from the start offset by ``offset`` (deg) from the
+    demonstrated start.
+    """
     robot_esn = runner("robot_esn")
     stem = stem_of(scenario, CHOSEN)
     setup, config = robot_setup(stem)
     settings = robot_esn.tracker_settings(config["tracker"])
     spans = disturbance_spans(config.get("disturbance"))
+    start = next(int(r["start"]) for r in rows_of(stem) if r["arm"] == "esn" and offset_of(r["origin"]) == offset)
     title = f"The chosen ESN on the robot: {scenario}"
     directory = run_dir(stem)
     return (
-        robot_esn.plot_joints(directory, setup, settings, spans, title),
-        robot_esn.plot_torques(directory, setup, settings, spans, title),
+        robot_esn.plot_joints(directory, setup, settings, spans, title, start),
+        robot_esn.plot_torques(directory, setup, settings, spans, title, start),
     )
 
 
-def push_distances(esn: str, setting: str, arm: str) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """The times (every 10 ms) and the hand's distance (mm) from the taught path in a pushes run."""
-    log = StateLog.load(run_dir(stem_of("pushes", esn)) / setting / f"{arm}_00.sklog.npz")
+def path_distances(scenario: str, esn: str, setting: str, arm: str) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """The times (every 10 ms) and the hand's distance (mm) from the taught path in a run of a scenario."""
+    log = StateLog.load(run_dir(stem_of(scenario, esn)) / setting / f"{arm}_00.sklog.npz")
     task = log.times >= 0
     skeleton = Skeleton.from_toml(TAKE_RUN / "config.toml")
     hand = endpoint_positions(skeleton, log.channel("q").reshape(len(log.times), -1)[task])
@@ -426,8 +461,11 @@ def push_distances(esn: str, setting: str, arm: str) -> tuple[NDArray[np.float64
     return log.times[task][::every], 1000 * distances_to_path(hand[::every], taught_hand())
 
 
-def arms_of_pushes() -> list[tuple[str, str, str, str]]:
-    """The arms compared under the pushes: label, ESN tag, arm, and color (the replay is the same in both runs)."""
+def arms_compared() -> list[tuple[str, str, str, str]]:
+    """The arms compared under the pushes and the block: label, ESN tag, arm, and color.
+
+    The replay is the same in both ESNs' runs.
+    """
     return [
         (ESNS[CHOSEN], CHOSEN, "esn", ESN_COLOR),
         (ESNS["final"], "final", "esn", FINAL_COLOR),
@@ -444,8 +482,8 @@ def plot_flexibility() -> Figure:
         style(ax)
         for onset, end, _ in PUSH_TIMES:
             ax.axvspan(onset, end, color=DISTURBANCE_COLOR, zorder=0)
-        for label, esn, arm, color in arms_of_pushes():
-            times, distance = push_distances(esn, setting, arm)
+        for label, esn, arm, color in arms_compared():
+            times, distance = path_distances("pushes", esn, setting, arm)
             ax.plot(times, distance, color=color, linewidth=1.3, label=label)
         ax.axhline(BACK_WITHIN, color=TEXT_COLOR, linewidth=0.8, linestyle=":")
         ax.set(title=name, ylabel="from the taught path (mm)", ylim=(0, None), xlim=(0, 18))
@@ -463,8 +501,8 @@ def write_flexibility() -> None:
     """
     out = []
     for setting, name in SETTINGS.items():
-        for label, esn, arm, _ in arms_of_pushes():
-            times, distance = push_distances(esn, setting, arm)
+        for label, esn, arm, _ in arms_compared():
+            times, distance = path_distances("pushes", esn, setting, arm)
             row: dict[str, Any] = {"tracker": name, "arm": label}
             for k, (onset, end, stop) in enumerate(PUSH_TIMES, start=1):
                 window = (times >= onset) & (times < stop)
@@ -474,6 +512,47 @@ def write_flexibility() -> None:
                 row[f"push{k}_settles_s"] = float(times[outside[-1] + 1] - end) if settled else float("nan")
             out.append(row)
     write_csv(FLEXIBILITY_CSV, out)
+
+
+def print_block() -> None:
+    """The block, from the logs: the force at the tip, how far the reference runs ahead, and the hand's return.
+
+    The peak force of metrics.csv is the grip's: the damper stops the moving hand.
+    How hard the arm then presses is the mean force over the block's last 0.1 s,
+    when its reference (the ESN's output, or the take) is the farthest ahead of the
+    held hand. After the release: the farthest the hand goes from the taught path,
+    and when it is back within BACK_WITHIN of it for good (counted from the release,
+    up to 12 s).
+    """
+    print(
+        "\n== 3.7 The block, from the logs: arm, tracker: force at the tip (N) at the grip (peak, first 0.1 s) and at"
+    )
+    print("the release (mean, last 0.1 s); the reference's hand ahead of the arm's at the release (mm); after the")
+    print("release, the farthest from the taught path (mm), and back within 5 mm (s)")
+    skeleton = Skeleton.from_toml(TAKE_RUN / "config.toml")
+    for label, esn, arm, _ in arms_compared():
+        stem = stem_of("block", esn)
+        with (RESULTS / run_name(stem) / "config.toml").open("rb") as f:
+            block = tomllib.load(f)["disturbance"]
+        onset, release = block["onset"], block["release"]
+        for setting, name in SETTINGS.items():
+            log = StateLog.load(run_dir(stem) / setting / f"{arm}_00.sklog.npz")
+            t = log.times
+            force = np.linalg.norm(log.channel("ext_force").reshape(len(t), -1), axis=1)
+            grip = force[(t >= onset) & (t < onset + 0.1)].max()
+            pressing = force[(t >= release - 0.1) & (t < release)].mean()
+            held = int(np.searchsorted(t, release)) - 1  # the last sample held
+            hand, reference = (
+                endpoint_positions(skeleton, log.channel(channel).reshape(len(t), -1)[held : held + 1])
+                for channel in ("q", "q_ref")
+            )
+            ahead = 1000 * float(np.linalg.norm(reference - hand))
+            times, distance = path_distances("block", esn, setting, arm)
+            after = (times >= release) & (times < 12.0)
+            back = times[np.flatnonzero(after & (distance > BACK_WITHIN))[-1] + 1] - release
+            print(
+                f"  {label}, {name}: {grip:.1f}, {pressing:.1f}; {ahead:.0f}; {distance[after].max():.0f}, {back:.1f}"
+            )
 
 
 # ---------------------------------------------------------------------------- animations
@@ -529,7 +608,7 @@ def export_animation(
     top, bottom = max(int(rows.min()) - margin, 0), int(rows.max()) + margin
     left, right = max(int(cols.min()) - margin, 0), int(cols.max()) + margin
     width, height = right - left, bottom - top
-    header, label_height, gap = 44, 30, 8
+    header, label_height, gap = 44, 48, 8
     canvas_width = len(frames) * width + (len(frames) - 1) * gap
 
     def header_line(t: float) -> str:
@@ -592,9 +671,9 @@ def print_tables() -> None:
     times, q = resample_joint_angles(recorded, DT)
     hand = endpoint_positions(skeleton, q)
     distance = np.linalg.norm(hand - target, axis=1)
-    shares = ", ".join(
-        f"{100 * share:g}% at {times[np.argmax(distance <= distance[0] * (1 - share))]:.2f} s" for share in (0.034, 0.5)
-    )
+    progress = 1 - distance / distance[0]
+    shares = ", ".join(f"{100 * progress[np.argmin(abs(times - t))]:.1f}% at {t:g} s" for t in (4.5, 5.5))
+    shares += f" (the block); 50% at {times[np.argmax(progress >= 0.5)]:.2f} s"
     raw_hand = endpoint_positions(skeleton, recorded.channel("q").reshape(len(recorded.times), -1))
     steps = np.linalg.norm(np.diff(raw_hand, axis=0), axis=1)
     reach = (recorded.times[1:] - recorded.times[0] >= 0.64) & (recorded.times[1:] - recorded.times[0] <= 9.64)
@@ -726,7 +805,7 @@ def print_tables() -> None:
     better = sum(x["worst_path_rmse_m"] < y["worst_path_rmse_m"] for x, y in zip(a, b, strict=True))
     print(f"  leak rate 0.03 beats 0.04 (input scaling 2) for {better} of 10 seeds")
 
-    print("\n== 3.7 Validation: ESN, scenario, tracker: arrival (s), holds, path RMSE (mm); block: holding force (N);")
+    print("\n== 3.7 Validation: ESN, scenario, tracker: arrival (s), holds, path RMSE (mm); block: peak force (N);")
     print("offsets: starts that hold, median path RMSE (mm), median peak torque (N m), failed starts")
     for esn, label in ESNS.items():
         for scenario in ("nominal", "block"):
