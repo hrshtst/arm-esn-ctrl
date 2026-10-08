@@ -45,10 +45,13 @@ max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, 
 # The filter of demo_00_filtered: one of skelarm's zero-phase filters, as the keyword
 # arguments of skelarm.smooth. It removes the steps of the cursor's whole pixels, a
 # few millimeters each; the first-order low-pass only averages, so the filtered hand
-# never goes beyond where the hand went.
+# never goes beyond where the hand went. At 2 Hz rather than report 004's 8 Hz, the
+# hand's acceleration at 10 ms falls from 1.7 to 0.7 m/s^2, and the hand stays within
+# 9 mm of the take; below about 1 Hz, the filter would spread the reach back into the
+# start, which the take holds for only 0.6 s, and move the start posture.
 [recording.filter]
 kind = "lowpass"   # first order, run forward and backward
-cutoff_hz = 8.0
+cutoff_hz = 2.0
 
 [demonstrations]
 # The start posture: joint angles in degrees. Keep it the same as [initial] q.
