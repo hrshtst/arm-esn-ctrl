@@ -65,6 +65,7 @@ uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2
 | `sweep_robot_fine_lr{0.05,0.1,0.15,0.2,0.3}_filtered.toml` | stage 3: input scaling 1–3 × spectral radius 0.5–0.99, one leak rate each, at ridge 1e-2 and a 1 s warm-up |
 | `sweep_robot_slow_leak_filtered.toml` | stage 3, continued: leak rate 0.02–0.04 × input scaling 1.5–2.5 × spectral radius 0.9 and 0.99 |
 | `sweep_robot_size_filtered.toml` | stage 3, continued: neurons 200–800 × sparsity 0.02–0.2, at leak rate 0.04, spectral radius 0.99, and input scaling 2 |
+| `sweep_robot_seeds_filtered_lr<lr>_sr0.99_is<is>.toml` | stage 4: seeds 0–9 of the five best combinations (leak rate and input scaling 0.04 and 2, 0.03 and 2, 0.05 and 2, 0.03 and 2.5, 0.04 and 1.5) |
 
 All train on the take filtered at 2 Hz, with ridge 1e-2, a 1 s warm-up, 400
 neurons, and sparsity 0.05, and run 22 s with the tracker of
