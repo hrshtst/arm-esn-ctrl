@@ -67,6 +67,12 @@ uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2
 | `sweep_robot_size_filtered.toml` | stage 3, continued: neurons 200–800 × sparsity 0.02–0.2, at leak rate 0.04, spectral radius 0.99, and input scaling 2 |
 | `sweep_robot_seeds_filtered_lr<lr>_sr0.99_is<is>.toml` | stage 4: seeds 0–9 of the five best combinations (leak rate and input scaling 0.04 and 2, 0.03 and 2, 0.05 and 2, 0.03 and 2.5, 0.04 and 1.5) |
 
+The ESN the sweeps chose (leak rate 0.03, spectral radius 0.99, input scaling 2,
+seed 4) is trained by `grid_robot_final_filtered.toml` of the autonomous
+experiment, and `{nominal,block,offsets}_robot_final_filtered.toml` validate it on
+the robot (stage 5) with the same tracker: undisturbed from the demonstrated start,
+the tip held from 1.15 s to 1.65 s, and from the 49 starts of the grid every 5 deg.
+
 All train on the take filtered at 2 Hz, with ridge 1e-2, a 1 s warm-up, 400
 neurons, and sparsity 0.05, and run 22 s with the tracker of
 `nominal_test_filtered.toml`: computed torque and joint PD at ω = 20 rad/s,
