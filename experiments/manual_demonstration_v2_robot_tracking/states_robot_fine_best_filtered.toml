@@ -1,0 +1,42 @@
+# Stage 2 on the remade arm (v2): the reservoir states of the chosen ESN
+# (grid_robot_fine_best_filtered.toml: leak rate 0.05, spectral radius 0.99, input
+# scaling 2, seed 0) while it drives the robot in its validation runs (report 005),
+# for a few neurons picked at random, recomputed from the runs' logs, over its
+# states while the take is fed in as in training.
+#
+#   uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_tracking/states_robot_fine_best_filtered.toml
+
+[states]
+settings = ["pd_w20_z0.1", "computed_torque_w20_z0.1"]  # tracker settings, as the runs name them: one figure each
+count = 8              # neurons shown, picked at random
+seed = 0               # of the pick
+span = [-1.0, 18.5]    # time shown (s): from the warm-up's start to the take's end
+
+# The runs of experiments/robot_esn.py, relative to the storage root; they must share
+# their ESN. Each is shown from one start posture: its index among the run's starts
+# (the start column of its metrics.csv).
+
+[[run]]
+label = "undisturbed"
+path = "results/manual_demonstration_v2_robot_tracking/20261008-220759-nominal_robot_fine_best_filtered"
+start = 0
+
+[[run]]
+label = "the tip held, 4.5 s to 5.5 s"
+path = "results/manual_demonstration_v2_robot_tracking/20261008-224813-block_robot_fine_best_filtered"
+start = 0
+
+[[run]]
+label = "three pushes, at 4 s, 8 s, and 13 s"
+path = "results/manual_demonstration_v2_robot_tracking/20261008-220759-pushes_robot_fine_best_filtered"
+start = 0
+
+[[run]]
+label = "an offset start that arrives"
+path = "results/manual_demonstration_v2_robot_tracking/20261008-203445-offsets_robot_fine_best_filtered"
+start = 48             # offset by +15 deg in both joints
+
+[[run]]
+label = "an offset start that fails"
+path = "results/manual_demonstration_v2_robot_tracking/20261008-203445-offsets_robot_fine_best_filtered"
+start = 23             # offset by -10 deg in joint 2

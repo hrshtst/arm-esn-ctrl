@@ -43,6 +43,22 @@ Report 004 named its copies `<scenario>_<ESN>[_pd_gains|_damping][_zero_velocity
 | `_damping` | `omegas = { computed_torque = [10.0], pd = [20.0] }`, `dampings = [1.0, 0.5, 0.3, 0.1]`; its `offsets` from `[[10.0, -10.0], [-10.0, -10.0]]` only |
 | `_zero_velocity` | as `_pd_gains` or `_damping` with joint PD only, and `reference_velocity = false` |
 
+## Reservoir states on the robot
+
+[`robot_states.py`](../robot_states.py) plots the reservoir states of an ESN while
+it drives the robot, for neurons picked at random, over its states while the take
+is fed in as in training. The runs do not store the states: they are recomputed
+from the runs' logs (`arm_esn_ctrl.states.run_states`), which keep every posture
+the ESN was given, and the ESN must reproduce each run's logged reference.
+
+```bash
+uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_tracking/states_robot_fine_best_filtered.toml
+```
+
+| Configuration | Runs |
+| --- | --- |
+| `states_robot_fine_best_filtered.toml` | the chosen ESN (report 005) undisturbed, under the block, under the pushes, and from two offset starts, one that arrives (+15°, +15°) and one that fails (0°, −10°) |
+
 ## ESN sweeps on the robot
 
 [`sweep_robot_esn.py`](../sweep_robot_esn.py) tunes the ESN by how the robot follows

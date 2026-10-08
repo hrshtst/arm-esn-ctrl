@@ -14,6 +14,7 @@ experiments/
 ├── robot_esn.py
 ├── sweep_robot_esn.py
 ├── reservoir_states.py
+├── robot_states.py
 ├── warmup_esn.py
 ├── demonstrations/                            # one directory per experiment: README.md and configurations
 ├── single_demonstration_autonomous_reaching/
@@ -36,7 +37,7 @@ experiments/
 | [manual_demonstration_autonomous_reaching](manual_demonstration_autonomous_reaching/README.md) | an ESN trained on one take taught by hand, run on its own (Stage 1) | `import_demonstrations.py`, `autonomous_esn.py`, `reservoir_states.py`, `sweep_esn.py`, `warmup_esn.py`, `route_convergence.py` | [004](../reports/004-manual-demonstration/README.md) |
 | [manual_demonstration_robot_tracking](manual_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | `robot_esn.py` | [004](../reports/004-manual-demonstration/README.md) |
 | [manual_demonstration_v2_autonomous_reaching](manual_demonstration_v2_autonomous_reaching/README.md) | as manual-demonstration autonomous reaching, on a remade arm with its own start posture and target (base configurations) | the same | [005](../reports/005-tuned-on-the-robot/README.md) |
-| [manual_demonstration_v2_robot_tracking](manual_demonstration_v2_robot_tracking/README.md) | as manual-demonstration robot tracking, on that arm, and ESN sweeps on the robot | `robot_esn.py`, `sweep_robot_esn.py` | [005](../reports/005-tuned-on-the-robot/README.md) |
+| [manual_demonstration_v2_robot_tracking](manual_demonstration_v2_robot_tracking/README.md) | as manual-demonstration robot tracking, on that arm, and ESN sweeps on the robot | `robot_esn.py`, `sweep_robot_esn.py`, `robot_states.py` | [005](../reports/005-tuned-on-the-robot/README.md) |
 
 Run a configuration with its runner:
 
