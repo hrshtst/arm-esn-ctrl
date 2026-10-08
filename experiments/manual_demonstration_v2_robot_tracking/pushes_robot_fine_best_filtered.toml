@@ -1,0 +1,75 @@
+# Stage 2 on the remade arm (v2): a sequence of pushes at the tip, from the
+# demonstrated start, against the best ESN of the finer sweep
+# (grid_robot_fine_best_filtered.toml: leak rate 0.05, spectral radius 0.99, input
+# scaling 2, seed 0),
+# to compare how each ESN's reference gives way to the pushed arm and pulls it back
+# (reference_lead_1, ... in metrics.csv: its lead at the end of each push).
+# pushes_robot_final_filtered.toml runs the other ESN: keep the pushes of the two
+# files the same.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/pushes_robot_fine_best_filtered.toml
+#
+# The ESN and the take arrive at about 9.6 to 10 s; four pushes strike the reach,
+# and one the arm held at the target. The forces are a start: about 0.5 N along the
+# reach and 5 N across it strike this arm about as hard, for its size, as report
+# 004's 10 N and 5 N pushes struck its arm.
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_autonomous_reaching/20261008-194414-grid_robot_fine_best_filtered/esn.toml"
+
+[tracker]
+# Computed torque and joint PD at omega = 20 rad/s, underdamped (damping ratio 0.1),
+# given a zero reference velocity, as in the sweeps on the robot.
+laws = ["computed_torque", "pd"]
+omegas = [20.0]
+dampings = [0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+duration = 22.0        # task (s), after the warm-up; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+# Without an effort_window, the torque, effort, and force are measured over the whole run.
+
+# Each push: a force of `force` N for `duration` s from `onset` (task time, s), at
+# `angle_deg` counterclockwise from the direction toward the target (0 forward, 90
+# across, 180 backward), fixed for the run by the start posture.
+
+[[disturbance]]  # forward, along the reach toward the target
+type = "push"
+force = 0.5            # EDIT: N
+onset = 2.0            # EDIT: task time (s)
+duration = 0.1         # s
+angle_deg = 0.0        # deg from the direction toward the target
+
+[[disturbance]]  # across the reach, counterclockwise
+type = "push"
+force = 5.0            # EDIT: N
+onset = 4.0            # EDIT: task time (s)
+duration = 0.1         # s
+angle_deg = 90.0       # deg from the direction toward the target
+
+[[disturbance]]  # backward, along the reach away from the target
+type = "push"
+force = 0.5            # EDIT: N
+onset = 6.0            # EDIT: task time (s)
+duration = 0.1         # s
+angle_deg = 180.0      # deg from the direction toward the target
+
+[[disturbance]]  # across the reach, clockwise
+type = "push"
+force = 5.0            # EDIT: N
+onset = 8.0            # EDIT: task time (s)
+duration = 0.1         # s
+angle_deg = -90.0      # deg from the direction toward the target
+
+[[disturbance]]  # across, after the arrival and its hold window
+type = "push"
+force = 5.0            # EDIT: N
+onset = 13.0           # EDIT: task time (s)
+duration = 0.1         # s
+angle_deg = 90.0       # deg from the direction toward the target

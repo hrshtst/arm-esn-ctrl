@@ -74,6 +74,9 @@ the robot (stage 5) with the same tracker: undisturbed from the demonstrated sta
 the tip held from 1.15 s to 1.65 s, and from the 49 starts of the grid every 5 deg.
 `{nominal,block,offsets}_robot_fine_best_filtered.toml` validate the best ESN of the
 finer sweep (`grid_robot_fine_best_filtered.toml`: leak rate 0.05, seed 0) alike.
+`pushes_robot_{final,fine_best}_filtered.toml` push both ESNs' arms five times
+during one run, with the same forces, to compare how each reference gives way and
+pulls back.
 
 All train on the take filtered at 2 Hz, with ridge 1e-2, a 1 s warm-up, 400
 neurons, and sparsity 0.05, and run 22 s with the tracker of
