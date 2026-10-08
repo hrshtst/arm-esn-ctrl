@@ -65,20 +65,16 @@ TAKE_RUN = REPORT / "data" / "20261008-170034-reach_manual_v2"
 DT = 0.01  # the ESNs' period (s)
 # The tracker of every robot run: its settings' directories in a run, and their names.
 SETTINGS = {"computed_torque_w20_z0.1": "computed torque", "pd_w20_z0.1": "joint PD"}
-# The two ESNs validated on the robot: their configuration tag, and their name.
-ESNS = {
-    "fine_best": "chosen ESN (leak rate 0.05, seed 0)",
-    "final": "ESN of the seed check (leak rate 0.03, seed 4)",
-}
+# The ESN validated on the robot: its configuration tag, and its name.
 CHOSEN = "fine_best"
-SCENARIOS = ["nominal", "block", "offsets", "pushes"]
+CHOSEN_NAME = "chosen ESN (leak rate 0.05, seed 0)"
 OFFSET = (15.0, 15.0)  # the offset start (deg) shown: the largest from which the chosen ESN arrives and holds
 PUSH_TIMES = [(4.0, 4.2, 8.0), (8.0, 8.2, 12.0), (13.0, 13.2, 17.0)]  # each push: onset, end, and window end (s)
 BACK_WITHIN = 5.0  # mm: an arm is back on the taught path once it stays within this of it
 FLEXIBILITY_CSV = SUMMARY / "flexibility.csv"
 
 ESN_COLOR = "#2a78d6"
-FINAL_COLOR = "#4a3aa7"
+CT_COLOR = "#4a3aa7"  # the chosen ESN with computed torque, in the animations
 REPLAY_COLOR = "#eb6834"
 RECORDED_COLOR = "#a3a29d"
 TEXT_COLOR = "#52514e"
@@ -87,70 +83,28 @@ SURFACE_COLOR = "#fcfcfb"
 DISTURBANCE_COLOR = "#f0efec"
 TAKE_COLORS = {"as recorded": "#a3a29d", "filtered at 8 Hz": "#eb6834", "filtered at 2 Hz": "#2a78d6"}
 
-# The panels' labels: the arm, then the tracker.
-CHOSEN_PD = f"{ESNS[CHOSEN]}\ntracker: joint PD"
-CHOSEN_CT = f"{ESNS[CHOSEN]}\ntracker: computed torque"
-FINAL_PD = f"{ESNS['final']}\ntracker: joint PD"
-REPLAY_PD = "replay of the take by time\ntracker: joint PD"
+# The arms compared, both in the chosen ESN's runs: their name and color.
+ARMS = {"esn": (CHOSEN_NAME, ESN_COLOR), "replay": ("replay", REPLAY_COLOR)}
 
-# The animations: name, scenario, the start offset (deg) from the demonstrated start, the title, and the panels:
-# label, ESN tag, tracker setting, arm, and the label's color.
+# The panels of every animation: the label (the arm's reference, then its tracker), the tracker setting, the arm,
+# and the label's color.
+PANELS = [
+    (f"{CHOSEN_NAME}\ntracker: joint PD", "pd_w20_z0.1", "esn", ESN_COLOR),
+    ("replay of the take by time\ntracker: joint PD", "pd_w20_z0.1", "replay", REPLAY_COLOR),
+    (f"{CHOSEN_NAME}\ntracker: computed torque", "computed_torque_w20_z0.1", "esn", CT_COLOR),
+]
+# The animations: name, scenario, the start offset (deg) from the demonstrated start, and the title.
 ANIMATIONS = [
-    (
-        "nominal",
-        "nominal",
-        (0.0, 0.0),
-        "undisturbed, from the demonstrated start",
-        [
-            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
-            (CHOSEN_CT, CHOSEN, "computed_torque_w20_z0.1", "esn", FINAL_COLOR),
-        ],
-    ),
-    (
-        "block",
-        "block",
-        (0.0, 0.0),
-        "the tip held from 4.5 s to 5.5 s",
-        [
-            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
-            (CHOSEN_CT, CHOSEN, "computed_torque_w20_z0.1", "esn", FINAL_COLOR),
-        ],
-    ),
-    (
-        "pushes",
-        "pushes",
-        (0.0, 0.0),
-        "three pushes, at 4 s, 8 s, and 13 s",
-        [
-            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            (FINAL_PD, "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
-            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
-        ],
-    ),
+    ("nominal", "nominal", (0.0, 0.0), "undisturbed, from the demonstrated start"),
+    ("block", "block", (0.0, 0.0), "the tip held from 4.5 s to 5.5 s"),
+    ("pushes", "pushes", (0.0, 0.0), "three pushes, at 4 s, 8 s, and 13 s"),
     (
         "offset",
         "offsets",
         OFFSET,
         "start offset by +15 deg in both joints (turned counterclockwise, the elbow more bent)",
-        [
-            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            (FINAL_PD, "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
-            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
-        ],
     ),
-    (
-        "offset_failure",
-        "offsets",
-        (0.0, -10.0),
-        "start offset by -10 deg in joint 2 (the elbow straighter)",
-        [
-            (CHOSEN_PD, CHOSEN, "pd_w20_z0.1", "esn", ESN_COLOR),
-            (FINAL_PD, "final", "pd_w20_z0.1", "esn", FINAL_COLOR),
-            (REPLAY_PD, CHOSEN, "pd_w20_z0.1", "replay", REPLAY_COLOR),
-        ],
-    ),
+    ("offset_failure", "offsets", (0.0, -10.0), "start offset by -10 deg in joint 2 (the elbow straighter)"),
 ]
 ANIMATION_SPAN = (-0.2, 17.0)
 ANIMATION_FPS = 10.0
@@ -182,8 +136,8 @@ def main() -> None:
     if args.logs:
         print_block()
     if args.animations:
-        for name, scenario, offset, title, panels in ANIMATIONS:
-            export_animation(name, scenario, offset, title, panels)
+        for name, scenario, offset, title in ANIMATIONS:
+            export_animation(name, scenario, offset, title)
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -225,9 +179,9 @@ def rows_of(stem: str, name: str = "metrics.csv") -> list[dict[str, Any]]:
     return read_csv(RESULTS / run_name(stem) / name)
 
 
-def stem_of(scenario: str, esn: str) -> str:
-    """The configuration stem of a validation run of one of the two ESNs."""
-    return f"{scenario}_robot_{esn}_filtered"
+def stem_of(scenario: str) -> str:
+    """The configuration stem of a validation run of the chosen ESN."""
+    return f"{scenario}_robot_{CHOSEN}_filtered"
 
 
 def offset_of(origin: str) -> tuple[float, float]:
@@ -438,7 +392,7 @@ def plot_runs(scenario: str, offset: tuple[float, float] = (0.0, 0.0)) -> tuple[
     demonstrated start.
     """
     robot_esn = runner("robot_esn")
-    stem = stem_of(scenario, CHOSEN)
+    stem = stem_of(scenario)
     setup, config = robot_setup(stem)
     settings = robot_esn.tracker_settings(config["tracker"])
     spans = disturbance_spans(config.get("disturbance"))
@@ -451,9 +405,9 @@ def plot_runs(scenario: str, offset: tuple[float, float] = (0.0, 0.0)) -> tuple[
     )
 
 
-def path_distances(scenario: str, esn: str, setting: str, arm: str) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+def path_distances(scenario: str, setting: str, arm: str) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """The times (every 10 ms) and the hand's distance (mm) from the taught path in a run of a scenario."""
-    log = StateLog.load(run_dir(stem_of(scenario, esn)) / setting / f"{arm}_00.sklog.npz")
+    log = StateLog.load(run_dir(stem_of(scenario)) / setting / f"{arm}_00.sklog.npz")
     task = log.times >= 0
     skeleton = Skeleton.from_toml(TAKE_RUN / "config.toml")
     hand = endpoint_positions(skeleton, log.channel("q").reshape(len(log.times), -1)[task])
@@ -461,20 +415,8 @@ def path_distances(scenario: str, esn: str, setting: str, arm: str) -> tuple[NDA
     return log.times[task][::every], 1000 * distances_to_path(hand[::every], taught_hand())
 
 
-def arms_compared() -> list[tuple[str, str, str, str]]:
-    """The arms compared under the pushes and the block: label, ESN tag, arm, and color.
-
-    The replay is the same in both ESNs' runs.
-    """
-    return [
-        (ESNS[CHOSEN], CHOSEN, "esn", ESN_COLOR),
-        (ESNS["final"], "final", "esn", FINAL_COLOR),
-        ("replay", CHOSEN, "replay", REPLAY_COLOR),
-    ]
-
-
 def plot_flexibility() -> Figure:
-    """The hand's distance from the taught path under the pushes, for the two ESNs and the replay, per tracker."""
+    """The hand's distance from the taught path under the pushes, for the chosen ESN and the replay, per tracker."""
     fig = Figure(figsize=(13, 7), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle("Three pushes: how far each arm is carried off the taught path, and back", color="#0b0b0b")
     axes = fig.subplots(len(SETTINGS), 1, sharex=True)
@@ -482,8 +424,8 @@ def plot_flexibility() -> Figure:
         style(ax)
         for onset, end, _ in PUSH_TIMES:
             ax.axvspan(onset, end, color=DISTURBANCE_COLOR, zorder=0)
-        for label, esn, arm, color in arms_compared():
-            times, distance = path_distances("pushes", esn, setting, arm)
+        for arm, (label, color) in ARMS.items():
+            times, distance = path_distances("pushes", setting, arm)
             ax.plot(times, distance, color=color, linewidth=1.3, label=label)
         ax.axhline(BACK_WITHIN, color=TEXT_COLOR, linewidth=0.8, linestyle=":")
         ax.set(title=name, ylabel="from the taught path (mm)", ylim=(0, None), xlim=(0, 18))
@@ -501,8 +443,8 @@ def write_flexibility() -> None:
     """
     out = []
     for setting, name in SETTINGS.items():
-        for label, esn, arm, _ in arms_compared():
-            times, distance = path_distances("pushes", esn, setting, arm)
+        for arm, (label, _) in ARMS.items():
+            times, distance = path_distances("pushes", setting, arm)
             row: dict[str, Any] = {"tracker": name, "arm": label}
             for k, (onset, end, stop) in enumerate(PUSH_TIMES, start=1):
                 window = (times >= onset) & (times < stop)
@@ -530,11 +472,11 @@ def print_block() -> None:
     print("the release (mean, last 0.1 s); the reference's hand ahead of the arm's at the release (mm); after the")
     print("release, the farthest from the taught path (mm), and back within 5 mm (s)")
     skeleton = Skeleton.from_toml(TAKE_RUN / "config.toml")
-    for label, esn, arm, _ in arms_compared():
-        stem = stem_of("block", esn)
-        with (RESULTS / run_name(stem) / "config.toml").open("rb") as f:
-            block = tomllib.load(f)["disturbance"]
-        onset, release = block["onset"], block["release"]
+    stem = stem_of("block")
+    with (RESULTS / run_name(stem) / "config.toml").open("rb") as f:
+        block = tomllib.load(f)["disturbance"]
+    onset, release = block["onset"], block["release"]
+    for arm, (label, _) in ARMS.items():
         for setting, name in SETTINGS.items():
             log = StateLog.load(run_dir(stem) / setting / f"{arm}_00.sklog.npz")
             t = log.times
@@ -547,7 +489,7 @@ def print_block() -> None:
                 for channel in ("q", "q_ref")
             )
             ahead = 1000 * float(np.linalg.norm(reference - hand))
-            times, distance = path_distances("block", esn, setting, arm)
+            times, distance = path_distances("block", setting, arm)
             after = (times >= release) & (times < 12.0)
             back = times[np.flatnonzero(after & (distance > BACK_WITHIN))[-1] + 1] - release
             print(
@@ -563,12 +505,11 @@ def export_animation(
     scenario: str,
     offset: tuple[float, float],
     title: str,
-    panels: list[tuple[str, str, str, str, str]],
 ) -> None:
-    """Animate one start of a scenario into ``<name>.gif``: the arms of ``panels`` side by side, rendered by skelarm.
+    """Animate one start of a scenario into ``<name>.gif``: the arms of PANELS side by side, rendered by skelarm.
 
-    Each panel is a label, an ESN tag, a tracker setting, an arm ("esn" or
-    "replay"), and the label's color. The player exports each arm's run as a GIF
+    Each panel is a label, a tracker setting, an arm ("esn" or "replay"), and the
+    label's color. The player exports each arm's run as a GIF
     (``--export``); its frames, which the GIF merges where the arm rests, are spread
     back over time, cropped to where the arms move, labeled, and tiled into one GIF
     with the task time and the disturbance acting.
@@ -578,14 +519,14 @@ def export_animation(
     from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
     player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
-    with (RESULTS / run_name(stem_of(scenario, CHOSEN)) / "config.toml").open("rb") as f:
+    stem = stem_of(scenario)
+    with (RESULTS / run_name(stem) / "config.toml").open("rb") as f:
         disturbance = tomllib.load(f).get("disturbance")
     tables = [] if disturbance is None else [disturbance] if isinstance(disturbance, dict) else disturbance
     spans = disturbance_spans(disturbance)
     frames, starts = [], []
     with tempfile.TemporaryDirectory() as tmp:
-        for i, (_, esn, setting, arm, _) in enumerate(panels):
-            stem = stem_of(scenario, esn)
+        for i, (_, setting, arm, _) in enumerate(PANELS):
             start = next(int(r["start"]) for r in rows_of(stem) if r["arm"] == arm and offset_of(r["origin"]) == offset)
             path = run_dir(stem) / setting / f"{arm}_{start:02d}.sklog.npz"
             exported = Path(tmp) / f"{i}.gif"
@@ -632,7 +573,7 @@ def export_animation(
         canvas = Image.new("RGB", (canvas_width, header + label_height + height), "white")
         draw = ImageDraw.Draw(canvas)
         draw.text((10, 10), header_line(t), fill="#0b0b0b", font=font)
-        for i, (label, _, _, _, color) in enumerate(panels):
+        for i, (label, _, _, color) in enumerate(PANELS):
             k = int(np.clip(round((t - starts[i]) * ANIMATION_FPS), 0, len(frames[i]) - 1))
             x = i * (width + gap)
             canvas.paste(Image.fromarray(frames[i][k][top:bottom, left:right]), (x, header + label_height))
@@ -805,19 +746,19 @@ def print_tables() -> None:
     better = sum(x["worst_path_rmse_m"] < y["worst_path_rmse_m"] for x, y in zip(a, b, strict=True))
     print(f"  leak rate 0.03 beats 0.04 (input scaling 2) for {better} of 10 seeds")
 
-    print("\n== 3.7 Validation: ESN, scenario, tracker: arrival (s), holds, path RMSE (mm); block: peak force (N);")
+    print("\n== 3.7 Validation: arm, scenario, tracker: arrival (s), holds, path RMSE (mm); block: peak force (N);")
     print("offsets: starts that hold, median path RMSE (mm), median peak torque (N m), failed starts")
-    for esn, label in ESNS.items():
+    for arm, (label, _) in ARMS.items():
         for scenario in ("nominal", "block"):
-            for r in rows_of(stem_of(scenario, esn)):
-                if r["arm"] != "esn":
+            for r in rows_of(stem_of(scenario)):
+                if r["arm"] != arm:
                     continue
                 force = f", {r['peak_external_force_n']:.2f} N" if scenario == "block" else ""
                 print(
                     f"  {label}, {scenario}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f}, {r['success']},"
                     f" {1000 * r['taught_path_rmse_m']:.2f}{force}"
                 )
-        offsets = [r for r in rows_of(stem_of("offsets", esn)) if r["arm"] == "esn"]
+        offsets = [r for r in rows_of(stem_of("offsets")) if r["arm"] == arm]
         for setting, name in SETTINGS.items():
             group = [r for r in offsets if setting_of(r) == setting]
             fails = [r["origin"].split()[1] for r in group if not r["success"]]
@@ -827,34 +768,20 @@ def print_tables() -> None:
                 f" {1000 * np.median([r['taught_path_rmse_m'] for r in group]):.1f},"
                 f" {np.median([r['peak_torque_nm'] for r in group]):.2f}, {fails} ({never} never arrive)"
             )
-    replays = [r for r in rows_of(stem_of("offsets", CHOSEN)) if r["arm"] == "replay"]
-    for setting, name in SETTINGS.items():
-        group = [r for r in replays if setting_of(r) == setting]
-        print(
-            f"  replay, offsets, {name}: {sum(r['success'] for r in group)}/{len(group)},"
-            f" {1000 * np.median([r['taught_path_rmse_m'] for r in group]):.1f},"
-            f" {np.median([r['peak_torque_nm'] for r in group]):.2f}"
-        )
-    for scenario in ("nominal", "block"):
-        for r in rows_of(stem_of(scenario, CHOSEN)):
-            if r["arm"] == "replay":
-                force = f", {r['peak_external_force_n']:.2f} N" if scenario == "block" else ""
+        for r in rows_of(stem_of("offsets")):
+            if r["arm"] == arm and offset_of(r["origin"]) == OFFSET:
                 print(
-                    f"  replay, {scenario}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f}, {r['success']},"
-                    f" {1000 * r['taught_path_rmse_m']:.2f}{force}"
+                    f"  {label}, offset {OFFSET}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f}, {r['success']},"
+                    f" {1000 * r['taught_path_rmse_m']:.1f}, peak torque {r['peak_torque_nm']:.1f}"
                 )
 
     print("\n== 3.8 Pushes: arm, tracker: arrival (s), holds, path RMSE (mm), reference lead at the end of each push")
-    for esn, label in ESNS.items():
-        for r in rows_of(stem_of("pushes", esn)):
-            if r["arm"] == "replay" and esn != CHOSEN:
-                continue
-            name = label if r["arm"] == "esn" else "replay"
-            leads = " ".join(f"{r[f'reference_lead_{k}']:+.3f}" for k in (1, 2, 3))
-            print(
-                f"  {name}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f}, {r['success']},"
-                f" {1000 * r['taught_path_rmse_m']:.1f}, {leads}"
-            )
+    for r in rows_of(stem_of("pushes")):
+        leads = " ".join(f"{r[f'reference_lead_{k}']:+.3f}" for k in (1, 2, 3))
+        print(
+            f"  {ARMS[r['arm']][0]}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f}, {r['success']},"
+            f" {1000 * r['taught_path_rmse_m']:.1f}, {leads}"
+        )
     if FLEXIBILITY_CSV.exists():
         print("\n== 3.8 Each push: the farthest from the taught path (mm), and when the hand settles within 5 mm (s)")
         for r in read_csv(FLEXIBILITY_CSV):

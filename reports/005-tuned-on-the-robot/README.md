@@ -21,15 +21,15 @@ follows the taught path.
   about 10 s like the take. A slow leak rate (0.03 to 0.05), a strong input (input
   scaling 2), and a spectral radius just below 1 (0.99) did best; the ridge (1e-2)
   and the warm-up mattered little, and the random reservoir as much as the settings.
-- **Two ESNs were validated.** The seed check's ESN (leak rate 0.03, seed 4), the
-  best seed of the most reliable combination of the last stage, is the more robust:
-  48 of 49 offset starts arrive and hold. The chosen ESN (leak rate 0.05, seed 0)
-  follows the taught path within 1.0 mm undisturbed and 5.4 mm under a block of
-  1 s in mid-reach (the seed check's 10.4 to 10.7 mm), but fails from 19 of the 21
-  starts with the elbow straighter. It was chosen for how it yields: pushed, its arm
-  is carried 10–60% farther off the path and returns more slowly; held, it waits,
-  pressing with 1 to 2 N at the release, against the seed check's 3 to 5 N and the
-  replay's 18 to 20 N.
+- **The chosen ESN** (leak rate 0.05, spectral radius 0.99, input scaling 2, seed
+  0), the best of the finer grid, was chosen by hand in the robot app for how it
+  yields. Against the replay of the take, it follows the taught path within 1.0 mm
+  undisturbed (the replay 0.1 to 0.9 mm), and 5.4 mm under a block of 1 s in
+  mid-reach (7.5 to 16.6 mm); held, it waits, pressing with 1 to 2 N at the
+  release, against the replay's 18 to 20 N; pushed, it gives way, carried 1.2 to
+  3.4 times as far off the path, without the replay's ringing. But it arrives and
+  holds from only 30 of 49 offset starts, failing from 19 of the 21 with the elbow
+  straighter, where the replay arrives from all 49.
 
 ## 1. Question
 
@@ -108,7 +108,7 @@ The other settings stay at ridge 1e-2, a 1 s warm-up, 400 neurons, and sparsity
 
 ### Scenarios
 
-The ESNs chosen are then validated with
+The chosen ESN is then validated with
 [`robot_esn.py`](../../experiments/robot_esn.py), 22 s runs with both trackers:
 
 - **nominal:** undisturbed, from the demonstrated start;
@@ -135,13 +135,13 @@ under `results/`; place or link the copies there to rerun.
 | Runs | Command |
 | --- | --- |
 | [`20261008-170034-reach_manual_v2`](data/20261008-170034-reach_manual_v2) | `uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_v2.toml` |
-| `grid_*_filtered` (5) | `uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_autonomous_reaching/<name>.toml` |
+| `grid_*_filtered` (4) | `uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_autonomous_reaching/<name>.toml` |
 | `sweep_robot_*` (22) | `uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<name>.toml` |
-| `<scenario>_test_filtered`, `<scenario>_robot_<ESN>_filtered` (10) | `uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<name>.toml` |
+| `<scenario>_test_filtered`, `<scenario>_robot_<ESN>_filtered` (6) | `uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<name>.toml` |
 | [`summary`](results/summary) | `uv run python reports/005-tuned-on-the-robot/make_figures.py --logs --animations` |
 
-The `<ESN>` is `best` (the best of stage 1), `fine_best` (the chosen one, the best
-of the finer grid with seed 0), or `final` (the seed check's choice). Each run's
+The `<ESN>` is `best` (the best of stage 1) or `fine_best` (the chosen one, the
+best of the finer grid with seed 0). Each run's
 directory under [`results/`](results) is named after its configuration, and its run
 record (`run.toml`) gives its commit:
 
@@ -154,10 +154,10 @@ record (`run.toml`) gives its commit:
 | `f478a55`, `e7300f7` | the best ESN of stage 1, trained and on the robot |
 | `f1b11c9` | stage 2 |
 | `da38401`, `c11a686`, `6146f1a`, `836f4f4`, `516337b` | stage 3: the finer grid, its best ESN (the chosen one), the slower leak rates, their best ESN, and the reservoir's size |
-| `a4f9572`, `f6466f5` | stage 4, and the ESN of its choice |
-| `9b7b182`, `a893294` | the validation of the two ESNs, undisturbed and from the offsets |
-| `fd4faf6`, `b9b16dd` | the pushes of the seed check's ESN; the chosen ESN's undisturbed and pushes runs, with `torques.png` |
-| `513ad39` | the block of both ESNs, for 1 s in mid-reach |
+| `a4f9572` | stage 4 |
+| `a893294` | the chosen ESN from the offsets |
+| `b9b16dd` | the chosen ESN undisturbed and pushed, with `torques.png` |
+| `513ad39` | the chosen ESN under the block, for 1 s in mid-reach |
 
 All runs are deterministic. Each run directory here holds its configuration, its
 run record, and its metrics (`metrics.csv`, or `sweep.csv` and `runs.csv` with the
@@ -282,53 +282,53 @@ All with spectral radius 0.99; all 50 combinations hold.
   the five best for every one, the best for three (0.82 to 1.08 mm).
 - **Leak rate 0.03 with input scaling 2 is the most reliable,** with the smallest
   mean and spread; seed by seed, it beats leak rate 0.04 with the same input scaling
-  for 8 of the 10 seeds. Its best seed, 4 (0.88 mm), was trained as the seed
-  check's ESN (`grid_robot_final_filtered`).
+  for 8 of the 10 seeds.
 - **The best of stage 3 had a good seed.** Leak rate 0.05 with seed 0 gave 1.00 mm;
-  its mean over seeds is 1.86 mm.
+  its mean over seeds is 1.86 mm, the highest of the five.
 
-### 3.7 Validation: two ESNs
+### 3.7 Validation: the chosen ESN against the replay
 
-| Scenario | Chosen ESN (leak rate 0.05, seed 0) | Seed check's ESN (leak rate 0.03, seed 4) | Replay |
-| --- | --- | --- | --- |
-| Nominal: path RMSE (computed torque / joint PD) | 0.92 / 1.00 mm | 0.79 / 0.88 mm | 0.13 / 0.85 mm |
-| Nominal: arrival | 9.98 / 9.99 s | 9.75 / 9.74 s | 9.60 / 9.59 s |
-| Block: path RMSE | 5.43 / 5.44 mm | 10.37 / 10.70 mm | 7.47 / 16.64 mm |
-| Block: force at the grip (peak) | 10.6 / 10.3 N | 11.2 / 11.0 N | 9.4 / 11.3 N |
-| Block: force at the release (pressing) | 1.3 / 2.3 N | 2.7 / 4.6 N | 18.5 / 20.0 N |
-| Block: reference ahead of the hand at the release | 14 / 14 mm | 25 / 25 mm | 154 / 156 mm |
-| Block: after the release, farthest from the path | 23 / 20 mm | 39 / 35 mm | 39 / 53 mm |
-| Block: arrival | 10.58 / 10.60 s | 10.03 / 10.01 s | 9.60 / 9.59 s |
-| Offsets: starts that arrive and hold | 30 / 30 of 49 | 48 / 48 of 49 | |
-| Offsets: median path RMSE | 30.3 / 28.0 mm | 15.5 / 17.0 mm | |
-| Offsets: median peak torque | 86 / 6.6 N m | 73 / 5.7 N m | |
+The ESN validated is the best of stage 3 (`grid_robot_fine_best_filtered`: leak
+rate 0.05, spectral radius 0.99, input scaling 2, seed 0), chosen by hand, after
+trying it in the robot app, for how it yields when pushed (Section 3.8).
 
-Offset runs: [chosen](results/20261008-203445-offsets_robot_fine_best_filtered/grid.png),
-[seed check's](results/20261008-200751-offsets_robot_final_filtered/grid.png).
+| Scenario | Chosen ESN | Replay |
+| --- | --- | --- |
+| Nominal: path RMSE (computed torque / joint PD) | 0.92 / 1.00 mm | 0.13 / 0.85 mm |
+| Nominal: arrival | 9.98 / 9.99 s | 9.60 / 9.59 s |
+| Block: path RMSE | 5.43 / 5.44 mm | 7.47 / 16.64 mm |
+| Block: force at the grip (peak) | 10.6 / 10.3 N | 9.4 / 11.3 N |
+| Block: force at the release (pressing) | 1.3 / 2.3 N | 18.5 / 20.0 N |
+| Block: reference ahead of the hand at the release | 14 / 14 mm | 154 / 156 mm |
+| Block: after the release, farthest from the path | 23 / 20 mm | 39 / 53 mm |
+| Block: after the release, back within 5 mm of it | 1.4 / 1.5 s | 1.3 / 1.6 s |
+| Block: arrival | 10.58 / 10.60 s | 9.60 / 9.59 s |
+| Offsets: starts that arrive and hold | 30 / 30 of 49 | 49 / 49 of 49 |
+| Offsets: median path RMSE | 30.3 / 28.0 mm | 14.6 / 27.0 mm |
+| Offsets: median peak torque | 86 / 6.6 N m | 125 / 12 N m |
 
-- **Undisturbed, both follow the taught path within about 1 mm** and arrive within
-  0.4 s of the take.
-- **Under the block, the chosen ESN waits the more.** Each ESN's output stays
-  near the held hand, 14 mm ahead of it at the release for the chosen ESN and
-  25 mm for the seed check's, so each arm presses lightly: 1 to 2 N and 3 to 5 N
-  at the release, against the replay's 18 to 20 N, whose reference runs 155 mm
-  ahead. The peak force, about 10 N for every arm, is the grip's: the damper
-  stopping the moving hand.
-- **After the release, the chosen ESN keeps closer to the path.** Its arm lurches
-  20 to 23 mm off the taught path and is back within 5 mm in 1.4 to 1.5 s; the
-  seed check's, 35 to 39 mm and 2.4 s; the replay's, 39 to 53 mm, ringing. The chosen
-  ESN then carries on about 1 s behind the take and arrives 0.6 s later than
-  undisturbed; the seed check's, which waited less, 0.3 s later.
-- **From the offsets they differ.** The chosen ESN fails from 19 of the 21 starts
-  with the elbow straighter (a joint 2 offset of −5° to −15°); in each, it never
-  arrives. The seed check's ESN fails from one, (+15°, −15°). The replay arrives and
-  holds from all 49.
+Offset runs: [the map of the 49 starts](results/20261008-203445-offsets_robot_fine_best_filtered/grid.png).
+
+- **Undisturbed, the ESN follows the taught path within about 1 mm** and arrives
+  0.4 s after the take; the replay follows it within 0.13 mm with computed torque
+  and 0.85 mm with joint PD.
+- **Under the block, the ESN waits.** Its output stays near the held hand, 14 mm
+  ahead of it at the release, so its arm presses lightly, 1 to 2 N, against the
+  replay's 18 to 20 N, whose reference runs 155 mm ahead. The peak force, about
+  10 N for both, is the grip's: the damper stopping the moving hand.
+- **After the release, the ESN keeps closer to the path.** Its arm lurches 20 to
+  23 mm off the taught path, the replay's 39 to 53 mm, ringing; both are back
+  within 5 mm in 1.3 to 1.6 s. The ESN then carries on about 1 s behind the take
+  and arrives 0.6 s later than undisturbed.
+- **From the offsets, the ESN fails where the replay does not.** It fails from 19
+  of the 21 starts with the elbow straighter (a joint 2 offset of −5° to −15°); in
+  each, it never arrives. The replay, whose reference jumps to the take's start,
+  arrives and holds from all 49.
 - **Computed torque passes on the reference's first step from an offset**, with
-  its acceleration: median peak torques of 73 to 86 N m, against 5.7 to 6.6 N m with
-  joint PD. The replay, whose reference jumps to the take's start, needs 125 and
-  12 N m.
+  its acceleration: median peak torques of 86 N m for the ESN and 125 N m for the
+  replay, against 6.6 and 12 N m with joint PD.
 
-### 3.8 Pushes: how each ESN yields
+### 3.8 Pushes: how the ESN yields
 
 ![Distance from the taught path under the pushes](results/summary/flexibility.png)
 
@@ -340,35 +340,29 @@ after its onset):
 | --- | --- | --- | --- | --- | --- |
 | Chosen ESN | computed torque | 48 mm, 3.6 s | 220 mm, 1.8 s | 219 mm, not settled | 76.8 mm |
 | Chosen ESN | joint PD | 47 mm, not settled | 187 mm, 1.8 s | 170 mm, 3.0 s | 53.9 mm |
-| Seed check's ESN | computed torque | 38 mm, 3.6 s | 193 mm, 2.5 s | 157 mm, 3.1 s | 47.4 mm |
-| Seed check's ESN | joint PD | 29 mm, 3.6 s | 169 mm, 3.0 s | 149 mm, 2.8 s | 42.4 mm |
 | Replay | computed torque | 34 mm, 1.4 s | 149 mm, 1.6 s | 116 mm, 1.3 s | 34.1 mm |
 | Replay | joint PD | 14 mm, 1.7 s | 150 mm, 2.0 s | 115 mm, 2.2 s | 32.7 mm |
 
-All arms arrive (the ESNs at 10.3 s) and hold.
+Both arms arrive (the ESN's at 10.3 s) and hold.
 
-- **The chosen ESN yields more.** Every push carries its arm farther off the path,
-  10 to 60% farther than the seed check's, and twice it is not back within the
-  window: after the push at 13 s with computed torque, its arm wanders off for
-  about 4 s before returning. Its reference gives way at once: at the end of the
-  pushes at 8 and 13 s it is within 0.3% of the path of the arm, and after the
-  backward push at 4 s 5 to 9% ahead, as the replay's (9%).
-- **The seed check's ESN pulls back to the taught path more firmly,** as it does
-  from the offsets.
-- **The replay is the stiffest.** Its reference ignores the arm, so the tracker
+- **The ESN yields.** Every push carries its arm farther off the path than the
+  replay's, 1.2 to 3.4 times as far, and twice it is not back within the window:
+  after the push at 13 s with computed torque, its arm wanders off for about 4 s
+  before returning. Its reference gives way at once: at the end of the pushes at
+  8 and 13 s it is within 0.3% of the path of the arm, and after the backward push
+  at 4 s 5 to 9% ahead, as the replay's (9%).
+- **The replay is the stiffer.** Its reference ignores the arm, so the tracker
   drags the arm straight back onto the take's course, ringing at ζ = 0.1.
-- **The chosen ESN was chosen for this compliance,** after trying both in the robot
-  app.
+- **The ESN was chosen for this compliance,** after trying it in the robot app.
 
 ### 3.9 The chosen ESN, scenario by scenario
 
 The animations show three arms side by side on one clock, each rendered by
 skelarm's player; the purple dot is the target, the red arrow the force at the
-tip. Each panel names the arm's reference, an ESN or the replay of the take by
-time, and its tracker. In the pushes and the offset starts, the chosen ESN is set
-beside the seed check's ESN (leak rate 0.03, seed 4), the other ESN validated in
-Section 3.7, and the replay, all three through joint PD. The figures show the
-chosen ESN's joint angles (the taught motion, thick gray; the ESN's output, dashed
+tip. Each panel names the arm's reference, the chosen ESN or the replay of the
+take by time, and its tracker: the chosen ESN and the replay through joint PD, and
+the chosen ESN through computed torque. The figures show the chosen ESN's joint
+angles (the taught motion, thick gray; the ESN's output, dashed
 blue; the ESN's arm, blue; the replay's arm, orange) and the joint torques, with
 both trackers; the disturbances are shaded.
 
@@ -408,8 +402,7 @@ the path at the release, then carries on about 1 s behind the take and arrives a
 
 ![Joint torques: pushes](results/summary/pushes_torques.png)
 
-The animation sets the chosen ESN beside the seed check's, both with joint PD, and
-the replay. After each push, the chosen ESN's output goes with the arm and carries
+After each push, the chosen ESN's output goes with the arm and carries
 on from where it was pushed; its torques peak at 2.5 to 4.3 N m, as high as the
 replay's or lower, and die out within about 1 s, while the replay's ring for 2 to
 3 s with joint PD.
@@ -426,8 +419,8 @@ From the start offset by +15° in both joints, the arm turned counterclockwise a
 the elbow more bent, the largest offset from which the chosen ESN arrives and
 holds, its output brings the arm onto the taught motion within about 1 s, but
 farther along it: the arm then runs about 1 s ahead of the take and arrives at
-8.4 s, 31 mm off the taught path with joint PD, having skipped the path's first
-part. The seed check's ESN arrives at 9.8 s, 32 mm off. The replay's reference
+8.4 s, 31 mm off the taught path with joint PD (34 mm with computed torque),
+having skipped the path's first part. The replay's reference
 jumps back to the take's start: its arm swings there and rings for about 2 s with
 joint PD (68 mm off the path), and with computed torque the jump costs a peak
 torque of 257 N m, against the ESN's 123 N m.
@@ -436,9 +429,9 @@ torque of 257 N m, against the ESN's 123 N m.
 
 From the start offset by −10° in joint 2, the elbow straighter, one of the 19
 starts from which the chosen ESN fails, it straightens the arm out and stays
-there, 1.35 m from the target. The seed check's ESN arrives at 9.9 s and holds;
-the replay's reference jumps back to the take's start, and its arm follows it
-there before replaying the take.
+there, 1.35 m from the target, with either tracker; the replay's reference jumps
+back to the take's start, and its arm follows it there before replaying the
+take.
 
 ## 4. Observations
 
@@ -452,12 +445,12 @@ there before replaying the take.
   arm's in every combination that holds: with this tracker, the remaining error is
   the ESN's.
 - **Precision from one start, robustness from many.** Scored from the demonstrated
-  start alone, the search found ESNs that replicate the take within 1 mm; whether
-  they also return from offset starts depends on the reservoir drawn, as the two
-  ESNs validated show (30 and 48 of 49 starts).
-- **Compliance and firmness trade.** The ESN that yields more to pushes and waits
-  more for a held arm, which was preferred, also returns less from offset starts;
-  the one that returns more firmly is the more robust.
+  start alone, the search found ESNs that replicate the take within 1 mm, but the
+  score says nothing of other starts: the chosen ESN arrives from 30 of 49.
+- **Compliant where the replay is stiff.** The chosen ESN gives way to pushes and
+  waits for a held arm, pressing a tenth as hard, where the replay drags the arm
+  back onto the take's course; but from offset starts the replay, which jumps to
+  the take's start, is the more robust.
 - **One seed is not a setting.** The best combination of stage 3 owed half its
   score to its seed; the seed check changed the ranking.
 
