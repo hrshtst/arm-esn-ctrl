@@ -12,7 +12,7 @@ from skelarm import Skeleton
 
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
-from arm_esn_ctrl.states import run_states, teacher_forced_states
+from arm_esn_ctrl.states import principal_components, run_states, teacher_forced_states
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import EsnSource, TrackerConfig, track, tracking_gains
 
@@ -98,3 +98,17 @@ def test_the_take_fed_in_gives_a_state_per_input_after_the_held_start_posture(de
 
     assert states.shape == (W + len(demo), 100)
     assert teacher_forced_states(esn, demo) == pytest.approx(states, abs=0.0)  # from the reset state each time
+
+
+def test_principal_components_order_the_axes_by_the_variance_along_them():
+    rng = np.random.default_rng(0)
+    along = rng.normal(size=(500, 1)) * np.array([[3.0, 4.0, 0.0]])  # spread along (0.6, 0.8, 0)
+    states = 2.0 + along + 0.01 * rng.normal(size=(500, 3))
+
+    components = principal_components(states)
+
+    assert components.explained.sum() == pytest.approx(1.0)
+    assert components.explained[0] > 0.999
+    assert abs(components.axes[0] @ np.array([0.6, 0.8, 0.0])) == pytest.approx(1.0, abs=1e-4)
+    assert components.project(components.mean[None, :], 2) == pytest.approx(np.zeros((1, 2)))
+    assert components.project(states, 2).shape == (500, 2)

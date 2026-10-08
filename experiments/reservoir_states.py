@@ -64,7 +64,7 @@ from numpy.typing import NDArray
 from arm_esn_ctrl.autonomous import Start, start_postures
 from arm_esn_ctrl.demonstrations import load_joint_angles
 from arm_esn_ctrl.esn import ReachingEsn
-from arm_esn_ctrl.states import teacher_forced_states
+from arm_esn_ctrl.states import principal_components, teacher_forced_states
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import nearest_demonstration
 
@@ -98,10 +98,9 @@ def main() -> None:
     # The states the readout was fitted on, and their principal components over the task.
     taught = {name: teacher_forced_states(esn, q) for name, q in demos.items()}
     task_states = np.vstack([states[warmup_steps:] for states in taught.values()])
-    mean = task_states.mean(axis=0)
-    _, singular, axes = np.linalg.svd(task_states - mean, full_matrices=False)
-    explained = singular**2 / np.sum(singular**2)
-    basis = axes[: options["n_components"]]
+    components = principal_components(task_states)
+    mean, explained = components.mean, components.explained
+    basis = components.axes[: options["n_components"]]
     spread = float(np.sqrt(np.mean(np.sum((task_states - mean) ** 2, axis=1))))
     print(f"Explained variance of the first components: {np.round(explained[:5], 4).tolist()}")
 

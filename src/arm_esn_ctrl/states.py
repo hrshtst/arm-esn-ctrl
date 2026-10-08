@@ -12,12 +12,16 @@ states of a run follow from its inputs, and the runs need not store them:
 - :func:`run_states`: in a robot run driven by the ESN (``experiments/robot_esn.py``),
   from its log, which keeps every posture the ESN was given.
 
+:func:`principal_components` gives the axes of the largest variance of a set of
+states, onto which any states can be projected.
+
 Times are on the task clock: the warm-up runs at negative times, and the state at
 time t has seen the input up to t.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -77,3 +81,23 @@ def run_states(
         msg = f"the ESN's outputs differ from the logged reference by up to {error:.2g} rad: it did not drive this run"
         raise ValueError(msg)
     return (k * dt).astype(np.float64), np.array(states)
+
+
+@dataclass(frozen=True)
+class PrincipalComponents:
+    """The principal components of a set of states."""
+
+    mean: NDArray[np.float64]  # the states' mean, one value per neuron
+    axes: NDArray[np.float64]  # one unit row per component, by decreasing variance
+    explained: NDArray[np.float64]  # the fraction of the variance along each component
+
+    def project(self, states: NDArray[np.float64], n_components: int) -> NDArray[np.float64]:
+        """The coordinates of ``states`` (one row each) along the first ``n_components`` components."""
+        return (states - self.mean) @ self.axes[:n_components].T
+
+
+def principal_components(states: NDArray[np.float64]) -> PrincipalComponents:
+    """The principal components of ``states``, one row per state, about their mean."""
+    mean = states.mean(axis=0)
+    _, singular, axes = np.linalg.svd(states - mean, full_matrices=False)
+    return PrincipalComponents(mean, axes, singular**2 / np.sum(singular**2))
