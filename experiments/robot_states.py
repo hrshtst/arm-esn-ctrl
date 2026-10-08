@@ -15,9 +15,12 @@ not reproduce. For comparison, the take the ESN was trained on is fed in as in
 training (teacher forcing). For each tracker setting, the run directory receives:
 
 - ``neurons_<setting>.png``: the states of ``[neurons] count`` neurons picked at
-  random (``seed``), one row each, over ``[neurons] span``, for the runs marked
-  ``neurons = true``, one column each: how the warm-up brings the states from
-  the reset to where the task starts;
+  random (``seed``), one row each, over the whole run, from the reset, for every
+  run, one column each;
+- ``neurons_warmup_<setting>.png``: the same neurons over ``[neurons] span``, such
+  as the warm-up and the task's first seconds, for the runs marked
+  ``neurons = true``: how the warm-up brings the states from the reset to where
+  the task starts;
 - ``pca_<setting>.png``: every run's states along the first ``[pca] n_components``
   principal components over the whole run, from the reset, one column each;
 - ``pca_planes_<setting>.png``: the same, in the planes of pairs of components.
@@ -122,30 +125,28 @@ def main() -> None:
     rng = np.random.default_rng(options["seed"])
     neurons = np.sort(rng.choice(esn.config.n_neurons, options["count"], replace=False))
     print(f"Neurons picked at random (seed {options['seed']}): {neurons.tolist()}")
+    taught_neurons = {name: states[:, neurons] for name, states in taught.items()}
+    rows = [f"neuron {neuron}" for neuron in neurons]
     for setting, columns in recomputed.items():
-        shown = [c for c, run in zip(columns, runs, strict=True) if run.get("neurons", False)]
+        whole = [min(float(c.times[0]) for c in columns), max(float(c.times[-1]) for c in columns)]
+        picked = f"{len(neurons)} of {esn.config.n_neurons} neurons picked at random (seed {options['seed']})"
+        title = f"{args.config.stem}, tracker {setting}: {picked}, over the whole run"
+        selected = [Column(c.label, c.offset, c.times, c.traces[:, neurons], c.spans) for c in columns]
+        plot_traces(selected, taught_neurons, rows, dt, warmup_steps, whole, title).savefig(
+            run_dir / f"neurons_{setting}.png", dpi=150
+        )
+        shown = [c for c, run in zip(selected, runs, strict=True) if run.get("neurons", False)]
         if shown:
-            title = (
-                f"{args.config.stem}, tracker {setting}: {len(neurons)} of {esn.config.n_neurons} neurons"
-                f" picked at random (seed {options['seed']}), from the reset"
+            title = f"{args.config.stem}, tracker {setting}: {picked}, from the reset"
+            plot_traces(shown, taught_neurons, rows, dt, warmup_steps, options["span"], title).savefig(
+                run_dir / f"neurons_warmup_{setting}.png", dpi=150
             )
-            fig = plot_traces(
-                [Column(c.label, c.offset, c.times, c.traces[:, neurons], c.spans) for c in shown],
-                {name: states[:, neurons] for name, states in taught.items()},
-                [f"neuron {neuron}" for neuron in neurons],
-                dt,
-                warmup_steps,
-                options["span"],
-                title,
-            )
-            fig.savefig(run_dir / f"neurons_{setting}.png", dpi=150)
 
         projected = [
             Column(c.label, c.offset, c.times, components.project(c.traces, n_components), c.spans) for c in columns
         ]
         taught_projected = {name: components.project(states, n_components) for name, states in taught.items()}
         labels = [f"PC{i + 1} ({100 * components.explained[i]:.1f}%)" for i in range(n_components)]
-        whole = [min(float(c.times[0]) for c in columns), max(float(c.times[-1]) for c in columns)]
         title = (
             f"{args.config.stem}, tracker {setting}: the principal components of every run's states, warm-up included"
         )
