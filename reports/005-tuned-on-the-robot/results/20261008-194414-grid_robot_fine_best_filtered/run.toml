@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_autonomous_reaching/grid_robot_fine_best_filtered.toml"
+command = "experiments/autonomous_esn.py experiments/manual_demonstration_v2_autonomous_reaching/grid_robot_fine_best_filtered.toml"
+started = 2026-10-08 19:44:14+09:00
+host = "delbosque"
+commit = "c11a68615c0a58fa466103c3a763996edb65446b"
+uncommitted_changes = false

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_autonomous_reaching/grid_robot_slow_leak_best_filtered.toml"
+command = "experiments/autonomous_esn.py experiments/manual_demonstration_v2_autonomous_reaching/grid_robot_slow_leak_best_filtered.toml"
+started = 2026-10-08 19:55:45+09:00
+host = "delbosque"
+commit = "836f4f4b00490629d27048dff1f33ba865fdc023"
+uncommitted_changes = false

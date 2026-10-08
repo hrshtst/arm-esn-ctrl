@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_tracking/sweep_robot_slow_leak_filtered.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/sweep_robot_slow_leak_filtered.toml"
+started = 2026-10-08 19:50:47+09:00
+host = "delbosque"
+commit = "6146f1afd3ea2c29b31acf20e17e65a96a550568"
+uncommitted_changes = false

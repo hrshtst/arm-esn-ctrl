@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_tracking/sweep_robot_ridge_warmup_filtered_lr0.1_sr0.5_is1.5.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/sweep_robot_ridge_warmup_filtered_lr0.1_sr0.5_is1.5.toml"
+started = 2026-10-08 19:28:53+09:00
+host = "delbosque"
+commit = "f1b11c9dd50b3e32cdbf2f172a1fd4394e3e2423"
+uncommitted_changes = false

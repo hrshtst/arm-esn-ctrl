@@ -1,0 +1,25 @@
+# Stage 2 on the remade arm (v2), the validation of the ESN chosen by the sweeps on
+# the robot (grid_robot_final_filtered.toml: leak rate 0.03, spectral radius 0.99,
+# input scaling 2, seed 4): no disturbance, from the demonstrated start.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/nominal_robot_final_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_autonomous_reaching/20261008-200710-grid_robot_final_filtered/esn.toml"
+
+[tracker]
+# Computed torque and joint PD at omega = 20 rad/s, underdamped (damping ratio 0.1),
+# given a zero reference velocity, as in nominal_test_filtered.toml and the sweeps.
+laws = ["computed_torque", "pd"]
+omegas = [20.0]
+dampings = [0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+duration = 22.0        # task (s), after the warm-up, as in the sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start

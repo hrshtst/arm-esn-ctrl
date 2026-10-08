@@ -1,0 +1,52 @@
+# ESN sweep on the robot, stage 4: the seed check of one of the five best
+# combinations (leak rate 0.04, spectral radius 0.99, input scaling 1.5; worst path
+# RMSE 1.04 mm with seed 0), trained with ten random reservoirs (seeds 0 to 9), so
+# that the choice does not rest on one lucky reservoir. 400 neurons, sparsity 0.05,
+# ridge 1e-2, and a 1 s warm-up.
+#
+#   uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/sweep_robot_seeds_filtered_lr0.04_sr0.99_is1.5.toml
+#
+# Every combination is trained on the v2 take filtered at 2 Hz and generates the
+# reference of the simulated arm from the demonstrated start, undisturbed, with
+# each tracker setting. The combinations are ranked by their failed runs (never
+# arriving, leaving the goal, or holding under 2 s), then by the worst path RMSE
+# of their runs from the taught motion, regardless of timing.
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# The settings not swept: the combination checked, otherwise as
+# grid_test_filtered.toml; a swept key's value here is replaced by each swept value.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 0.99
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.04
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 0
+
+[sweep]
+seed = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # the random reservoir (and input weights)
+
+[tracker]
+# The tracker of nominal_test_filtered.toml: computed torque and joint PD at
+# omega = 20 rad/s, underdamped (damping ratio 0.1), given a zero reference velocity.
+laws = ["computed_torque", "pd"]
+omegas = [20.0]
+dampings = [0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+# 22 s: the take lasts 18.5 s, and with this tracker grid_test_filtered's ESN
+# arrives at about 19 s; the whole 2 s hold window must fit in the run.
+duration = 22.0
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start

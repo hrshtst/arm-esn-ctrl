@@ -244,6 +244,10 @@ that run them are shared:
 | [single_demonstration_robot_tracking](experiments/single_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | [003](reports/003-single-demonstration/README.md) |
 | [multi_demonstration_autonomous_reaching](experiments/multi_demonstration_autonomous_reaching/README.md) | an ESN trained on eight demonstrations, run on its own (Stage 1) | [001](reports/001-autonomous-reaching/README.md) |
 | [multi_demonstration_robot_tracking](experiments/multi_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | [002](reports/002-esn-reference-on-the-robot/README.md) |
+| [manual_demonstration_autonomous_reaching](experiments/manual_demonstration_autonomous_reaching/README.md) | an ESN trained on one take taught by hand, run on its own (Stage 1) | [004](reports/004-manual-demonstration/README.md) |
+| [manual_demonstration_robot_tracking](experiments/manual_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | [004](reports/004-manual-demonstration/README.md) |
+| [manual_demonstration_v2_autonomous_reaching](experiments/manual_demonstration_v2_autonomous_reaching/README.md) | the same on a remade arm, with a new take (Stage 1) | [005](reports/005-tuned-on-the-robot/README.md) |
+| [manual_demonstration_v2_robot_tracking](experiments/manual_demonstration_v2_robot_tracking/README.md) | ESNs tuned on the robot, by how it follows the taught path (Stage 2) | [005](reports/005-tuned-on-the-robot/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -331,6 +335,13 @@ The reports so far:
 - [003 One demonstration: what the ESN learns, and how it drives a robot arm](reports/003-single-demonstration/README.md)
   (Stages 1 and 2): an ESN trained on a single demonstration learns a clock or a
   path; on the robot, the path-type ESN's reference waits for a blocked arm.
+- [004 A demonstration taught by hand: from a pause and pixel steps to a mild return](reports/004-manual-demonstration/README.md)
+  (Stages 1 and 2): an ESN trained on one take taught by hand returns mildly to the
+  taught path from offset starts, and on the robot adapts to blocks and pushes.
+- [005 A remade arm, and an ESN tuned on the robot](reports/005-tuned-on-the-robot/README.md)
+  (Stage 2): on a remade arm, an ESN tuned by how the robot follows the taught path
+  with it follows it within about 1 mm; the more compliant of two candidates was
+  chosen, at a cost in robustness from offset starts.
 
 Each report has five parts:
 

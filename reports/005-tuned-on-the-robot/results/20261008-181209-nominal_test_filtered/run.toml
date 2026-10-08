@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_tracking/nominal_test_filtered.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/nominal_test_filtered.toml"
+started = 2026-10-08 18:12:09+09:00
+host = "delbosque"
+commit = "b2edb3bd4177b400064311a96fcfec27a9eaa8d4"
+uncommitted_changes = false

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_tracking/offsets_robot_fine_best_filtered.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/offsets_robot_fine_best_filtered.toml"
+started = 2026-10-08 20:34:45+09:00
+host = "delbosque"
+commit = "a893294a749ee7662a513df37e211f95f5e23f5c"
+uncommitted_changes = false
