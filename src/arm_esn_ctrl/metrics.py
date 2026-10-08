@@ -26,6 +26,9 @@ MOVING_THRESHOLD = 0.05
 PEAK_THRESHOLD = 0.1
 # The hand has started to move once it is this far from where it started (m).
 MOVED = 0.005
+# Paths are compared at points this far apart along their length (m): a polyline through
+# them strays from a bend of 5 cm radius by under 0.1 mm, and comparing paths stays fast.
+PATH_SPACING = 0.005
 # Normalized time at which a minimum-jerk speed profile first exceeds
 # MOVING_THRESHOLD: the solution of 16 tau^2 (1 - tau)^2 = MOVING_THRESHOLD.
 _MINIMUM_JERK_ONSET = 0.5 * (1.0 - np.sqrt(1.0 - np.sqrt(MOVING_THRESHOLD)))
@@ -145,6 +148,37 @@ def path_distance(path: NDArray[np.float64], reference: NDArray[np.float64]) -> 
     ``reference``.
     """
     return float(np.max(distances_to_path(path, reference)))
+
+
+def path_rmse(path: NDArray[np.float64], reference: NDArray[np.float64], spacing: float = PATH_SPACING) -> float:
+    """Return the RMS distance between the ``path`` and the ``reference`` path, regardless of timing.
+
+    Both are sequences of points, shaped ``(n, d)``. Each is resampled every
+    ``spacing`` along its length, so that its points weigh by length rather than by
+    time: a slow stretch or a pause adds nothing. The result is the root mean square,
+    over the points of both, of each point's distance to the other path: a path that
+    strays counts by how far it strays, and one that skips part of the reference
+    counts by how far that part lies from it.
+    """
+    a, b = resample_by_length(path, spacing), resample_by_length(reference, spacing)
+    distances = np.concatenate([distances_to_path(a, b), distances_to_path(b, a)])
+    return float(np.sqrt(np.mean(distances**2)))
+
+
+def resample_by_length(points: NDArray[np.float64], spacing: float) -> NDArray[np.float64]:
+    """Return points every ``spacing`` along the polyline through ``points``, from its start to its end.
+
+    A polyline of no length (points that never move) gives its start twice, so that
+    the result is always a polyline.
+    """
+    steps = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    moving = steps > 0
+    points = points[np.concatenate([[True], moving])]  # without repeated points, so that the length increases
+    length = np.concatenate([[0.0], np.cumsum(steps[moving])])
+    if length[-1] == 0:
+        return np.vstack([points[:1], points[:1]])
+    along = np.append(np.arange(0.0, length[-1], spacing), length[-1])
+    return np.column_stack([np.interp(along, length, points[:, j]) for j in range(points.shape[1])])
 
 
 def distances_to_path(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:

@@ -15,6 +15,7 @@ from arm_esn_ctrl.metrics import (
     onset_index,
     path_distance,
     path_progress,
+    path_rmse,
     reach_metrics,
     route_spread,
 )
@@ -76,6 +77,36 @@ def test_path_distance_is_the_largest_distance_to_the_nearest_point():
     bowed = np.array([[0.0, 0.0], [0.5, 0.2], [1.0, 0.05], [1.3, 0.0]])
 
     assert path_distance(bowed, line) == pytest.approx(0.3)
+
+
+LINE = np.array([[0.0, 0.0], [1.0, 0.0]])
+
+
+def test_path_rmse_ignores_timing_and_pauses():
+    """A path traversed slowly, with a long pause at the start, is the same path."""
+    paused = np.zeros((300, 2))  # 300 samples standing still at the start
+    slow = np.column_stack([np.linspace(0.0, 1.0, 101) ** 3, np.zeros(101)])
+
+    assert path_rmse(np.vstack([paused, slow]), LINE) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_path_rmse_of_a_parallel_path_is_their_distance():
+    shifted = LINE + np.array([0.0, 0.02])
+
+    assert path_rmse(shifted, LINE) == pytest.approx(0.02)
+
+
+def test_path_rmse_counts_the_part_of_the_reference_a_path_skips_by_its_length():
+    """Stopping halfway: the skipped half, 0.5 m long, lies 0 to 0.5 m from the path, over 1.5 m of both paths."""
+    half = np.array([[0.0, 0.0], [0.5, 0.0]])
+
+    assert path_rmse(half, LINE) == pytest.approx(np.sqrt((0.5**3 / 3) / 1.5), rel=1e-2)
+
+
+def test_path_rmse_of_an_arm_that_never_moves_is_how_far_the_reference_goes():
+    still = np.zeros((50, 2))
+
+    assert path_rmse(still, LINE) == pytest.approx(np.sqrt(1 / 3), rel=1e-2)
 
 
 def hand_path(distances):

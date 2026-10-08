@@ -73,7 +73,7 @@ from arm_esn_ctrl.autonomous import Reference, Run, Setup, load_setup, rms_degre
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach
 from arm_esn_ctrl.disturbances import make_disturbance
 from arm_esn_ctrl.esn import ReachingEsn
-from arm_esn_ctrl.metrics import hand_speed, path_progress
+from arm_esn_ctrl.metrics import hand_speed, path_progress, path_rmse
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import (
     EsnSource,
@@ -271,6 +271,9 @@ def arm_metrics(
     :func:`arm_esn_ctrl.autonomous.run_metrics`), over the task (t >= 0):
 
     - ``tracking_error_deg``: RMS of the tracking error ``q_ref - q``;
+    - ``reference_path_rmse_m``: RMS distance between the hand path of the
+      reference (what the ESN generates) and the taught hand path, regardless of
+      timing, as ``taught_path_rmse_m`` measures the arm's;
     - ``peak_reference_speed_dps``: the reference's fastest joint speed, which
       shows a jump of the reference (as a jump of a few degrees in one period);
     - ``peak_hand_speed_mps``: the hand's fastest speed, sampled every period;
@@ -321,8 +324,14 @@ def arm_metrics(
             k = int(np.argmin(np.abs(times - span[1])))
             ahead = progress(log.channel("q_ref")[k : k + 1], setup.starts[i].q, setup)
             lead = float(ahead[0] - progress(log.channel("q")[k : k + 1], setup.starts[i].q, setup)[0])
+    reference_path_rmse = nan
+    if tracked:
+        reference_hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1], "q_ref"))
+        taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
+        reference_path_rmse = path_rmse(reference_hand, taught_hand)
     return run_metrics(run, setup) | {
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
+        "reference_path_rmse_m": reference_path_rmse,
         "peak_reference_speed_dps": reference_speed,
         "peak_hand_speed_mps": float(hand_speed(setup.times, hand).max()),
         "settling_time_s": settling_time,

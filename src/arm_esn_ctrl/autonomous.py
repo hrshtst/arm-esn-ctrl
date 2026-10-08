@@ -38,6 +38,7 @@ from arm_esn_ctrl.metrics import (
     jitter,
     onset_index,
     path_distance,
+    path_rmse,
 )
 from arm_esn_ctrl.storage import resolve_run_path
 from arm_esn_ctrl.tracking import nearest_demonstration
@@ -290,8 +291,14 @@ def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
 
         - ``taught_joint_error_deg``: RMS joint-angle difference, compared at equal
           times, over the shorter of the run and the demonstration;
+        - ``taught_tip_error_m``: RMS distance between the hand and the taught hand,
+          compared at equal times over the same span;
         - ``taught_path_distance_m``: how far the hand path strays from the taught
           hand path until t_a, regardless of timing;
+        - ``taught_path_rmse_m``: RMS distance between the whole hand path and the
+          whole taught hand path, regardless of timing (see
+          :func:`arm_esn_ctrl.metrics.path_rmse`): waiting or moving slowly adds
+          nothing;
         - ``onset_delay_s`` and ``taught_arrival_delay_s``: when the hand starts to
           move (5 mm from where it started) and when it arrives, minus the same for
           the taught motion (NaN if either never happens);
@@ -358,7 +365,9 @@ def taught_metrics(run: Run, setup: Setup, arrival: int | None) -> dict[str, flo
     first = round(_JITTER_WINDOW / dt)
     return {
         "taught_joint_error_deg": rms_degrees(run.q[:n] - taught[:n]),
+        "taught_tip_error_m": float(np.sqrt(np.mean(np.sum((run.hand[:n] - taught_hand[:n]) ** 2, axis=1)))),
         "taught_path_distance_m": path_distance(run.hand[:reach_end], taught_hand),
+        "taught_path_rmse_m": path_rmse(run.hand, taught_hand),
         "onset_delay_s": time_of(onset_index(run.hand)) - time_of(onset_index(taught_hand)),
         "taught_arrival_delay_s": time_of(arrival) - time_of(taught_arrival),
         "jitter_deg": jitter_degrees(run.q[first:reach_end], window),

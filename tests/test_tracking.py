@@ -134,6 +134,15 @@ def test_without_the_reference_velocity_joint_pd_lags_a_ramp_by_kd_over_kp_times
     assert np.degrees(log.channel("error")[settled] - lag) == pytest.approx(0.0, abs=0.01)
 
 
+def test_the_reference_is_sampled_on_the_task_clock_too(demos):
+    demo = demos[1]
+
+    log = run(ReplaySource(demo), demo[0])
+
+    # The log's times are sums of simulation steps, a little off the period's multiples.
+    assert task_joint_angles(log, ESN_CONFIG.dt, 2.0, "q_ref") == pytest.approx(demo[:201], abs=1e-6)
+
+
 def test_replaying_a_demonstration_reproduces_it(demos):
     demo = demos[1]
 

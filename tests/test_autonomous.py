@@ -186,7 +186,9 @@ def test_a_run_identical_to_the_taught_motion_matches_it_and_has_no_demonstrator
     m = run_metrics(taught_run(setup, taught), setup)
 
     assert m["taught_joint_error_deg"] == pytest.approx(0.0, abs=1e-12)
+    assert m["taught_tip_error_m"] == pytest.approx(0.0, abs=1e-12)
     assert m["taught_path_distance_m"] == pytest.approx(0.0, abs=1e-12)
+    assert m["taught_path_rmse_m"] == pytest.approx(0.0, abs=1e-12)
     assert m["onset_delay_s"] == pytest.approx(0.0)
     assert m["taught_arrival_delay_s"] == pytest.approx(0.0)
     assert m["jitter_deg"] == pytest.approx(m["taught_jitter_deg"])
@@ -216,6 +218,17 @@ def test_the_onset_and_the_arrival_are_timed_against_the_taught_motion():
 
     assert m["onset_delay_s"] == pytest.approx(0.2)
     assert m["taught_arrival_delay_s"] == pytest.approx(0.2)
+
+
+def test_the_path_rmse_ignores_a_late_run_that_the_tip_error_counts():
+    taught = joint_reach([18.2, 119.9], [48.6, 97.2])
+    later = np.vstack([np.repeat(taught[:1], 20, axis=0), taught[:-20]])  # the same path, 0.2 s later
+    setup = reach_setup(taught, demonstrator=False)
+
+    m = run_metrics(taught_run(setup, later), setup)
+
+    assert m["taught_path_rmse_m"] == pytest.approx(0.0, abs=1e-9)
+    assert m["taught_tip_error_m"] > 0.01  # at equal times, the late hand is behind
 
 
 def test_demonstrations_without_a_controller_have_no_demonstrator(tmp_path, monkeypatch):

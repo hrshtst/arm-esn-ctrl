@@ -308,10 +308,13 @@ def shift_times(log: StateLog, offset: float) -> StateLog:
     return shifted
 
 
-def task_joint_angles(log: StateLog, period: float, duration: float) -> NDArray[np.float64]:
-    """The joint angles of a log on the task clock, sampled every ``period`` from 0 to ``duration``."""
+def task_joint_angles(log: StateLog, period: float, duration: float, channel: str = "q") -> NDArray[np.float64]:
+    """The joint angles of a log on the task clock, sampled every ``period`` from 0 to ``duration``.
+
+    ``channel`` is the arm's (``q``) or, for a tracked run, its reference's (``q_ref``).
+    """
     times = period * np.arange(round(duration / period) + 1)
-    q = log.channel("q").reshape(len(log.times), -1)
+    q = log.channel(channel).reshape(len(log.times), -1)
     return np.column_stack([np.interp(times, log.times, q[:, j]) for j in range(q.shape[1])])
 
 
