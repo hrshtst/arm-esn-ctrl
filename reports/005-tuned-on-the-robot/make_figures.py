@@ -44,6 +44,7 @@ import re
 import subprocess
 import sys
 import tomllib
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +121,47 @@ VIDEOS = storage_root() / "reports" / REPORT.name / "videos"
 VIDEO_FPS = 30.0
 VIDEO_ARMS = {"esn": "chosen_esn", "replay": "replay"}
 VIDEO_TRACKERS = {"pd_w20_z0.1": "joint_pd", "computed_torque_w20_z0.1": "computed_torque"}
+VIDEOS_README = """# Videos of report 005's runs, for slides
+
+These MP4s show the runs behind the animations of report 005, *A remade arm, and
+an ESN tuned on the robot* (`reports/005-tuned-on-the-robot/` in the arm-esn-ctrl
+repository), one arm per video: each scenario with the chosen ESN's arm and the
+replay's, each through both trackers. They are not kept in Git.
+
+## The videos
+
+`<scenario>_<arm>_<tracker>.mp4`, {count} in all:
+
+| Name | Scenario |
+| --- | --- |
+{scenarios}
+
+- **Arms:** `chosen_esn`, driven by the chosen ESN (leak rate 0.05, spectral radius
+  0.99, input scaling 2, seed 0) from the arm's measured posture; `replay`, tracking
+  the take replayed by time.
+- **Trackers:** `joint_pd` and `computed_torque`, at omega = 20 rad/s with damping
+  ratio 0.1, given a zero reference velocity.
+- **Format:** H.264 at {fps:g} fps, 1104 x 800, the whole run, from the warm-up at
+  -1 s to the end at 22 s, rendered by skelarm's player with its side panel: the
+  task time, the joint angles, the tip's position and speed, and the external force
+  while a disturbance acts. The purple dot is the target, the red arrow the force
+  at the tip. The videos have no labels: their names say which arm and tracker.
+
+[`videos.csv`](videos.csv) lists each video's scenario, arm, tracker, and the run
+log it shows, relative to the storage root.
+
+## Reproducing them
+
+From the repository, at commit `{commit}`:
+
+    uv run python reports/005-tuned-on-the-robot/make_figures.py --videos
+
+It reads the runs' logs under the storage root and overwrites the files here, this
+README included, in about a minute. The runs are deterministic, so the videos show
+the same motion.
+
+Exported on {day} at commit `{commit}`{dirty}.
+"""
 
 
 def main() -> None:
@@ -535,19 +577,25 @@ def player_export(log: Path, out: Path, fps: float, *, panel: bool = False) -> N
     )
 
 
+def video_name(scenario: str, offset: tuple[float, float]) -> str:
+    """The name of a scenario's videos: the scenario, or an offset start by its offset (deg), such as offset_+15_+15."""
+    return scenario if offset == (0.0, 0.0) else f"offset_{offset[0]:+g}_{offset[1]:+g}"
+
+
 def export_videos() -> None:
     """Export each animation's run, with every arm and tracker, as an MP4 for slides into VIDEOS.
 
     Each video is one arm's whole run, the warm-up included, rendered by skelarm's
     player at VIDEO_FPS with its side panel. It is named
-    ``<scenario>_<arm>_<tracker>.mp4``, an offset start by its offset (deg), such
-    as ``offset_+15_+15_replay_joint_pd.mp4``; ``videos.csv`` lists each video's
-    scenario, arm, tracker, and log.
+    ``<scenario>_<arm>_<tracker>.mp4`` (see :func:`video_name`), such as
+    ``offset_+15_+15_replay_joint_pd.mp4``; ``videos.csv`` lists each video's
+    scenario, arm, tracker, and log, and ``README.md`` (VIDEOS_README) explains
+    them and how to reproduce them, with the commit they were exported at.
     """
     VIDEOS.mkdir(parents=True, exist_ok=True)
     rows = []
     for _, scenario, offset, title in ANIMATIONS:
-        name = scenario if offset == (0.0, 0.0) else f"offset_{offset[0]:+g}_{offset[1]:+g}"
+        name = video_name(scenario, offset)
         stem = stem_of(scenario)
         for arm, arm_name in VIDEO_ARMS.items():
             start = start_of(stem, arm, offset)
@@ -565,7 +613,21 @@ def export_videos() -> None:
                     }
                 )
     write_csv(VIDEOS / "videos.csv", rows)
-    print(f"wrote {len(rows)} videos to {VIDEOS}")
+    git = [["git", "rev-parse", "--short", "HEAD"], ["git", "status", "--porcelain"]]
+    commit, changes = (subprocess.run(c, cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout for c in git)
+    scenarios = "\n".join(
+        f"| `{video_name(scenario, offset)}` | {title} |" for _, scenario, offset, title in ANIMATIONS
+    )
+    readme = VIDEOS_README.format(
+        count=len(rows),
+        scenarios=scenarios,
+        fps=VIDEO_FPS,
+        commit=commit.strip(),
+        dirty=" (with uncommitted changes)" if changes.strip() else "",
+        day=date.today().isoformat(),
+    )
+    (VIDEOS / "README.md").write_text(readme)
+    print(f"wrote {len(rows)} videos and their README to {VIDEOS}")
 
 
 def export_animation(
