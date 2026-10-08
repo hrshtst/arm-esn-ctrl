@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_tracking/states_robot_fine_best_filtered.toml"
+command = "experiments/robot_states.py experiments/manual_demonstration_v2_robot_tracking/states_robot_fine_best_filtered.toml"
+started = 2026-10-09 01:09:12+09:00
+host = "delbosque"
+commit = "a8ae1d195403dd1ea3ede35f34e33699880faf97"
+uncommitted_changes = false

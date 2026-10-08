@@ -30,6 +30,10 @@ follows the taught path.
   3.4 times as far off the path, without the replay's ringing. But it arrives and
   holds from only 30 of 49 offset starts, failing from 19 of the 21 with the elbow
   straighter, where the replay arrives from all 49.
+- **Its reservoir states,** recomputed from the runs' logs, follow the take's when
+  undisturbed, pause along them while the tip is held, and, from an offset start
+  that fails, settle to a fixed point although the warm-up ends near the take's
+  start.
 
 ## 1. Question
 
@@ -43,7 +47,8 @@ answers to that. Here:
    the taught path with it, with the tracker to be used, which settings win, and
    how much does the random reservoir matter?
 3. **The chosen ESN:** how does it behave from offset starts, under a block, and
-   under pushes, against the replay of the take?
+   under pushes, against the replay of the take, and what do its reservoir states
+   do meanwhile, from the warm-up on?
 
 ## 2. Setup
 
@@ -138,6 +143,7 @@ under `results/`; place or link the copies there to rerun.
 | `grid_*_filtered` (4) | `uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_autonomous_reaching/<name>.toml` |
 | `sweep_robot_*` (22) | `uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<name>.toml` |
 | `<scenario>_test_filtered`, `<scenario>_robot_<ESN>_filtered` (6) | `uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<name>.toml` |
+| `states_robot_fine_best_filtered` (1) | `uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_tracking/states_robot_fine_best_filtered.toml` |
 | [`summary`](results/summary) | `uv run python reports/005-tuned-on-the-robot/make_figures.py --logs --animations` |
 
 The `<ESN>` is `best` (the best of stage 1) or `fine_best` (the chosen one, the
@@ -158,11 +164,13 @@ record (`run.toml`) gives its commit:
 | `a893294` | the chosen ESN from the offsets |
 | `b9b16dd` | the chosen ESN undisturbed and pushed, with `torques.png` |
 | `513ad39` | the chosen ESN under the block, for 1 s in mid-reach |
+| `a8ae1d1` | the chosen ESN's reservoir states in those runs |
 
 All runs are deterministic. Each run directory here holds its configuration, its
 run record, and its metrics (`metrics.csv`, or `sweep.csv` and `runs.csv` with the
 heatmaps of `sweep.png`); the grid runs also hold the trained ESN and their maps
-(`grid.png`), and the offsets runs theirs. [`make_figures.py`](make_figures.py)
+(`grid.png`), and the offsets runs theirs; the states run holds only its figures.
+[`make_figures.py`](make_figures.py)
 draws `take.png`, `stage1.png`, `stage3.png`, and `seeds.png` and prints the tables
 of Section 3 from those copies. With `--logs`, it reads the runs' logs under the
 storage root, which are not kept in Git, to draw the chosen ESN's joint angles and
@@ -438,6 +446,65 @@ there, 1.35 m from the target, with either tracker; the replay's reference jumps
 back to the take's start, and its arm follows it there before replaying the
 take.
 
+### 3.10 The reservoir states
+
+The robot runs do not store the ESN's reservoir states.
+[`robot_states.py`](../../experiments/robot_states.py) recomputes them from the
+runs' logs: the trained ESN keeps its weights, and a run's log keeps every posture
+the ESN was given, from the reset at the warm-up's start (−1 s). The script
+refuses a log whose reference the recomputed ESN does not reproduce within
+1e-8 rad; every one here passes. The figures
+([run](results/20261009-010912-states_robot_fine_best_filtered)) draw the chosen ESN's states beneath its states while the take is
+fed in as in training (thick gray), with the warm-up and the disturbances shaded.
+
+#### The warm-up
+
+![Neurons, joint PD](results/20261009-010912-states_robot_fine_best_filtered/neurons_pd_w20_z0.1.png)
+
+![Neurons, computed torque](results/20261009-010912-states_robot_fine_best_filtered/neurons_computed_torque_w20_z0.1.png)
+
+Eight of the 400 neurons, picked at random (seed 0), over the warm-up and the
+task's first 3 s. The two trackers give the same warm-up: the arm holds its start
+posture either way.
+
+- **From the demonstrated start,** the warm-up brings every neuron onto the take's
+  states, and the run then follows them.
+- **From (+15°, +15°),** it leaves several neurons elsewhere, neuron 16 near 0
+  rather than 0.6; after the start, they cut across onto the take's course, ahead
+  of the take.
+- **From (0°, −10°),** from which the chosen ESN fails, the warm-up ends near the
+  take's states, but after the start they settle to constants, most near ±1,
+  instead of following them.
+
+#### The principal components
+
+![Principal components over time, joint PD](results/20261009-010912-states_robot_fine_best_filtered/pca_pd_w20_z0.1.png)
+
+![Principal components over time, computed torque](results/20261009-010912-states_robot_fine_best_filtered/pca_computed_torque_w20_z0.1.png)
+
+![Planes of the principal components, joint PD](results/20261009-010912-states_robot_fine_best_filtered/pca_planes_pd_w20_z0.1.png)
+
+![Planes of the principal components, computed torque](results/20261009-010912-states_robot_fine_best_filtered/pca_planes_computed_torque_w20_z0.1.png)
+
+The principal components are those of all five runs' states with both trackers,
+warm-up included, so that every figure shares them: PC1, PC2, and PC3 hold
+63.4%, 32.7%, and 1.9% of the variance. In the planes, the warm-up is dashed, a
+hollow dot marks the state just after the reset, and a filled one the state at the
+task's start.
+
+- **The take's states trace a U** in the plane of PC1 and PC2, from the start, at
+  the left, to the target, at the right. The warm-up jumps from the reset to the
+  U's start, and the undisturbed run follows the U.
+- **Under the block, the states pause** along the U while the tip is held (flat
+  over time), then go on behind the take: the reservoir waits with the arm.
+- **Each push throws the states off the U** and back; with computed torque, after
+  the push at 13 s, they circle near its end for about 4 s, as the arm wanders.
+- **From (+15°, +15°),** the warm-up ends off the U, and the states join it partway
+  along its left arm: the arm runs ahead of the take.
+- **From (0°, −10°),** the warm-up ends near the U's start, off it mainly along
+  PC2, but the states then move away from it, up PC2, to a fixed point: the
+  reservoir never starts the reach.
+
 ## 4. Observations
 
 - **Tuning on the robot finds an ESN that keeps time despite the tracker.** With a
@@ -456,6 +523,9 @@ take.
   waits for a held arm, pressing a tenth as hard, where the replay drags the arm
   back onto the take's course; but from offset starts the replay, which jumps to
   the take's start, is the more robust.
+- **Where the warm-up leaves the reservoir does not decide the reach alone.** Of
+  the two offset starts examined, the one whose warm-up ends off the take's course
+  joins it, and the one whose warm-up ends close to the take's start never moves.
 - **One seed is not a setting.** The best combination of stage 3 owed half its
   score to its seed; the seed check changed the ranking.
 

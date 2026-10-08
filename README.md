@@ -341,7 +341,8 @@ The reports so far:
 - [005 A remade arm, and an ESN tuned on the robot](reports/005-tuned-on-the-robot/README.md)
   (Stage 2): on a remade arm, an ESN tuned by how the robot follows the taught path
   with it follows it within about 1 mm; the more compliant of two candidates was
-  chosen, at a cost in robustness from offset starts.
+  chosen, at a cost in robustness from offset starts. Its reservoir states,
+  recomputed from the runs' logs, wait with a held arm.
 
 Each report has five parts:
 
