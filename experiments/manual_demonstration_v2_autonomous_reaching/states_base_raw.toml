@@ -14,7 +14,7 @@
 model = "results/manual_demonstration_v2_autonomous_reaching/YYYYMMDD-HHMMSS-grid_<settings>_raw/esn.toml"  # EDIT
 
 [evaluation]
-duration = 14.8        # EDIT: autonomous run (s): the take's length, so every state has one to compare with
+duration = 18.4        # EDIT: autonomous run (s): within the take's 18.5 s, so every state has one to compare with
 [evaluation.start_grid]
 span_deg = 15.0        # EDIT: the start offsets of the grid run: -span to span deg in each joint
 step_deg = 2.5         # EDIT
@@ -22,7 +22,7 @@ step_deg = 2.5         # EDIT
 [states]
 n_components = 10      # principal components each state is projected onto (projections.npz)
 join_threshold = 0.1   # a run joins the demonstration's states once the time-matched distance stays below this
-phase_window = [4.1, 7.3]  # EDIT: the take's reach (s), from heading for the target to arriving: the phase lead's span
+phase_window = [1.15, 9.64]  # EDIT: the take's reach (s), from 3.4 % of the way to the target to arriving: the phase lead's span
 # The start offsets (deg) whose runs pca.png and convergence.png draw: the outer ring of the grid.
 shown_offsets_deg = [
   [15.0, 0.0], [-15.0, 0.0], [0.0, 15.0], [0.0, -15.0],

@@ -35,6 +35,6 @@ acceleration_filter = 0.02  # time constant of the low-pass filter on the refere
 reference_velocity = true
 
 [evaluation]
-duration = 16.0        # EDIT: task (s), after the warm-up: the take's length and about 1 s more
+duration = 20.0        # EDIT: task (s), after the warm-up; the take lasts 18.5 s
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start

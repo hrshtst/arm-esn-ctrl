@@ -18,7 +18,7 @@
 [demonstrations]
 # A run directory of experiments/import_demonstrations.py, relative to the storage
 # root: the take of reach_manual_v2.toml.
-run = "results/demonstrations/YYYYMMDD-HHMMSS-reach_manual_v2"  # EDIT: the import's run
+run = "results/demonstrations/20261008-164314-reach_manual_v2"
 train = ["demo_00.sklog.npz"]  # EDIT: the take as recorded; ["demo_00_filtered.sklog.npz"] for it filtered
 
 [esn]
@@ -34,7 +34,7 @@ ridge = 1e-2           # EDIT
 seed = 0
 
 [evaluation]
-duration = 16.0        # EDIT: autonomous run (s): the take's length and about 1 s more
+duration = 20.0        # EDIT: autonomous run (s); the take lasts 18.5 s
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 [evaluation.start_grid]
 span_deg = 15.0        # EDIT: the demonstrated start offset by -span to span deg in each joint
