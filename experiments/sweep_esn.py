@@ -268,8 +268,13 @@ def plot_sweep(
     sweep: dict[str, list[Any]],
     maps: list[tuple[str, str, float, bool]],
     title: str,
+    tops: dict[str, float] | None = None,
 ) -> Figure:
-    """Heatmaps of the ``maps``: the first two swept values on the axes, one column per third value."""
+    """Heatmaps of the ``maps``: the first two swept values on the axes, one column per third value.
+
+    ``tops`` gives, for some metrics, the value that takes the darkest color, as COLOR_TOPS does.
+    """
+    tops = COLOR_TOPS | (tops or {})
     names = list(sweep)
     x_name, y_name = names[0], names[1]
     panel_values = sweep[names[2]] if len(names) == 3 else [None]
@@ -282,8 +287,8 @@ def plot_sweep(
         values = np.array([r[metric] for r in rows], dtype=float) * factor
         finite = values[np.isfinite(values)]
         top = float(finite.max()) if finite.size else 1.0
-        if metric in COLOR_TOPS:
-            top = COLOR_TOPS[metric]  # larger values take the darkest color; the cells print them
+        if metric in tops:
+            top = tops[metric]  # larger values take the darkest color; the cells print them
         # One color scale per metric, shared by its panels.
         norm = LogNorm(vmin=max(float(finite.min()), 1e-3), vmax=top) if log and finite.size else Normalize(0.0, top)
         if metric in ("failures", "jumps"):

@@ -25,7 +25,8 @@ The combinations are ranked by
 The run directory receives:
 
 - ``sweep.csv``: one row per combination: its hyperparameters, its failed runs,
-  the worst and the mean path RMSE of its runs and their latest arrival, then, for
+  the worst and the mean path RMSE of its runs, their latest arrival, and the
+  hand's largest distance from the target at the end of a run, then, for
   each tracker setting from the first start posture, the path RMSE of the arm and
   of its reference (what the ESN generates), the RMS distance of the hand from the
   taught hand at equal times, the arrival time, the first step, the detour beyond
@@ -33,6 +34,17 @@ The run directory receives:
 - ``runs.csv``: the metrics of every run (see ``robot_esn.arm_metrics``);
 - ``sweep.png``, with two or three swept hyperparameters: heatmaps of the worst
   path RMSE, the failed runs, and the latest arrival.
+
+With ``seed`` among the swept keys, the other swept values make the settings, each
+tried with every seed (a random reservoir; see :mod:`arm_esn_ctrl.sweeps`), and the
+run directory also receives:
+
+- ``seeds.csv``: one row per setting, over its seeds: the seeds with a failed run,
+  the median, mean, standard deviation, smallest, and largest worst path RMSE, the
+  median latest arrival, and the largest distance from the target at the end;
+- ``seeds.png``, with two other swept hyperparameters: heatmaps of the median
+  worst path RMSE, the seeds with a failed run, the largest final distance, and
+  the median latest arrival.
 
 The runs are not saved. To look at one combination, copy its values into a
 configuration for ``autonomous_esn.py`` and run its ESN with ``robot_esn.py``.
@@ -57,6 +69,7 @@ from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import resolve_run_path, start_run
+from arm_esn_ctrl.sweeps import summarize_seeds
 from arm_esn_ctrl.tracking import (
     EsnSource,
     TrackerConfig,
@@ -71,6 +84,13 @@ MAPS = [
     ("worst_path_rmse_m", "Worst path RMSE from the taught motion (mm)", 1000.0, True),
     ("failures", "Failed runs: never arrive, leave the goal, or hold too short", 1.0, False),
     ("latest_arrival_s", "Latest arrival (s)", 1.0, False),
+]
+# The heatmaps of seeds.png, as MAPS: each setting over its seeds.
+SEED_MAPS = [
+    ("median_worst_path_rmse_m", "Median over the seeds of the worst path RMSE (mm)", 1000.0, True),
+    ("failing_seeds", "Seeds with a failed run (of {seeds})", 1.0, False),
+    ("worst_final_distance_m", "Largest distance from the target at the end (mm)", 1000.0, True),
+    ("median_latest_arrival_s", "Median over the seeds of the latest arrival (s)", 1.0, False),
 ]
 # What sweep.csv gives for each tracker setting, from the first start posture: its column, and the run's metric.
 PER_SETTING = {
@@ -160,7 +180,11 @@ def main() -> None:
             f" worst path RMSE {1000 * row['worst_path_rmse_m']:6.1f} mm; arrival {arrivals}"
         )
 
-    for name, table in (("sweep.csv", rows), ("runs.csv", run_rows)):
+    tables = {"sweep.csv": rows, "runs.csv": run_rows}
+    names = [name for name in sweep if name != "seed"]  # the settings, each tried with every seed
+    if "seed" in sweep:
+        tables["seeds.csv"] = summarize_seeds(rows, names)
+    for name, table in tables.items():
         with (run_dir / name).open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=list(table[0]))
             writer.writeheader()
@@ -170,6 +194,15 @@ def main() -> None:
         plot_sweep(rows, sweep, MAPS, f"ESN sweep on the robot: {args.config.stem}").savefig(
             run_dir / "sweep.png", dpi=150
         )
+    if "seed" in sweep:
+        print_seed_ranking(tables["seeds.csv"], names)
+        if len(names) > 1:
+            seeds = len(sweep["seed"])
+            maps = [(metric, label.format(seeds=seeds), factor, log) for metric, label, factor, log in SEED_MAPS]
+            title = f"ESN sweep on the robot over {seeds} seeds: {args.config.stem}"
+            plot_sweep(
+                tables["seeds.csv"], {name: sweep[name] for name in names}, maps, title, {"failing_seeds": seeds}
+            ).savefig(run_dir / "seeds.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
 
 
@@ -192,6 +225,7 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting]) -> dict[str, 
         "worst_path_rmse_m": float(np.max(path_rmse)),
         "mean_path_rmse_m": float(np.mean(path_rmse)),
         "latest_arrival_s": float(np.max(arrivals)) if np.all(np.isfinite(arrivals)) else float("nan"),
+        "worst_final_distance_m": float(np.max([run["final_distance_m"] for run in runs])),
     }
     for setting in settings:
         first = next(run for run in runs if run["setting"] == setting.name and run["start"] == 0)
@@ -217,6 +251,22 @@ def print_ranking(rows: list[dict[str, Any]], names: list[str], settings: list[S
         print(
             f"  {values}: {r['failures']} of {r['runs']} fail, worst path RMSE {1000 * r['worst_path_rmse_m']:.1f} mm"
             f" | {details}"
+        )
+
+
+def print_seed_ranking(rows: list[dict[str, Any]], names: list[str], count: int = 10) -> None:
+    """Print the settings whose every seed arrives and holds, by their median worst path RMSE over the seeds."""
+    holding = sorted((r for r in rows if r["failing_seeds"] == 0), key=lambda r: r["median_worst_path_rmse_m"])
+    print(f"\n{len(holding)} of {len(rows)} settings arrive and hold in every run with all {rows[0]['seeds']} seeds.")
+    print("The smallest median worst path RMSE over the seeds:")
+    for r in holding[:count]:
+        values = ", ".join(f"{name}={r[name]:g}" for name in names)
+        print(
+            f"  {values}: median {1000 * r['median_worst_path_rmse_m']:.2f} mm,"
+            f" mean {1000 * r['mean_worst_path_rmse_m']:.2f} +- {1000 * r['sd_worst_path_rmse_m']:.2f} mm,"
+            f" {1000 * r['min_worst_path_rmse_m']:.2f} to {1000 * r['max_worst_path_rmse_m']:.2f} mm;"
+            f" median latest arrival {r['median_latest_arrival_s']:.2f} s;"
+            f" farthest from the target at the end {1000 * r['worst_final_distance_m']:.1f} mm"
         )
 
 
