@@ -10,12 +10,23 @@ import pytest
 import tomli_w
 from skelarm import Skeleton, StateLog
 
-from arm_esn_ctrl.autonomous import Run, Setup, Start, load_setup, run_metrics, start_postures
+from arm_esn_ctrl.autonomous import EVALUATION_KEYS, Run, Setup, Start, load_setup, run_metrics, start_postures
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.metrics import path_distance
 from arm_esn_ctrl.storage import REPO_ROOT
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted(p for p in (REPO_ROOT / "experiments").rglob("*.toml") if "evaluation" in tomllib.loads(p.read_text())),
+    ids=lambda p: str(p.relative_to(REPO_ROOT / "experiments")),
+)
+def test_every_experiment_configures_only_known_evaluation_keys(path):
+    evaluation = tomllib.loads(path.read_text())["evaluation"]
+
+    assert set(evaluation) <= EVALUATION_KEYS
 
 
 def test_start_postures_are_offsets_around_each_demonstration_then_extra_groups():

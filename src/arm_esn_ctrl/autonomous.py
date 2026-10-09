@@ -44,7 +44,15 @@ from arm_esn_ctrl.storage import resolve_run_path
 from arm_esn_ctrl.tracking import nearest_demonstration
 
 # The keys allowed in an [evaluation] table.
-EVALUATION_KEYS = {"duration", "hold", "start_offsets_deg", "start_grid", "extra_starts", "effort_window"}
+EVALUATION_KEYS = {
+    "duration",
+    "hold",
+    "start_offsets_deg",
+    "start_grid",
+    "extra_starts",
+    "effort_window",
+    "return_tolerance",
+}
 # A demonstrator's reach this close to the training path, on average, has no course of its own to
 # compare with: from a start along the demonstrated path, the ratio would divide by almost nothing (rad).
 # The same holds for a start this close to it, which has no offset to retain.
