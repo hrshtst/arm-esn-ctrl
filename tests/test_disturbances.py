@@ -121,8 +121,8 @@ def test_several_blocks_each_hold_the_tip_where_it_was():
     log, hand = ramp_run(blocks)
 
     assert isinstance(blocks, Disturbances)
-    held = [part.held for part in blocks.parts if isinstance(part, Block)]
-    assert len(held) == 2 and held[0] is not None and held[1] is not None
+    held = [part.held for part in blocks.parts if isinstance(part, Block) and part.held is not None]
+    assert len(held) == 2
     assert np.linalg.norm(held[1] - held[0]) > 0.05  # the arm moved on between the two
     for (onset, release), point in zip(windows, held, strict=True):
         window = (log.times >= onset + 0.002) & (log.times < release)

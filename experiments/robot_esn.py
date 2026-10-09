@@ -219,10 +219,10 @@ def main() -> None:
     plot_joints(run_dir, setup, settings, spans, title).savefig(run_dir / "joints.png", dpi=150)
     plot_torques(run_dir, setup, settings, spans, title).savefig(run_dir / "torques.png", dpi=150)
     for offset in config.get("plots", {}).get("offsets_deg", []):
-        start = offset_start(setup, offset)
+        index = offset_start(setup, offset)
         name = f"offset_{offset[0]:+g}_{offset[1]:+g}"
-        plot_joints(run_dir, setup, settings, spans, title, start).savefig(run_dir / f"joints_{name}.png", dpi=150)
-        plot_torques(run_dir, setup, settings, spans, title, start).savefig(run_dir / f"torques_{name}.png", dpi=150)
+        plot_joints(run_dir, setup, settings, spans, title, index).savefig(run_dir / f"joints_{name}.png", dpi=150)
+        plot_torques(run_dir, setup, settings, spans, title, index).savefig(run_dir / f"torques_{name}.png", dpi=150)
     if "start_grid" in evaluation:
         plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
