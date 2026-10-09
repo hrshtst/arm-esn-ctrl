@@ -317,7 +317,8 @@ parameters ([`esn.toml`](results/20261008-194414-grid_robot_fine_best_filtered/e
 | Input | the arm's measured joint angles every 10 ms, normalized by the range each covers in the filtered take, (q − (67.80°, 71.74°)) / (46.54°, 41.74°), so that the take spans [−1, 1] |
 | Input scaling | 2, the scale of the random input weights |
 | Bias | a random constant input to each neuron |
-| Readout | ridge regression on the reservoir state, with a bias; ridge 1e-2; its output, converted back to joint angles, is the next posture, 10 ms on |
+| Readout | ridge regression on the reservoir state, with a bias; its output, converted back to joint angles, is the next posture, 10 ms on |
+| Ridge | 1e-2, the regularization of the readout |
 | Training | teacher forcing on the filtered take alone, without noise |
 | Warm-up | 1 s of the held start posture, from a reset reservoir |
 | Seed | 0, of the reservoir and its input weights |
