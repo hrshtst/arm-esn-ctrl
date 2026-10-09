@@ -47,6 +47,9 @@ start posture, and the run directory receives:
 - ``joints.png``: the joint angles over time from the first start posture: the
   demonstrated motion, the ESN's output (its reference), and the arms;
 - ``torques.png``: the arms' joint torques over time from the first start posture;
+- ``joints_offset_<dq1>_<dq2>.png`` and ``torques_offset_<dq1>_<dq2>.png``, such as
+  ``joints_offset_+15_+15.png``: the same from each start posture offset by
+  ``[dq1, dq2]`` degrees that an optional ``[plots]`` table lists in ``offsets_deg``;
 - ``grid.png``, with an ``[evaluation.start_grid]``: maps over the start offsets
   of the outcome, the path distance, the training path ratio, the peak reference
   speed, the peak torque, and the tracking error, for each tracker setting.
@@ -59,7 +62,7 @@ from __future__ import annotations
 import argparse
 import csv
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -215,6 +218,11 @@ def main() -> None:
     plot_timeline(run_dir, setup, settings, spans, title).savefig(run_dir / "timeline.png", dpi=150)
     plot_joints(run_dir, setup, settings, spans, title).savefig(run_dir / "joints.png", dpi=150)
     plot_torques(run_dir, setup, settings, spans, title).savefig(run_dir / "torques.png", dpi=150)
+    for offset in config.get("plots", {}).get("offsets_deg", []):
+        start = offset_start(setup, offset)
+        name = f"offset_{offset[0]:+g}_{offset[1]:+g}"
+        plot_joints(run_dir, setup, settings, spans, title, start).savefig(run_dir / f"joints_{name}.png", dpi=150)
+        plot_torques(run_dir, setup, settings, spans, title, start).savefig(run_dir / f"torques_{name}.png", dpi=150)
     if "start_grid" in evaluation:
         plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
@@ -623,6 +631,16 @@ def demonstrated_motion(setup: Setup, start: int = 0) -> tuple[NDArray[np.float6
         return reference.times, reference.channel("q").reshape(len(reference.times), -1), "demonstrator, undisturbed"
     q = setup.demos[nearest_demonstration(setup.starts[start].q, setup.demos)]
     return (setup.times[1] - setup.times[0]) * np.arange(len(q)), q, "taught motion"
+
+
+def offset_start(setup: Setup, offset: Sequence[float]) -> int:
+    """The index of the first start posture offset by ``offset`` (deg) from a demonstrated start, such as (15, 15)."""
+    suffix = f" {offset[0]:+g},{offset[1]:+g} deg"
+    for i, start in enumerate(setup.starts):
+        if start.origin.endswith(suffix):
+            return i
+    msg = f"no start posture is offset by {list(offset)} deg; add it to [evaluation]"
+    raise ValueError(msg)
 
 
 def plot_joints(

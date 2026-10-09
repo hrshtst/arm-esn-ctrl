@@ -1,0 +1,27 @@
+# Step A of the wider ESN search on the robot: candidate #1 of stage 1
+# (grid_lr0.03_sr1.5_is1.5_seed2_filtered.toml:
+# leak rate 0.03, spectral radius 1.5, input scaling 1.5, seed 2) in report 005's
+# validation scenarios: no disturbance, from the demonstrated start.
+# As nominal_robot_fine_best_filtered.toml (report 005) otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_search/nominal_robot_lr0.03_sr1.5_is1.5_seed2_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_search/20261009-160946-grid_lr0.03_sr1.5_is1.5_seed2_filtered/esn.toml"
+
+[tracker]
+# Computed torque and joint PD at omega = 20 rad/s, underdamped (damping ratio 0.1),
+# given a zero reference velocity, as in nominal_test_filtered.toml and the sweeps.
+laws = ["computed_torque", "pd"]
+omegas = [20.0]
+dampings = [0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+duration = 22.0        # task (s), after the warm-up, as in the sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start

@@ -73,3 +73,26 @@ uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_
 | `grid_lr0.07_sr1.5_is1.5_seed3_filtered.toml` | a faster leak rate |
 | `grid_lr0.1_sr1.2_is1.5_seed4_filtered.toml` | a faster leak rate still, arriving later |
 | `grid_lr0.03_sr0.99_is1.5_seed2_filtered.toml` | the first candidate's reservoir with spectral radius 0.99, below 1 |
+
+## Step A: the kept candidates in report 005's scenarios
+
+Candidates #1, #2 (the most balanced against disturbances in the robot app), #6
+(a faster leak rate), and #7 (spectral radius below 1) run report 005's validation
+with [`robot_esn.py`](../robot_esn.py), each against the replay of the take:
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_search/pushes_robot_lr0.03_sr1.35_is2_seed5_filtered.toml
+```
+
+| Configurations | Scenario |
+| --- | --- |
+| `nominal_robot_<candidate>_filtered.toml` | no disturbance, from the demonstrated start |
+| `block_robot_<candidate>_filtered.toml` | the tip held from 4.5 s to 5.5 s, in mid-reach, then let go |
+| `pushes_robot_<candidate>_filtered.toml` | three pushes at the tip, at 4 s, 8 s, and 13 s |
+| `offsets_robot_<candidate>_filtered.toml` | the 49 start postures, −15° to 15° from the demonstrated start in each joint |
+
+The `<candidate>` is `lr0.03_sr1.5_is1.5_seed2` (#1), `lr0.03_sr1.35_is2_seed5`
+(#2), `lr0.1_sr1.2_is1.5_seed4` (#6), or `lr0.03_sr0.99_is1.5_seed2` (#7). Each run
+draws the joint angles and torques over time (`joints.png`, `torques.png`); the
+offsets runs also from the offset starts that their `[plots]` table lists, (+15°,
++15°) and (0°, −10°) (`joints_offset_+15_+15.png`, `torques_offset_+0_-10.png`, ...).
