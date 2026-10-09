@@ -310,7 +310,9 @@ parameters ([`esn.toml`](results/20261008-194414-grid_robot_fine_best_filtered/e
 
 | Parameter | Value |
 | --- | --- |
-| Reservoir | 400 tanh neurons, sparsity 0.05 (the fraction of nonzero connections), spectral radius 0.99 |
+| Neurons | 400, tanh |
+| Sparsity | 0.05, the fraction of nonzero reservoir connections |
+| Spectral radius | 0.99 |
 | Leak rate | 0.05 |
 | Input | the arm's measured joint angles every 10 ms, normalized by the range each covers in the filtered take, (q − (67.80°, 71.74°)) / (46.54°, 41.74°), so that the take spans [−1, 1] |
 | Input scaling | 2, the scale of the random input weights |
