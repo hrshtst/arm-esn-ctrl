@@ -11,8 +11,10 @@ to three of the ``[esn]`` hyperparameters, as in ``experiments/sweep_esn.py``; t
 ``[tracker]`` table of ``experiments/robot_esn.py``; and an ``[evaluation]`` table:
 the run's duration, the hold, and the start postures. Every combination of the
 swept values is trained on the demonstrations and generates the reference of the
-simulated arm from every start posture, with every tracker setting, undisturbed,
-as the ESN arm of ``robot_esn.py`` does.
+simulated arm from every start posture, with every tracker setting, as the ESN arm
+of ``robot_esn.py`` does: undisturbed, or pushed and blocked by the optional
+``[disturbance]`` table or ``[[disturbance]]`` tables of ``robot_esn.py``, with the
+``effort_window`` and the ``return_tolerance`` of its ``[evaluation]``.
 
 The combinations are ranked by
 
@@ -31,9 +33,17 @@ The run directory receives:
   of its reference (what the ESN generates), the RMS distance of the hand from the
   taught hand at equal times, the arrival time, the first step, the detour beyond
   the start, and the peak torque;
+- with disturbances, also in ``sweep.csv``: the runs whose hand is not back on the
+  taught hand path after a disturbance (within the return tolerance, before the
+  next disturbance or the end of the run), the latest return over the runs and
+  disturbances, and the hand's farthest distance from the path after one; then,
+  for each tracker setting from the first start posture, each disturbance's
+  ``reference_lead``, ``off_path_m``, and ``return_time_s`` (see
+  ``robot_esn.arm_metrics``), and the peak disturbance force;
 - ``runs.csv``: the metrics of every run (see ``robot_esn.arm_metrics``);
 - ``sweep.png``, with two or three swept hyperparameters: heatmaps of the worst
-  path RMSE, the failed runs, and the latest arrival.
+  path RMSE, the failed runs, and the latest arrival, and with disturbances, of the
+  runs not back on the path, the latest return, and the farthest from the path.
 
 With ``seed`` among the swept keys, the other swept values make the settings, each
 tried with every seed (a random reservoir; see :mod:`arm_esn_ctrl.sweeps`), and the
@@ -42,6 +52,8 @@ run directory also receives:
 - ``seeds.csv``: one row per setting, over its seeds: the seeds with a failed run,
   the median, mean, standard deviation, smallest, and largest worst path RMSE, the
   median latest arrival, and the largest distance from the target at the end;
+  with disturbances, also the seeds with a run not back on the path, the median
+  latest return, and the median farthest distance from the path;
 - ``seeds.png``, with two other swept hyperparameters: heatmaps of the median
   worst path RMSE, the seeds with a failed run, the largest final distance, and
   the median latest arrival.
@@ -61,11 +73,12 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from robot_esn import Setting, arm_metrics, posed, tracker_settings
+from robot_esn import RETURN_TOLERANCE, Setting, arm_metrics, per_disturbance, posed, tracker_settings
 from sweep_esn import plot_sweep
 
 from arm_esn_ctrl.autonomous import load_setup
 from arm_esn_ctrl.demonstrations import endpoint_positions
+from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import resolve_run_path, start_run
@@ -85,12 +98,23 @@ MAPS = [
     ("failures", "Failed runs: never arrive, leave the goal, or hold too short", 1.0, False),
     ("latest_arrival_s", "Latest arrival (s)", 1.0, False),
 ]
+# More heatmaps with disturbances, as MAPS.
+DISTURBANCE_MAPS = [
+    ("unreturned", "Runs not back on the path after a disturbance (of {runs})", 1.0, False),
+    ("latest_return_s", "Latest return to the path after a disturbance (s)", 1.0, False),
+    ("worst_off_path_m", "Farthest from the path after a disturbance (mm)", 1000.0, True),
+]
 # The heatmaps of seeds.png, as MAPS: each setting over its seeds.
 SEED_MAPS = [
     ("median_worst_path_rmse_m", "Median over the seeds of the worst path RMSE (mm)", 1000.0, True),
     ("failing_seeds", "Seeds with a failed run (of {seeds})", 1.0, False),
     ("worst_final_distance_m", "Largest distance from the target at the end (mm)", 1000.0, True),
     ("median_latest_arrival_s", "Median over the seeds of the latest arrival (s)", 1.0, False),
+]
+# More heatmaps of seeds.png with disturbances, as MAPS.
+SEED_DISTURBANCE_MAPS = [
+    ("unreturned_seeds", "Seeds with a run not back on the path (of {seeds})", 1.0, False),
+    ("median_latest_return_s", "Median over the seeds of the latest return (s)", 1.0, False),
 ]
 # What sweep.csv gives for each tracker setting, from the first start posture: its column, and the run's metric.
 PER_SETTING = {
@@ -110,9 +134,6 @@ def main() -> None:
     args = parser.parse_args()
 
     config, run_dir = start_run(args.config)
-    if "disturbance" in config:
-        msg = "sweep_robot_esn.py runs undisturbed; run disturbances with robot_esn.py"
-        raise ValueError(msg)
     sweep: dict[str, list[Any]] = config["sweep"]
     if len(sweep) not in (1, 2, 3):
         msg = f"[sweep] must list one to three hyperparameters, not {len(sweep)}"
@@ -137,10 +158,15 @@ def main() -> None:
         )
         trackers[setting.name] = (tracker_config, tracking_gains(tracker_config, setup.skeleton, end_posture))
     duration = float(evaluation["duration"])
+    window = evaluation.get("effort_window", [0.0, duration])
+    disturbance = config.get("disturbance")
+    spans = disturbance_spans(disturbance)
+    tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
     print(
         f"{len(setup.starts)} start postures, {len(settings)} tracker settings"
         f" ({', '.join(setting.label for setting in settings)}), {duration:g} s runs"
     )
+    print(f"Disturbance: {disturbance or 'none'}")
 
     combinations = [dict(zip(sweep, values, strict=True)) for values in itertools.product(*sweep.values())]
     rows, run_rows = [], []
@@ -161,8 +187,11 @@ def main() -> None:
                     duration=duration,
                     dt=simulator["dt"],
                     enforce_limits=simulator.get("enforce_limits", True),
+                    external_force=make_disturbance(
+                        disturbance, endpoint_positions(setup.skeleton, start.q[np.newaxis])[0], setup.target
+                    ),
                 )
-                metrics = arm_metrics(log, i, setup, esn.config.dt, [0.0, duration], [])
+                metrics = arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance)
                 hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, duration))
                 runs.append(
                     {"setting": setting.name, "start": i, "origin": start.origin}
@@ -170,14 +199,15 @@ def main() -> None:
                     | {"detour_m": detour(hand, setup.demo_hands[nearest_demonstration(start.q, setup.demos)])}
                     | {"failed": not metrics["success"] or metrics["hold_observed_s"] < setup.hold - 1e-9}
                 )
-        row = combination | summarize(runs, settings)
+        row = combination | summarize(runs, settings, len(spans))
         rows.append(row)
         run_rows += [combination | run for run in runs]
         values = ", ".join(f"{name}={value:g}" for name, value in combination.items())
         arrivals = ", ".join(f"{row[f'{setting.name}_arrival_time_s']:.2f} s" for setting in settings)
+        returns = f"; {row['unreturned']} not back, latest return {row['latest_return_s']:.2f} s" if spans else ""
         print(
             f"[{k + 1:3d}/{len(combinations)}] {values}: {row['failures']} of {row['runs']} runs fail;"
-            f" worst path RMSE {1000 * row['worst_path_rmse_m']:6.1f} mm; arrival {arrivals}"
+            f" worst path RMSE {1000 * row['worst_path_rmse_m']:6.1f} mm; arrival {arrivals}{returns}"
         )
 
     tables = {"sweep.csv": rows, "runs.csv": run_rows}
@@ -191,18 +221,26 @@ def main() -> None:
             writer.writerows(table)
     print_ranking(rows, list(sweep), settings)
     if len(sweep) > 1:
-        plot_sweep(rows, sweep, MAPS, f"ESN sweep on the robot: {args.config.stem}").savefig(
-            run_dir / "sweep.png", dpi=150
-        )
+        maps = [
+            (metric, label.format(runs=rows[0]["runs"]), factor, log)
+            for metric, label, factor, log in MAPS + (DISTURBANCE_MAPS if spans else [])
+        ]
+        tops = {"unreturned": float(rows[0]["runs"])}
+        title = f"ESN sweep on the robot: {args.config.stem}"
+        plot_sweep(rows, sweep, maps, title, tops).savefig(run_dir / "sweep.png", dpi=150)
     if "seed" in sweep:
         print_seed_ranking(tables["seeds.csv"], names)
         if len(names) > 1:
             seeds = len(sweep["seed"])
-            maps = [(metric, label.format(seeds=seeds), factor, log) for metric, label, factor, log in SEED_MAPS]
+            maps = [
+                (metric, label.format(seeds=seeds), factor, log)
+                for metric, label, factor, log in SEED_MAPS + (SEED_DISTURBANCE_MAPS if spans else [])
+            ]
             title = f"ESN sweep on the robot over {seeds} seeds: {args.config.stem}"
-            plot_sweep(
-                tables["seeds.csv"], {name: sweep[name] for name in names}, maps, title, {"failing_seeds": seeds}
-            ).savefig(run_dir / "seeds.png", dpi=150)
+            tops = {"failing_seeds": float(seeds), "unreturned_seeds": float(seeds)}
+            plot_sweep(tables["seeds.csv"], {name: sweep[name] for name in names}, maps, title, tops).savefig(
+                run_dir / "seeds.png", dpi=150
+            )
     print(f"\nWrote the results to {run_dir}")
 
 
@@ -215,8 +253,13 @@ def detour(hand: NDArray[np.float64], taught_hand: NDArray[np.float64], every: i
     return float(distances.max() - distances[0])
 
 
-def summarize(runs: list[dict[str, Any]], settings: list[Setting]) -> dict[str, Any]:
-    """A combination's failed runs, worst and mean path RMSE, and latest arrival; then each setting's first run."""
+def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances: int) -> dict[str, Any]:
+    """A combination's failed runs, worst and mean path RMSE, and latest arrival; then each setting's first run.
+
+    With ``disturbances`` (how many), also its runs not back on the path after one,
+    the latest return, and the farthest from the path, and each setting's first run
+    under each disturbance.
+    """
     path_rmse = [run["taught_path_rmse_m"] for run in runs]
     arrivals = [run["arrival_time_s"] for run in runs]
     summary: dict[str, Any] = {
@@ -227,9 +270,21 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting]) -> dict[str, 
         "latest_arrival_s": float(np.max(arrivals)) if np.all(np.isfinite(arrivals)) else float("nan"),
         "worst_final_distance_m": float(np.max([run["final_distance_m"] for run in runs])),
     }
+    columns = dict(PER_SETTING)
+    if disturbances:
+        returns = np.array([[run[name] for name in per_disturbance("return_time_s", disturbances)] for run in runs])
+        farthest = [run[name] for run in runs for name in per_disturbance("off_path_m", disturbances)]
+        summary |= {
+            "unreturned": int(np.sum(~np.all(np.isfinite(returns), axis=1))),
+            "latest_return_s": float(returns.max()) if np.all(np.isfinite(returns)) else float("nan"),
+            "worst_off_path_m": float(np.max(farthest)),
+        }
+        for metric in ("reference_lead", "off_path_m", "return_time_s"):
+            columns |= {name: name for name in per_disturbance(metric, disturbances)}
+        columns["peak_external_force_n"] = "peak_external_force_n"
     for setting in settings:
         first = next(run for run in runs if run["setting"] == setting.name and run["start"] == 0)
-        summary |= {f"{setting.name}_{column}": first[metric] for column, metric in PER_SETTING.items()}
+        summary |= {f"{setting.name}_{column}": first[metric] for column, metric in columns.items()}
     return summary
 
 
@@ -261,12 +316,18 @@ def print_seed_ranking(rows: list[dict[str, Any]], names: list[str], count: int 
     print("The smallest median worst path RMSE over the seeds:")
     for r in holding[:count]:
         values = ", ".join(f"{name}={r[name]:g}" for name in names)
+        returns = ""
+        if "unreturned_seeds" in r:
+            returns = (
+                f"; {r['unreturned_seeds']} seeds not back on the path,"
+                f" median latest return {r['median_latest_return_s']:.2f} s"
+            )
         print(
             f"  {values}: median {1000 * r['median_worst_path_rmse_m']:.2f} mm,"
             f" mean {1000 * r['mean_worst_path_rmse_m']:.2f} +- {1000 * r['sd_worst_path_rmse_m']:.2f} mm,"
             f" {1000 * r['min_worst_path_rmse_m']:.2f} to {1000 * r['max_worst_path_rmse_m']:.2f} mm;"
             f" median latest arrival {r['median_latest_arrival_s']:.2f} s;"
-            f" farthest from the target at the end {1000 * r['worst_final_distance_m']:.1f} mm"
+            f" farthest from the target at the end {1000 * r['worst_final_distance_m']:.1f} mm{returns}"
         )
 
 

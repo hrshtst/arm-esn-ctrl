@@ -25,7 +25,10 @@ rather than the velocity error. Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table, or several ``[[disturbance]]`` tables,
 push or block all three arms alike (see :mod:`arm_esn_ctrl.disturbances`): from the
-same start posture, the same forces at the same times. Start postures away from the demonstrated
+same start posture, the same forces at the same times. The metrics then measure how
+far each disturbance sends the hand from the taught hand path, and how soon the hand
+comes back within ``return_tolerance`` of it (in ``[evaluation]``; 5 mm by default).
+Start postures away from the demonstrated
 ones (``start_offsets_deg`` in ``[evaluation]``) make the initial-offset scenario.
 
 Every run is compared with the demonstrator's undisturbed reach from the same
@@ -81,7 +84,7 @@ from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_r
 from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
 from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
-from arm_esn_ctrl.metrics import hand_speed, path_progress, path_rmse
+from arm_esn_ctrl.metrics import distances_to_path, disturbance_returns, hand_speed, path_progress, path_rmse
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import (
     EsnSource,
@@ -105,6 +108,9 @@ TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
 DISTURBANCE_COLOR = "#f0efec"
+# How near the taught hand path the hand must come back after a disturbance, unless
+# [evaluation] gives a return_tolerance (m).
+RETURN_TOLERANCE = 0.005
 
 
 def main() -> None:
@@ -125,6 +131,7 @@ def main() -> None:
     disturbance = config.get("disturbance")
     spans = disturbance_spans(disturbance)
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
+    tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
     print(f"ESN {config['esn']['model']}, trained on {len(setup.demos)} demonstrations")
     print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
     if not config["tracker"].get("reference_velocity", True):
@@ -146,7 +153,7 @@ def main() -> None:
         rows.append(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
-            | arm_metrics(log, i, setup, esn.config.dt, window, spans)
+            | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance)
         )
 
     tracker = config["tracker"]
@@ -199,7 +206,7 @@ def main() -> None:
                     {"law": law, "omega": omega, "damping": setting.damping, "arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm == "replay" else ""}
-                    | arm_metrics(log, i, setup, esn.config.dt, window, spans)
+                    | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance)
                 )
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
@@ -277,7 +284,13 @@ def posed(skeleton: Skeleton, q: NDArray[np.float64]) -> Skeleton:
 
 
 def arm_metrics(
-    log: StateLog, i: int, setup: Setup, period: float, window: list[float], spans: list[tuple[float, float]]
+    log: StateLog,
+    i: int,
+    setup: Setup,
+    period: float,
+    window: list[float],
+    spans: list[tuple[float, float]],
+    tolerance: float,
 ) -> dict[str, Any]:
     """The metrics of one arm's run from start posture ``i``, compared with the demonstrator's undisturbed reach.
 
@@ -302,12 +315,20 @@ def arm_metrics(
     - ``peak_external_force_n``: the largest disturbance force at the tip (a
       block's holding force shows how hard the arm pushes against it);
 
-    and at the end of each disturbance (``spans``, when each acts on the task clock):
+    and for each disturbance (``spans``, when each acts on the task clock):
 
-    - ``reference_lead``: how far the reference is ahead of the arm along the
-      demonstrated path, as a fraction of the path (see :func:`progress`); NaN
-      without a disturbance. With several disturbances, ``reference_lead_1``,
-      ``reference_lead_2``, ... at the end of each, in the order configured.
+    - ``reference_lead``: at its end, how far the reference is ahead of the arm
+      along the demonstrated path, as a fraction of the path (see :func:`progress`);
+    - ``off_path_m``: the hand's largest distance from the taught hand path from its
+      onset until the next disturbance starts, or to the end of the run;
+    - ``return_time_s``: the time from its end until the hand is back within
+      ``tolerance`` (m) of the taught hand path until the next disturbance starts or
+      the run ends: 0 if it never strays farther after the end, NaN if it is not
+      back by then (see :func:`arm_esn_ctrl.metrics.disturbance_returns`).
+
+    Without a disturbance, these are NaN. With several, ``reference_lead_1``,
+    ``reference_lead_2``, ..., ``off_path_m_1``, ... measure each, in the order
+    configured (see :func:`per_disturbance`).
 
     The demonstrator tracks no reference, so its tracking metrics are NaN.
     """
@@ -339,14 +360,19 @@ def arm_metrics(
             k = int(np.argmin(np.abs(times - end)))
             ahead = progress(log.channel("q_ref")[k : k + 1], setup.starts[i].q, setup)
             leads[n] = float(ahead[0] - progress(log.channel("q")[k : k + 1], setup.starts[i].q, setup)[0])
-    if len(spans) > 1:
-        lead_metrics = {f"reference_lead_{n + 1}": lead for n, lead in enumerate(leads)}
-    else:
-        lead_metrics = {"reference_lead": leads[0] if leads else nan}
+    taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
+    returns = disturbance_returns(setup.times, distances_to_path(hand, taught_hand), spans, tolerance) if spans else []
+    measured = {
+        "reference_lead": leads,
+        "off_path_m": [farthest for farthest, _ in returns],
+        "return_time_s": [back for _, back in returns],
+    }
+    disturbance_metrics: dict[str, float] = {}
+    for metric, values in measured.items():
+        disturbance_metrics |= dict(zip(per_disturbance(metric, len(spans)), values or [nan], strict=True))
     reference_path_rmse = nan
     if tracked:
         reference_hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1], "q_ref"))
-        taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
         reference_path_rmse = path_rmse(reference_hand, taught_hand)
     return run_metrics(run, setup) | {
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
@@ -358,8 +384,17 @@ def arm_metrics(
         "peak_torque_nm": float(np.abs(tau[in_window]).max()),
         "effort_n2m2s": float(np.sum(tau[in_window] ** 2) * np.diff(times).mean()),
         "peak_external_force_n": float(np.linalg.norm(force[in_window], axis=1).max()),
-        **lead_metrics,
+        **disturbance_metrics,
     }
+
+
+def per_disturbance(metric: str, count: int) -> list[str]:
+    """The columns of a disturbance metric of :func:`arm_metrics` with ``count`` disturbances.
+
+    One column, ``metric``, with one disturbance or none; ``metric_1``, ``metric_2``,
+    ... with several.
+    """
+    return [f"{metric}_{n + 1}" for n in range(count)] if count > 1 else [metric]
 
 
 def progress(q: NDArray[np.float64], start_q: NDArray[np.float64], setup: Setup) -> NDArray[np.float64]:

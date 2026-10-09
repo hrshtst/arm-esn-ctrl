@@ -96,3 +96,35 @@ The `<candidate>` is `lr0.03_sr1.5_is1.5_seed2` (#1), `lr0.03_sr1.35_is2_seed5`
 draws the joint angles and torques over time (`joints.png`, `torques.png`); the
 offsets runs also from the offset starts that their `[plots]` table lists, (+15°,
 +15°) and (0°, −10°) (`joints_offset_+15_+15.png`, `torques_offset_+0_-10.png`, ...).
+
+## Step B: a star around candidate #2
+
+Candidate #2 (leak rate 0.03, spectral radius 1.35, input scaling 2) felt the most
+balanced against disturbances in the robot app. In Step A, it was the only candidate
+whose hand came back onto the taught path after all three pushes with both trackers.
+Step B varies one of its settings at a time, keeping the others, with ten random
+reservoirs each. Every setting runs undisturbed, under the pushes, and under the
+block of Step A, with [`sweep_robot_esn.py`](../sweep_robot_esn.py):
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_search/sweep_robot_star_sr_pushes_filtered.toml
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `sweep_robot_star_sr_{nominal,pushes,block}_filtered.toml` | spectral radius 0.99, 1.1, 1.2, 1.3, 1.35, 1.4, 1.5, 1.75 |
+| `sweep_robot_star_lr_{nominal,pushes,block}_filtered.toml` | leak rate 0.015, 0.02, 0.025, 0.03, 0.04, 0.05 |
+| `sweep_robot_star_is_{nominal,pushes,block}_filtered.toml` | input scaling 1.5, 1.75, 2, 2.25 |
+
+Under a disturbance, the sweep also measures, for each disturbance, how far the hand
+strays from the taught path and how soon it is back within 5 mm of it
+(`return_tolerance`), before the next disturbance starts or the run ends. The push
+at 13 s, after the hold, checks that the hand comes back to the target: in Step A,
+candidate #1 (spectral radius 1.5) settled 23 to 27 mm from the target after it,
+outside the goal, which the undisturbed runs of stage 1 could not show. Under the
+block, the reference's lead at the release shows how long the ESN waits for the
+held arm.
+
+A setting must, for all ten seeds, arrive and hold in every scenario, come back onto
+the path after every disturbance, and end at the target. The undisturbed runs
+repeat settings of stage 1, which they must reproduce.

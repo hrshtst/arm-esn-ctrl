@@ -214,6 +214,36 @@ def join_index(distances: NDArray[np.float64], threshold: float) -> int | None:
     return None if above[-1] == len(distances) - 1 else int(above[-1]) + 1
 
 
+def disturbance_returns(
+    times: NDArray[np.float64], distances: NDArray[np.float64], spans: list[tuple[float, float]], tolerance: float
+) -> list[tuple[float, float]]:
+    """Return how far each disturbance sends the hand from a path, and how soon the hand comes back.
+
+    ``distances`` are the hand's distances from the path at ``times``, and ``spans``
+    when each disturbance acts, as ``(onset, end)``. A disturbance's window lasts
+    from its onset until the next disturbance starts, or to the last sample. For
+    each span, the result is the largest distance in its window, and the time from
+    its end until the hand is back within ``tolerance`` of the path for the rest of
+    the window: 0 if it is never farther after the end, NaN if it is not back by
+    the end of the window.
+    """
+    nan = float("nan")
+    returns = []
+    for onset, end in spans:
+        later = [other for other, _ in spans if other > onset]
+        stop = min(later) if later else np.inf
+        window = (times > onset - 1e-9) & (times < stop - 1e-9)
+        after = window & (times > end - 1e-9)
+        farthest = float(distances[window].max()) if window.any() else nan
+        outside = np.flatnonzero(distances[after] > tolerance)
+        if not after.any() or (outside.size and outside[-1] == np.count_nonzero(after) - 1):
+            back = nan  # the window ends before the disturbance does, or with the hand still away
+        else:
+            back = float(times[after][outside[-1] + 1] - end) if outside.size else 0.0
+        returns.append((farthest, back))
+    return returns
+
+
 def path_progress(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:
     """Return how far along the ``reference`` path the nearest point to each of ``points`` lies.
 

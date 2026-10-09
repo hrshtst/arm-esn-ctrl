@@ -9,6 +9,7 @@ import pytest
 from arm_esn_ctrl.metrics import (
     arrival_index,
     count_speed_peaks,
+    disturbance_returns,
     hold_metrics,
     jitter,
     join_index,
@@ -225,3 +226,35 @@ def test_a_run_that_gathers_onto_the_others_route_loses_its_spread():
     assert join_index(spread[4], 0.12) == 31  # 0.5 (1 - x / 0.4) < 0.12 from x > 0.304
     assert join_index(np.array([0.5, 0.0, 0.5, 0.0]), 0.1) == 3  # it must stay
     assert join_index(np.array([0.5, 0.5]), 0.1) is None
+
+
+def test_each_disturbance_is_measured_until_the_next_one_starts():
+    times = np.arange(0.0, 10.0, 0.5)
+    distances = np.zeros_like(times)
+    distances[(times >= 2.0) & (times < 3.5)] = [0.01, 0.03, 0.02]  # the first push sends the hand 30 mm away
+    distances[times >= 8.5] = 0.04  # the second one, at 8 s, leaves it away
+
+    (first, second) = disturbance_returns(times, distances, [(2.0, 2.5), (8.0, 8.5)], 0.005)
+
+    assert first == (pytest.approx(0.03), pytest.approx(1.0))  # back from 3.5 s, 1 s after the push ends
+    assert second[0] == pytest.approx(0.04)
+    assert np.isnan(second[1])  # not back by the end of the run
+
+
+def test_a_disturbance_the_hand_never_strays_from_returns_at_once():
+    times = np.arange(0.0, 6.0, 0.5)
+    distances = np.where((times >= 1.0) & (times < 2.0), 0.002, 0.0)  # within the tolerance throughout
+
+    ((farthest, back),) = disturbance_returns(times, distances, [(1.0, 2.0)], 0.005)
+
+    assert farthest == pytest.approx(0.002)
+    assert back == 0.0
+
+
+def test_a_disturbance_that_lasts_past_the_run_has_no_return():
+    times = np.arange(0.0, 3.0, 0.5)
+
+    ((farthest, back),) = disturbance_returns(times, np.zeros_like(times), [(2.0, 4.0)], 0.005)
+
+    assert farthest == 0.0
+    assert np.isnan(back)

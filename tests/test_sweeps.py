@@ -62,3 +62,23 @@ def test_a_single_seed_has_no_spread():
     (summary,) = summarize_seeds([row(2.0, 0.99, 0, 0.001)], ["input_scaling", "spectral_radius"])
 
     assert summary["sd_worst_path_rmse_m"] == 0.0
+
+
+def test_a_sweep_with_disturbances_also_summarizes_the_returns_to_the_path():
+    rows = [
+        row(2.0, 0.99, 0, 0.001) | {"unreturned": 0, "latest_return_s": 3.0, "worst_off_path_m": 0.04},
+        row(2.0, 0.99, 1, 0.001) | {"unreturned": 1, "latest_return_s": math.nan, "worst_off_path_m": 0.20},
+        row(2.0, 0.99, 2, 0.001) | {"unreturned": 0, "latest_return_s": 2.0, "worst_off_path_m": 0.05},
+    ]
+
+    (summary,) = summarize_seeds(rows, ["input_scaling", "spectral_radius"])
+
+    assert summary["unreturned_seeds"] == 1
+    assert summary["median_latest_return_s"] == pytest.approx(2.5)  # the seed whose run is not back is left out
+    assert summary["median_worst_off_path_m"] == pytest.approx(0.05)
+
+
+def test_an_undisturbed_sweep_has_no_returns():
+    (summary,) = summarize_seeds([row(2.0, 0.99, 0, 0.001)], ["input_scaling", "spectral_radius"])
+
+    assert "unreturned_seeds" not in summary
