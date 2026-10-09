@@ -52,3 +52,24 @@ All train with ridge 1e-2, a 1 s warm-up, 400 neurons, and sparsity 0.05, and ru
 
 Leak rates 0.03 and 0.05 at spectral radius 0.99 and input scaling 2 repeat report
 005's seed check (stage 4) and must reproduce it.
+
+## Candidates to try
+
+Some settings of stage 1, each trained by
+[`autonomous_esn.py`](../autonomous_esn.py) with its typical seed (the one nearest
+the median over its ten seeds), so that its ESN is saved for the interactive apps
+and for `robot_esn.py`:
+
+```bash
+uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_search/grid_lr0.03_sr1.5_is1.5_seed2_filtered.toml
+```
+
+| Configuration | Why |
+| --- | --- |
+| `grid_lr0.03_sr1.5_is1.5_seed2_filtered.toml` | stage 1's best setting (median 0.81 mm over its seeds) |
+| `grid_lr0.03_sr1.35_is2_seed5_filtered.toml` | the setting steadiest over its seeds (SD 0.12 mm) |
+| `grid_lr0.03_sr1.5_is1_seed7_filtered.toml` | the weakest input among the best settings |
+| `grid_lr0.05_sr1.5_is1.5_seed3_filtered.toml` | report 005's leak rate with a spectral radius over 1 |
+| `grid_lr0.07_sr1.5_is1.5_seed3_filtered.toml` | a faster leak rate |
+| `grid_lr0.1_sr1.2_is1.5_seed4_filtered.toml` | a faster leak rate still, arriving later |
+| `grid_lr0.03_sr0.99_is1.5_seed2_filtered.toml` | the first candidate's reservoir with spectral radius 0.99, below 1 |
