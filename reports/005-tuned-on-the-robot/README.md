@@ -179,9 +179,10 @@ own functions) and the arms' distance from the taught path under the pushes
 (`flexibility.png`, `flexibility.csv`), and to print the forces and the return
 under the block. With `--animations`, it exports `nominal.gif`, `block.gif`,
 `pushes.gif`, `offset.gif`, and `offset_failure.gif`, each arm rendered by
-skelarm's player. With `--videos`, it exports the runs of those five animations,
-for both arms and both trackers, as 20 MP4s for slides at 30 fps with the player's
-side panel (the time, the joint angles, the tip, and the external force) into
+skelarm's player. With `--videos`, it exports the take, as recorded and filtered at
+2 Hz, and the runs of those five animations, for both arms and both trackers, as
+22 MP4s for slides at 30 fps with the player's side panel (the time, the joint
+angles, the tip, and the external force) into
 `<storage root>/reports/005-tuned-on-the-robot/videos/`, listed in `videos.csv`
 and explained, with how to reproduce them, in a `README.md` there; they are not
 kept in Git.

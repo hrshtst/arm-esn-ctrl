@@ -28,9 +28,10 @@ the taught path (``flexibility.png`` and ``flexibility.csv``, Section 3.8). With
 ``--animations``, it animates the undisturbed run, the block, the pushes, the
 offset start of OFFSET, and one from which the chosen ESN fails (``<name>.gif``),
 the arms side by side, each rendered by skelarm's player. With ``--videos``, it
-exports every arm (the chosen ESN's and the replay's) with each tracker in those
-five runs as an MP4 for slides, with the player's side panel, into VIDEOS under
-the storage root, since they are not kept in Git.
+exports the take, as recorded and filtered at 2 Hz, and every arm (the chosen ESN's
+and the replay's) with each tracker in those five runs as an MP4 for slides, with
+the player's side panel, into VIDEOS under the storage root, since they are not
+kept in Git.
 
     uv run python reports/005-tuned-on-the-robot/make_figures.py --videos
 """
@@ -116,19 +117,41 @@ ANIMATION_SPAN = (-0.2, 17.0)
 ANIMATION_FPS = 10.0
 ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
 
-# The videos for slides: each animation's run, with every arm and tracker, named by these.
+# The videos for slides: the take, and each animation's run, with every arm and tracker, named by these.
 VIDEOS = storage_root() / "reports" / REPORT.name / "videos"
 VIDEO_FPS = 30.0
+# The take's videos: each log of the take, its video's name, and what it shows.
+TAKE_VIDEOS = {
+    "demo_00": ("take_as_recorded", "the take, as recorded"),
+    "demo_00_filtered": ("take_filtered_2hz", "the take, filtered at 2 Hz"),
+}
 VIDEO_ARMS = {"esn": "chosen_esn", "replay": "replay"}
 VIDEO_TRACKERS = {"pd_w20_z0.1": "joint_pd", "computed_torque_w20_z0.1": "computed_torque"}
-VIDEOS_README = """# Videos of report 005's runs, for slides
+VIDEOS_README = """# Videos of report 005's take and runs, for slides
 
-These MP4s show the runs behind the animations of report 005, *A remade arm, and
-an ESN tuned on the robot* (`reports/005-tuned-on-the-robot/` in the arm-esn-ctrl
-repository), one arm per video: each scenario with the chosen ESN's arm and the
-replay's, each through both trackers. They are not kept in Git.
+These MP4s show the take of report 005, *A remade arm, and an ESN tuned on the
+robot* (`reports/005-tuned-on-the-robot/` in the arm-esn-ctrl repository), and the
+runs behind its animations, one arm per video. They are not kept in Git.
 
-## The videos
+All are H.264 at {fps:g} fps, 1104 x 800, rendered by skelarm's player with its side
+panel: the time, the joint angles, the tip's position, and, where the log holds the
+joint velocities, the tip's speed. The purple dot is the target. The videos have no
+labels: their names say what they show.
+
+## The take
+
+The take taught by hand, from 0 s to its end at 18.5 s:
+
+| Name | Take |
+| --- | --- |
+{takes}
+
+The arm takes the logged postures; nothing is simulated. The filtered take is what
+the ESNs were trained on and what the replay replays. The take as recorded moves in
+the cursor's steps of a few millimeters, and its panel shows no tip speed, since its
+log holds no joint velocities.
+
+## The runs
 
 `<scenario>_<arm>_<tracker>.mp4`, {count} in all:
 
@@ -141,14 +164,12 @@ replay's, each through both trackers. They are not kept in Git.
   the take replayed by time.
 - **Trackers:** `joint_pd` and `computed_torque`, at omega = 20 rad/s with damping
   ratio 0.1, given a zero reference velocity.
-- **Format:** H.264 at {fps:g} fps, 1104 x 800, the whole run, from the warm-up at
-  -1 s to the end at 22 s, rendered by skelarm's player with its side panel: the
-  task time, the joint angles, the tip's position and speed, and the external force
-  while a disturbance acts. The purple dot is the target, the red arrow the force
-  at the tip. The videos have no labels: their names say which arm and tracker.
+- **Span:** the whole run, from the warm-up at -1 s to the end at 22 s. The side
+  panel also shows the external force while a disturbance acts, and the red arrow
+  is the force at the tip.
 
-[`videos.csv`](videos.csv) lists each video's scenario, arm, tracker, and the run
-log it shows, relative to the storage root.
+[`videos.csv`](videos.csv) lists each video's scenario, arm, tracker (none for the
+take), and the log it shows, relative to the storage root.
 
 ## Reproducing them
 
@@ -156,7 +177,7 @@ From the repository, at commit `{commit}`:
 
     uv run python reports/005-tuned-on-the-robot/make_figures.py --videos
 
-It reads the runs' logs under the storage root and overwrites the files here, this
+It reads the logs under the storage root and overwrites the files here, this
 README included, in about a minute. The runs are deterministic, so the videos show
 the same motion.
 
@@ -583,17 +604,23 @@ def video_name(scenario: str, offset: tuple[float, float]) -> str:
 
 
 def export_videos() -> None:
-    """Export each animation's run, with every arm and tracker, as an MP4 for slides into VIDEOS.
+    """Export the take and each animation's run, with every arm and tracker, as MP4s for slides into VIDEOS.
 
-    Each video is one arm's whole run, the warm-up included, rendered by skelarm's
-    player at VIDEO_FPS with its side panel. It is named
-    ``<scenario>_<arm>_<tracker>.mp4`` (see :func:`video_name`), such as
+    Each video is one log, rendered by skelarm's player at VIDEO_FPS with its side
+    panel: the take, as recorded and filtered, from the take's run under the storage
+    root (TAKE_VIDEOS), and each arm's whole run, the warm-up included. A run's video
+    is named ``<scenario>_<arm>_<tracker>.mp4`` (see :func:`video_name`), such as
     ``offset_+15_+15_replay_joint_pd.mp4``; ``videos.csv`` lists each video's
     scenario, arm, tracker, and log, and ``README.md`` (VIDEOS_README) explains
     them and how to reproduce them, with the commit they were exported at.
     """
     VIDEOS.mkdir(parents=True, exist_ok=True)
-    rows = []
+    take_run = resolve_run_path(f"results/{TAKE_RUN.name}")
+    # Each video, its scenario, arm, and tracker (none for the take), and its log.
+    videos = [
+        (VIDEOS / f"{name}.mp4", title, "", "", take_run / f"{log}.sklog.npz")
+        for log, (name, title) in TAKE_VIDEOS.items()
+    ]
     for _, scenario, offset, title in ANIMATIONS:
         name = video_name(scenario, offset)
         stem = stem_of(scenario)
@@ -601,25 +628,31 @@ def export_videos() -> None:
             start = start_of(stem, arm, offset)
             for setting, tracker in VIDEO_TRACKERS.items():
                 log = run_dir(stem) / setting / f"{arm}_{start:02d}.sklog.npz"
-                video = VIDEOS / f"{name}_{arm_name}_{tracker}.mp4"
-                player_export(log, video, VIDEO_FPS, panel=True)
-                rows.append(
-                    {
-                        "video": video.name,
-                        "scenario": title,
-                        "arm": ARMS[arm][0],
-                        "tracker": SETTINGS[setting],
-                        "log": str(log.relative_to(storage_root())),
-                    }
+                videos.append(
+                    (VIDEOS / f"{name}_{arm_name}_{tracker}.mp4", title, ARMS[arm][0], SETTINGS[setting], log)
                 )
+    rows = []
+    for video, scenario, arm, tracker, log in videos:
+        player_export(log, video, VIDEO_FPS, panel=True)
+        rows.append(
+            {
+                "video": video.name,
+                "scenario": scenario,
+                "arm": arm,
+                "tracker": tracker,
+                "log": str(log.relative_to(storage_root())),
+            }
+        )
     write_csv(VIDEOS / "videos.csv", rows)
     git = [["git", "rev-parse", "--short", "HEAD"], ["git", "status", "--porcelain"]]
     commit, changes = (subprocess.run(c, cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout for c in git)
+    takes = "\n".join(f"| `{name}` | {title} |" for name, title in TAKE_VIDEOS.values())
     scenarios = "\n".join(
         f"| `{video_name(scenario, offset)}` | {title} |" for _, scenario, offset, title in ANIMATIONS
     )
     readme = VIDEOS_README.format(
-        count=len(rows),
+        takes=takes,
+        count=len(rows) - len(TAKE_VIDEOS),
         scenarios=scenarios,
         fps=VIDEO_FPS,
         commit=commit.strip(),
