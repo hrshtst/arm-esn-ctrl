@@ -75,7 +75,8 @@ swept below. The tracker, for every run, is computed torque and joint PD at
 ω = 20 rad/s with damping ratio 0.1, given a zero reference velocity, so that the
 derivative term damps the arm's own velocity. Report 004 found that such a tracker
 lets the arm trail its reference and makes an ESN driven by the measured posture
-wait for it (Section 3.10 there).
+wait for it (Section 3.10 there). Section 3.7 lists the chosen ESN's parameters and
+the trackers' gains.
 
 ### Measures
 
@@ -304,7 +305,45 @@ All with spectral radius 0.99; all 50 combinations hold.
 
 The ESN validated is the best of stage 3 (`grid_robot_fine_best_filtered`: leak
 rate 0.05, spectral radius 0.99, input scaling 2, seed 0), chosen by hand, after
-trying it in the robot app, for how it yields when pushed (Section 3.8).
+trying it in the robot app, for how it yields when pushed (Section 3.8). Its
+parameters ([`esn.toml`](results/20261008-194414-grid_robot_fine_best_filtered/esn.toml)):
+
+| Parameter | Value |
+| --- | --- |
+| Reservoir | 400 tanh neurons, sparsity 0.05 (the fraction of nonzero connections), spectral radius 0.99 |
+| Leak rate | 0.05 |
+| Input | the arm's measured joint angles every 10 ms, normalized by the range each covers in the filtered take, (q − (67.80°, 71.74°)) / (46.54°, 41.74°), so that the take spans [−1, 1] |
+| Input scaling | 2, the scale of the random input weights |
+| Bias | a random constant input to each neuron |
+| Readout | ridge regression on the reservoir state, with a bias; ridge 1e-2; its output, converted back to joint angles, is the next posture, 10 ms on |
+| Training | teacher forcing on the filtered take alone, without noise |
+| Warm-up | 1 s of the held start posture, from a reset reservoir |
+| Seed | 0, of the reservoir and its input weights |
+
+The trackers' gains, the same in every robot run of this report, are computed from
+ω = 20 rad/s and ζ = 0.1 by `arm_esn_ctrl.tracking.tracking_gains`, as in
+`robot_esn.py` and `sweep_robot_esn.py`, and recomputed here by `make_figures.py`.
+With the tracking error e = q_r − q, where q_r is the reference:
+
+| Tracker | Law | K_p (joint 1, joint 2) | K_d (joint 1, joint 2) |
+| --- | --- | --- | --- |
+| Computed torque | τ = H(q)(q̈_r + K_d ė + K_p e) + b(q, q̇) | ω² = 400, 400 s⁻² | 2ζω = 4, 4 s⁻¹ |
+| Joint PD | τ = K_p e + K_d ė | H_ii ω² = 74.96, 8.96 N m/rad | 2ζ H_ii ω = 0.750, 0.0896 N m s/rad |
+
+- **Computed torque** cancels the arm's dynamics (H, the mass matrix; b, the
+  Coriolis, centrifugal, and gravity torques), so each joint's error obeys
+  ë + 2ζω ė + ω² e = 0 in every posture.
+- **Joint PD** scales each joint's gains by its inertia H_ii, the diagonal of the
+  mass matrix where the take ends, at (113.94°, 74.59°): 0.1874 and 0.0224 kg m².
+  Elsewhere the error's dynamics differ, since joint 1's inertia changes with the
+  elbow and the joints are coupled. At the start posture, (30°, 30°), joint 1's
+  inertia is 0.2354 kg m², so its gains give ω = 17.8 rad/s and ζ = 0.089 there;
+  joint 2's inertia does not change.
+- **Both** are given a zero reference velocity, so ė = −q̇: the derivative term
+  damps the arm's own velocity. Computed torque also takes the reference's
+  acceleration q̈_r, the change of its velocity over each 10 ms period, low-pass
+  filtered with a time constant of 20 ms; joint PD has none. The arm is simulated,
+  and the torque computed, every 2 ms.
 
 | Scenario | Chosen ESN | Replay |
 | --- | --- | --- |

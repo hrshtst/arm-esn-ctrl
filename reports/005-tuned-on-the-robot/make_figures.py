@@ -64,6 +64,7 @@ from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, storage_root
+from arm_esn_ctrl.tracking import TrackerConfig, error_dynamics, gain_scale, tracking_gains
 
 REPORT = Path(__file__).resolve().parent
 RESULTS = REPORT / "results"
@@ -901,6 +902,39 @@ def print_tables() -> None:
     a, b = groups["lr0.03_sr0.99_is2"], groups["lr0.04_sr0.99_is2"]
     better = sum(x["worst_path_rmse_m"] < y["worst_path_rmse_m"] for x, y in zip(a, b, strict=True))
     print(f"  leak rate 0.03 beats 0.04 (input scaling 2) for {better} of 10 seeds")
+
+    print("\n== 3.7 The chosen ESN's parameters (its esn.toml)")
+    with (RESULTS / run_name(f"grid_robot_{CHOSEN}_filtered") / "esn.toml").open("rb") as f:
+        record = tomllib.load(f)
+    print("  " + ", ".join(f"{key} {value}" for key, value in record["esn"].items()))
+
+    def rounded(x: NDArray[np.float64], decimals: int) -> list[float]:
+        return np.round(x, decimals).tolist()
+
+    center, half = (np.degrees(record["normalization"][key]) for key in ("center_rad", "half_range_rad"))
+    print(f"  normalization: center {rounded(center, 2)} deg, half range {rounded(half, 2)} deg")
+
+    print("\n== 3.7 The trackers' gains, recomputed from omega and the damping ratio as robot_esn.py does, at the")
+    print("posture where the take ends, and the natural frequency (rad/s) and damping ratio they give at its start")
+    with (RESULTS / run_name(stem_of("nominal")) / "config.toml").open("rb") as f:
+        tracker = tomllib.load(f)["tracker"]
+    q = resample_joint_angles(StateLog.load(TAKE_RUN / "demo_00_filtered.sklog.npz"), DT)[1]
+    end, start = q[-1], q[0]
+    print(f"  end posture {rounded(np.degrees(end), 2)} deg, start {rounded(np.degrees(start), 2)} deg")
+    for law in tracker["laws"]:
+        for omega in tracker["omegas"]:
+            for damping in tracker["dampings"]:
+                config = TrackerConfig(law, omega, tracker["acceleration_filter"], damping=damping)
+                kp, kd = tracking_gains(config, skeleton, end)
+                frequency, ratio = error_dynamics(law, (kp, kd), skeleton, start)
+                print(
+                    f"  {law}, omega {omega:g}, damping ratio {damping:g}: scale (M_ii) at the end"
+                    f" {rounded(gain_scale(law, skeleton, end), 4)}, kp {rounded(kp, 4)}, kd {rounded(kd, 4)};"
+                    f" at the start: scale {rounded(gain_scale(law, skeleton, start), 4)},"
+                    f" omega {rounded(frequency, 2)}, damping ratio {rounded(ratio, 3)}"
+                )
+    filtered, velocity = tracker["acceleration_filter"], tracker["reference_velocity"]
+    print(f"  acceleration filter {filtered:g} s, reference velocity: {velocity}")
 
     print("\n== 3.7 Validation: arm, scenario, tracker: arrival (s), holds, path RMSE (mm); block: peak force (N);")
     print("offsets: starts that hold, median path RMSE (mm), median peak torque (N m), failed starts")
