@@ -35,3 +35,42 @@ To watch them with report 006's chosen ESN and the replay, both with joint PD:
 uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_ringing/pushes_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml
 uv run python third_party/skelarm/tools/player.py <run directory>/pd_w20_z0.1/replay_00.sklog.npz
 ```
+
+## Step 1: a grid, with joint PD
+
+[`sweep_robot_esn.py`](../sweep_robot_esn.py) trains every setting with ten seeds
+and runs it with joint PD from the demonstrated start, undisturbed, under the
+block, and under the pushes, in runs of 24 s:
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_ringing/sweep_robot_ringing_lr0.03_pushes_filtered.toml
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `sweep_robot_ringing_lr{0.02,0.03,0.04,0.05,0.07,0.1}_{nominal,block,pushes}_filtered.toml` | spectral radius 0.99, 1.2, 1.35, 1.5, 1.75 × input scaling 1, 1.5, 2 × seeds 0–9, at one leak rate |
+
+That is 90 settings, among them report 006's chosen setting (leak rate 0.03,
+spectral radius 1.35, input scaling 1.5). The other settings of the ESN are reports
+005 and 006's: 400 neurons, sparsity 0.05, ridge 1e-2, and a 1 s warm-up.
+
+The rule, fixed before the runs. With joint PD, a seed qualifies if, in each of the
+three scenarios, its run arrives and holds (`failed` is false in `runs.csv`) and
+ends within the goal, 20 mm from the target. Its **ringing** is the mean of
+`ringing_m` over the four disturbances: the block's release and the three pushes.
+
+1. A setting qualifies if all ten of its seeds do.
+2. The qualifying settings are ranked by the median of the ringing over their
+   seeds, the smallest first.
+3. Alongside, each setting's medians over its seeds: the undisturbed path RMSE, and,
+   after each disturbance, the ringing, the farthest from the path, and the return
+   onto it; and the block's reference lead.
+4. The shortlist is the top three settings, each with its typical seed, and report
+   006's chosen ESN (leak rate 0.03, spectral radius 1.35, input scaling 1.5, seed
+   8). A setting's typical seed is the one nearest its medians over its seeds of the
+   undisturbed path RMSE, the ringing, and the latest return after a disturbance
+   (a hand not back before the next disturbance or the end of the run counts as back
+   then), each scaled by its interquartile range over the seeds.
+
+The shortlisted ESNs are trained by [`autonomous_esn.py`](../autonomous_esn.py), so
+that they can be tried in the apps, where one is chosen by hand.

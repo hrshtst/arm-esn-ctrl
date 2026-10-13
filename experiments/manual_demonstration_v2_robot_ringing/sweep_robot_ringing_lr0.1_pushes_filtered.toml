@@ -1,0 +1,77 @@
+# The ringing study's grid, with joint PD: leak rate 0.1 (one of 0.02, 0.03, 0.04,
+# 0.05, 0.07, 0.1, one configuration each), spectral radius 0.99 to 1.75, and input
+# scaling 1 to 2, each setting with ten random reservoirs (seeds 0 to 9), under the
+# study's three pushes of 0.5 s at the tip, forward at 3 s, across at 7 s, and
+# across again at 15 s, after the hold, from the demonstrated start. Otherwise as
+# report 006's sweeps.
+#
+#   uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_ringing/sweep_robot_ringing_lr0.1_pushes_filtered.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# The settings not swept, those of reports 005 and 006; a swept key's value here is
+# replaced by each swept value.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.35
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.1
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 8
+
+[sweep]
+# The heatmap axes of sweep.png: x, then y.
+spectral_radius = [0.99, 1.2, 1.35, 1.5, 1.75]
+input_scaling = [1.0, 1.5, 2.0]
+seed = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # the random reservoir, its input weights, and its biases
+
+[tracker]
+# Joint PD at omega = 20 rad/s, underdamped (damping ratio 0.1), given a zero
+# reference velocity, as in reports 005 and 006.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up; the take lasts 18.5 s, and the last push comes at 15 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 3.2 Hz
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+
+# The study's pushes, as pushes_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml. Each: a
+# force of `force` N for `duration` s from `onset` (task time, s), at `angle_deg`
+# counterclockwise from the direction toward the target (0 forward, 90 across, 180
+# backward), fixed for the run by the start posture.
+
+[[disturbance]]  # nearly forward: 10 deg off it, toward counterclockwise across
+type = "push"
+force = 3.0            # N
+onset = 3.0            # task time (s): the take's hand is 18% of the way
+duration = 0.5         # s
+angle_deg = 10.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, counterclockwise: 10 deg off it, toward the target
+type = "push"
+force = 5.0            # N
+onset = 7.0            # task time (s): 62% of the way, and done 2.1 s before the take arrives
+duration = 0.5         # s
+angle_deg = 80.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, clockwise, after the hold: 10 deg off it, toward the target
+type = "push"
+force = 4.0            # N
+onset = 15.0           # task time (s)
+duration = 0.5         # s
+angle_deg = -80.0      # deg from the direction toward the target
