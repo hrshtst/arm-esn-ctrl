@@ -3,13 +3,14 @@
 # 1.35, input scaling 1.5, seed 8) while it drives the robot in its validation runs,
 # recomputed from the runs' logs, over its states while the take is fed in as in
 # training: a few neurons over every whole run and, closer, through the warm-up, and
-# the principal components of every run, warm-up included. As
-# states_robot_fine_best_filtered.toml (report 005) otherwise.
+# the principal components of every run, warm-up included, with joint PD, the
+# tracker of report 006's comparisons. As states_robot_fine_best_filtered.toml
+# (report 005) otherwise.
 #
 #   uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_search/states_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml
 
 [states]
-settings = ["pd_w20_z0.1", "computed_torque_w20_z0.1"]  # tracker settings, as the runs name them: figures for each
+settings = ["pd_w20_z0.1"]  # tracker settings, as the runs name them: figures for each
 
 [neurons]              # neurons_<setting>.png: every whole run; neurons_warmup_<setting>.png: the runs marked neurons = true
 count = 8              # how many neurons are picked at random
@@ -31,12 +32,12 @@ neurons = true         # also in neurons_warmup_<setting>.png
 
 [[run]]
 label = "the tip held, 4.5 s to 5.5 s"
-path = "results/manual_demonstration_v2_robot_search/20261013-114518-block_robot_lr0.03_sr1.35_is1.5_seed8_filtered"
+path = "results/manual_demonstration_v2_robot_search/20261013-132857-block_robot_lr0.03_sr1.35_is1.5_seed8_filtered"
 start = 0
 
 [[run]]
-label = "three pushes, at 4 s, 8 s, and 13 s"
-path = "results/manual_demonstration_v2_robot_search/20261013-114518-pushes_robot_lr0.03_sr1.35_is1.5_seed8_filtered"
+label = "three pushes, at 4 s, 8 s, and 15 s"
+path = "results/manual_demonstration_v2_robot_search/20261013-132857-pushes_robot_lr0.03_sr1.35_is1.5_seed8_filtered"
 start = 0
 
 [[run]]
