@@ -19,8 +19,7 @@ and prints the tables of the report. The validation compares the arms of COMPARE
 the chosen ESN and the replay with joint PD, and the replay with computed torque;
 the chosen ESN with computed torque is a note. With ``--logs``, it reads the runs'
 logs, which are not kept in Git, from the runs under the storage root, and also
-draws, with ``experiments/robot_esn.py``'s own functions, the joint angles and the
-joint torques of the chosen ESN's arm and the replay with joint PD in the
+draws the joint angles and the joint torques of the arms of COMPARED in the
 undisturbed run, the block, the pushes, and the offset starts of OFFSETS
 (``<scenario>_joints.png`` and ``<scenario>_torques.png``, Section 3.8), and how far
 each compared arm goes from the taught path under the block and the pushes
@@ -556,23 +555,91 @@ def runner(name: str) -> Any:
 
 
 def plot_runs(scenario: str, offset: tuple[float, float] = (0.0, 0.0)) -> tuple[Figure, Figure]:
-    """The joint angles and the joint torques of the chosen ESN's run of a scenario, by robot_esn.py's functions.
+    """The joint angles and the joint torques over time of the compared arms in a scenario's run.
 
     The run is the one from the start offset by ``offset`` (deg) from the
-    demonstrated start, with joint PD; the figures show the replay with it too.
+    demonstrated start. One panel per joint draws the taught motion (thick gray),
+    the chosen ESN's output (dashed) and arm with joint PD, and the replay's arm with
+    joint PD and with computed torque (COMPARED); the disturbances are shaded. The
+    torques' axis keeps to the range of the arms with joint PD, so that a computed
+    torque far beyond it, such as the replay's jump to the take's start from an
+    offset start, does not flatten them: its peak is written in the panel instead.
     """
     robot_esn = runner("robot_esn")
     stem = stem_of(scenario)
     setup, config = robot_setup(stem)
-    settings = [setting for setting in robot_esn.tracker_settings(config["tracker"]) if setting.name == PD]
     spans = disturbance_spans(config.get("disturbance"))
     start = start_of(stem, "esn", offset)
-    title = f"The chosen ESN on the robot, joint PD: {scenario}"
-    directory = run_dir(stem)
-    return (
-        robot_esn.plot_joints(directory, setup, settings, spans, title, start),
-        robot_esn.plot_torques(directory, setup, settings, spans, title, start),
-    )
+    logs = {
+        (arm, setting): StateLog.load(run_dir(stem) / setting / f"{arm}_{start:02d}.sklog.npz")
+        for arm, setting, *_ in COMPARED
+    }
+    taught_times, taught_q, taught_label = robot_esn.demonstrated_motion(setup, start)
+    duration = float(setup.times[-1])
+    figures = []
+    for quantity, channel, unit in (("angles", "q", "deg"), ("torques", "tau", "N m")):
+        fig = Figure(figsize=(9.0, 6.4), facecolor=SURFACE_COLOR, layout="constrained")
+        fig.suptitle(
+            f"The chosen ESN on the robot: {scenario}: joint {quantity}, from {setup.starts[start].origin}",
+            color="#0b0b0b",
+        )
+        axes = fig.subplots(setup.skeleton.num_joints, 1, sharex=True)
+        for joint, ax in enumerate(axes):
+            style(ax)
+            for span in spans:
+                ax.axvspan(*span, color=DISTURBANCE_COLOR, zorder=0)
+            if channel == "q":
+                ax.plot(
+                    taught_times,
+                    np.degrees(taught_q[:, joint]),
+                    color="#52514e",
+                    linewidth=4,
+                    alpha=0.3,
+                    label=taught_label,
+                )
+                esn = logs["esn", PD]
+                reference = esn.channel("q_ref").reshape(len(esn.times), -1)[:, joint]
+                ax.plot(
+                    esn.times,
+                    np.degrees(reference),
+                    color=ESN_COLOR,
+                    linewidth=1.3,
+                    linestyle="--",
+                    label="chosen ESN's output (its reference), joint PD",
+                )
+            pd_values = []
+            for i, (arm, setting, label, color) in enumerate(COMPARED):
+                log = logs[arm, setting]
+                values = log.channel(channel).reshape(len(log.times), -1)[:, joint]
+                values = np.degrees(values) if channel == "q" else values
+                width = 1.3 if setting == PD else 1.0
+                # The chosen ESN on top, the replay with computed torque beneath.
+                ax.plot(log.times, values, color=color, linewidth=width, label=label, zorder=2 + len(COMPARED) - i)
+                if setting == PD:
+                    pd_values.append(values)
+                elif channel == "tau":
+                    low, high = min(v.min() for v in pd_values), max(v.max() for v in pd_values)
+                    margin = 0.15 * (high - low)
+                    peak = int(np.argmax(np.abs(values)))
+                    if values[peak] > high + margin or values[peak] < low - margin:
+                        ax.set_ylim(low - margin, high + margin)
+                        ax.text(
+                            0.99,
+                            0.95,
+                            f"{label}: {values[peak]:+.0f} N m at {log.times[peak]:.2f} s, off scale",
+                            transform=ax.transAxes,
+                            ha="right",
+                            va="top",
+                            fontsize=8,
+                            color=color,
+                        )
+            ax.set_xlim(-0.3, duration)
+            ax.set_ylabel(f"joint {joint + 1} ({unit})", color=TEXT_COLOR)
+        axes[-1].set_xlabel("time (s)", color=TEXT_COLOR)
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
+        figures.append(fig)
+    return figures[0], figures[1]
 
 
 def path_distances(scenario: str, setting: str, arm: str) -> tuple[NDArray[np.float64], NDArray[np.float64]]:

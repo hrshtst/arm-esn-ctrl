@@ -119,11 +119,10 @@ chosen ESN's its trained ESN; the offsets run holds its map and its hand paths
 of the pushes (Section 3.1), without saving them, in about two minutes.
 [`make_figures.py`](make_figures.py) draws `grid.png` and prints the tables of
 Section 3 from the copies. With `--logs`, it reads the runs' logs under the storage
-root, which are not kept in Git, to draw the joint angles and torques of the chosen
-ESN and the replay with joint PD (`<scenario>_joints.png`, `<scenario>_torques.png`,
-with `robot_esn.py`'s own functions) and each compared arm's distance from the
-taught path under the block and the pushes (`disturbances.png`), and to print the
-forces under the block. With `--animations`, it exports `nominal.gif`, `block.gif`,
+root, which are not kept in Git, to draw the joint angles and torques of the three
+compared arms (`<scenario>_joints.png`, `<scenario>_torques.png`) and their distance
+from the taught path under the block and the pushes (`disturbances.png`), and to
+print the forces under the block. With `--animations`, it exports `nominal.gif`, `block.gif`,
 `pushes.gif`, `offset.gif`, and `offset_straight.gif`, each arm rendered by
 skelarm's player. With `--videos`, it exports the runs of those five animations,
 for both arms and both trackers, as 20 MP4s for slides into
@@ -327,9 +326,12 @@ The animations show three arms side by side on one clock, each rendered by
 skelarm's player; the purple dot is the target, the red arrow the force at the tip.
 Each panel names the arm's reference and its tracker: the chosen ESN and the replay
 of the take by time through joint PD, and the replay through computed torque. The
-figures show the joint angles with joint PD (the taught motion, thick gray; the
-ESN's output, dashed blue; the ESN's arm, blue; the replay's arm, orange) and the
-joint torques; the disturbances are shaded.
+figures show the joint angles (the taught motion, thick gray; the chosen ESN's
+output, dashed blue, and its arm, blue, with joint PD; the replay's arm with joint
+PD, orange, and with computed torque, brown) and the joint torques of the same three
+arms; the disturbances are shaded. Where the replay with computed torque leaves the
+others' range, as when it jumps to the take's start from an offset start, the peak
+of its torque is written in the panel instead.
 
 #### Nominal
 
@@ -371,7 +373,9 @@ After each push, the chosen ESN's output goes with the arm and carries on from
 where it was pushed. After the push forward, its arm runs ahead of the take in
 joint 1 and rejoins it by about 5.5 s; after the push at the target, joint 1 sags
 to 102° and swings back over about 1.5 s. The replay's arm is dragged back at once,
-ringing for 2 to 3 s.
+ringing for 2 to 3 s; with computed torque, it rings much as with joint PD, and its
+torques also jitter between the pushes, following the take's remaining pixel
+steps.
 
 #### Offset starts
 
