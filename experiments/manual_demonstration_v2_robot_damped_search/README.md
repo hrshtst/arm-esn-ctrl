@@ -63,6 +63,54 @@ The score keeps the ringing alongside the return: ranked by the return alone, th
 search would favor ESNs that follow the arm less, closer to the replay, and lose
 what the ESN gives under the block.
 
+## Step 1b: noise in the training
+
+In the grid, report 007's chosen setting returned the fastest of all 105 settings,
+in 2.66 s, the median over its seeds. The leak rate, the spectral radius, and the
+input scaling shape how the reservoir responds to the posture, but none of them
+teaches the ESN what to do off the taught path. Noisy teacher forcing does (see
+[`esn.py`](../../src/arm_esn_ctrl/esn.py)): the take is fed in several times, each
+time with noise added to the input while the target stays the clean take one step
+ahead, so that from a posture off the take the ESN learns to give the take's next
+posture. Report 004 tried white noise, at leak rates of 0.5 to 1. At a leak rate of
+0.02, the reservoir averages its input over about 0.5 s: a first-order low-pass with
+that time constant keeps about 10% of the deviation of white noise, 54% of pink
+noise's, and 88% of brown noise's, which drifts as a disturbed arm does. So the
+noise's color is swept with its level:
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_damped_search/sweep_robot_damped_noise_ridge4e-2_pushes_filtered.toml
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `sweep_robot_damped_noise_ridge{1e-2,4e-2}_{nominal,block,pushes}_filtered.toml` | noise of 0, 0.5, 1, 2, 4, 8 deg × exponent 0, 1, 2 (white, pink, brown noise) × seeds 0–9, at one ridge |
+
+- **The noise:** `teacher_noise_deg` is its standard deviation over each copy of the
+  take, in each joint, and `teacher_noise_exponent` colors it: its power spectrum
+  goes as 1/f to the exponent, 0 for white noise, 1 for pink, and 2 for brown.
+- **Four copies at every level, the noiseless included.** Every copy weakens the
+  ridge, so ridge 4e-2 with four copies weighs as report 007's 1e-2 with one: the
+  noiseless setting at ridge 4e-2 repeats report 007's chosen setting, and the noise
+  is all that changes from it. Ridge 1e-2, a quarter of that, leaves more of the
+  regularization to the noise.
+- **Otherwise as the grid:** report 007's chosen setting (leak rate 0.02, spectral
+  radius 1.35, input scaling 2, 400 neurons, sparsity 0.05, a 1 s warm-up), and the
+  grid's tracker, scenarios, and evaluation. A seed draws the reservoir and the
+  noise.
+
+That is 32 settings: at each ridge, the noiseless one is tried with each exponent,
+the same each time. The rule, fixed before the runs, is step 1's:
+
+1. A setting qualifies if all ten of its seeds do, as in step 1.
+2. Its score is step 1's, against the same reference: report 007's chosen setting
+   in the grid, which the noiseless setting at ridge 4e-2 repeats.
+3. Alongside, step 1's medians over the seeds, and the peak torque over the run
+   under the pushes.
+4. For each color, the qualifying setting with noise that scores the lowest joins
+   the shortlist with its typical seed, if it scores below 1: at most three more
+   ESNs.
+
 ## Then
 
 The shortlisted ESNs are trained by [`autonomous_esn.py`](../autonomous_esn.py), so
