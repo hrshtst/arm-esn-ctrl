@@ -207,3 +207,10 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot
 | Configurations | Scenario |
 | --- | --- |
 | `{nominal,block,pushes,offsets}_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml` | as in Step A |
+
+Its reservoir states in those runs, recomputed from their logs, with
+[`robot_states.py`](../robot_states.py):
+
+```bash
+uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_search/states_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml
+```
