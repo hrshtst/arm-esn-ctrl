@@ -15,6 +15,9 @@ metrics), it draws into ``results/summary``:
 - ``undisturbed.png``: undisturbed, the path RMSE and the arrival, and from the
   offset starts, the median and largest peak torque, against the damping ratio
   (Sections 3.1 and 3.3);
+- ``control_period.png``: after each disturbance, the ringing and the return of both
+  arms against the damping ratio, with the tracker's torque computed every 2 ms or
+  every 10 ms, given a zero reference velocity (Section 3.4);
 
 and prints the tables of the report. With ``--logs``, it reads the runs' logs, which
 are not kept in Git, from the runs under the storage root, and also draws each arm's
@@ -59,6 +62,9 @@ DT = 0.01  # the ESNs' period (s)
 DAMPINGS = (0.1, 0.4, 0.8)
 # The trackers' reference velocity: the configurations' tag, and its name.
 VELOCITIES = {"zero": "zero reference velocity", "reference": "reference velocity"}
+# How often the tracker's torque is computed: every simulation step (2 ms), or every 10 ms and held between, the
+# configurations' tag for each, and its name.
+CONTROLS = {"": "every 2 ms", "_control10ms": "every 10 ms"}
 ARMS = {"esn": "chosen ESN", "replay": "replay"}
 # The disturbances, each with its run, the suffix of its columns in metrics.csv, its name, and, for a hand not back
 # on the path before the next disturbance or the end of the 24 s run, when it counts as back (s after its end).
@@ -105,7 +111,11 @@ def main() -> None:
     args = parser.parse_args()
 
     SUMMARY.mkdir(parents=True, exist_ok=True)
-    figures = {"disturbed.png": plot_disturbed(), "undisturbed.png": plot_undisturbed()}
+    figures = {
+        "disturbed.png": plot_disturbed(),
+        "undisturbed.png": plot_undisturbed(),
+        "control_period.png": plot_control_period(),
+    }
     if args.logs:
         figures |= {f"{scenario}_distances.png": plot_distances(scenario) for scenario in ("block", "pushes")}
         for name, (scenario, velocity, figure) in FIGURES.items():
@@ -149,19 +159,22 @@ def run_name(stem: str) -> str:
     return matches[0]
 
 
-def stem_of(scenario: str, velocity: str) -> str:
-    return f"{scenario}_robot_pd_{velocity}_velocity_filtered"
+def stem_of(scenario: str, velocity: str, control: str = "") -> str:
+    """A configuration's stem, by its scenario, its reference velocity, and its control period (CONTROLS)."""
+    return f"{scenario}_robot_pd_{velocity}_velocity{control}_filtered"
 
 
-def rows_of(scenario: str, velocity: str) -> list[dict[str, Any]]:
+def rows_of(scenario: str, velocity: str, control: str = "") -> list[dict[str, Any]]:
     """The metrics of a scenario's run with the trackers given ``velocity``."""
-    return read_csv(RESULTS / run_name(stem_of(scenario, velocity)) / "metrics.csv")
+    return read_csv(RESULTS / run_name(stem_of(scenario, velocity, control)) / "metrics.csv")
 
 
-def run_of(scenario: str, velocity: str, damping: float, arm: str, start: int = 0) -> dict[str, Any]:
+def run_of(scenario: str, velocity: str, damping: float, arm: str, start: int = 0, control: str = "") -> dict[str, Any]:
     """One arm's run from one start, with one tracker."""
     return next(
-        r for r in rows_of(scenario, velocity) if r["damping"] == damping and r["arm"] == arm and r["start"] == start
+        r
+        for r in rows_of(scenario, velocity, control)
+        if r["damping"] == damping and r["arm"] == arm and r["start"] == start
     )
 
 
@@ -211,6 +224,52 @@ def plot_disturbed() -> Figure:
             for velocity, linestyle in LINESTYLES.items():
                 for arm, color in COLORS.items():
                     runs = [run_of(scenario, velocity, damping, arm) for damping in DAMPINGS]
+                    if measure == "ringing":
+                        y = [1000 * r[f"ringing_m{suffix}"] for r in runs]
+                    else:
+                        y = [returned(r, suffix, cap) for r in runs]
+                    ax.plot(DAMPINGS, y, color=color, linestyle=linestyle, marker="o", markersize=4, linewidth=1.4)
+                    if measure == "return":
+                        missing = [
+                            d
+                            for d, r in zip(DAMPINGS, runs, strict=True)
+                            if not np.isfinite(r[f"return_time_s{suffix}"])
+                        ]
+                        ax.scatter(missing, [cap] * len(missing), marker="x", s=60, color=color, zorder=3)
+            ax.set_xticks(DAMPINGS)
+            ax.set_ylim(0, None)
+            if row == 0:
+                ax.set_title(name, color="#0b0b0b", fontsize=10)
+            else:
+                ax.set_xlabel("damping ratio", color=TEXT_COLOR)
+            if col == 0:
+                ax.set_ylabel(
+                    "ringing over the next 2 s (mm)" if measure == "ringing" else "back within 5 mm\nof the path (s)",
+                    color=TEXT_COLOR,
+                )
+    return fig
+
+
+def plot_control_period() -> Figure:
+    """After each disturbance, the ringing and the return with the torque computed every 2 ms or every 10 ms.
+
+    Given a zero reference velocity; the runs given the reference's are much the same
+    (Section 3.4). Solid lines: every 2 ms; dashed: every 10 ms.
+    """
+    fig = Figure(figsize=(14, 6.6), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(
+        "Joint PD, zero reference velocity: the chosen ESN (blue) and the replay (orange),"
+        " the torque computed every 2 ms (solid) or every 10 ms and held (dashed)",
+        color="#0b0b0b",
+    )
+    axes = fig.subplots(2, len(DISTURBANCES), sharex=True)
+    for col, (scenario, suffix, name, cap) in enumerate(DISTURBANCES):
+        for row, measure in enumerate(("ringing", "return")):
+            ax = axes[row, col]
+            style(ax)
+            for control, linestyle in zip(CONTROLS, ("-", "--"), strict=True):
+                for arm, color in COLORS.items():
+                    runs = [run_of(scenario, "zero", damping, arm, control=control) for damping in DAMPINGS]
                     if measure == "ringing":
                         y = [1000 * r[f"ringing_m{suffix}"] for r in runs]
                     else:
@@ -462,6 +521,38 @@ def print_tables() -> None:
                     f" {np.median([r['peak_torque_nm'] for r in group]):.1f}, {largest['peak_torque_nm']:.0f}"
                     f" ({largest['origin'].split(' ', 1)[-1]})"
                 )
+
+    print("\n== 3.4 The torque computed every 2 ms or every 10 ms: arm, reference velocity, damping ratio, then for")
+    print("each: after the block's release and each push, ringing (mm) / back within 5 mm (s); whether it holds under")
+    print("the block and the pushes; undisturbed path RMSE (mm); offset starts: holds of 49, median path RMSE (mm),")
+    print("median and largest peak torque (N m)")
+    for velocity in VELOCITIES:
+        for damping in DAMPINGS:
+            for arm in ARMS:
+                print(f"  {ARMS[arm]}, {velocity}, {damping:g}:")
+                for control, control_name in CONTROLS.items():
+                    cells = []
+                    for scenario, suffix, _, _ in DISTURBANCES:
+                        r = run_of(scenario, velocity, damping, arm, control=control)
+                        back = r[f"return_time_s{suffix}"]
+                        back_text = f"{back:.2f}" if np.isfinite(back) else "not back"
+                        cells.append(f"{1000 * r[f'ringing_m{suffix}']:.1f} / {back_text}")
+                    holds = [
+                        run_of(scenario, velocity, damping, arm, control=control)["success"]
+                        for scenario in ("block", "pushes")
+                    ]
+                    nominal = run_of("nominal", velocity, damping, arm, control=control)
+                    group = [
+                        r for r in rows_of("offsets", velocity, control) if r["damping"] == damping and r["arm"] == arm
+                    ]
+                    peaks = [r["peak_torque_nm"] for r in group]
+                    rmse = 1000 * np.median([r["taught_path_rmse_m"] for r in group])
+                    print(
+                        f"    {control_name}: {' | '.join(cells)} || holds {holds[0]}, {holds[1]}"
+                        f" || {1000 * nominal['taught_path_rmse_m']:.2f}"
+                        f" || {sum(r['success'] for r in group)}, {rmse:.1f},"
+                        f" {np.median(peaks):.1f}, {max(peaks):.0f}"
+                    )
 
 
 if __name__ == "__main__":

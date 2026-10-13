@@ -5,14 +5,14 @@ a zero reference velocity, the chosen ESN makes the arm ring less after a block 
 a push than the replay of the take. Here the same ESN and the replay ran with joint
 PD better damped, at damping ratios 0.4 and 0.8, and with each tracker given the
 reference's velocity as well as a zero one, to see whether the ESN still helps
-when the tracker rings less by itself.
+when the tracker rings less by itself. All runs were then repeated with the
+tracker's torque computed every 10 ms, the ESN's period, and held between.
 
 - **Damping does most of the work.** At a damping ratio of 0.4, the replay's arm
   rings less after the pushes (6.3 to 9.5 mm) than the ESN's did at 0.1 (9.6 to
-  15.9 mm).
-  As the damping rises, the ESN's advantage after the pushes shrinks from a half or
-  two-thirds of the replay's ringing to three-quarters at 0.4 and four-fifths at
-  0.8.
+  15.9 mm). As the damping rises, the ESN's advantage after the pushes shrinks from
+  a half or two-thirds of the replay's ringing to three-quarters at 0.4 and
+  four-fifths at 0.8.
 - **After the block, the ESN's arm still rings a fifth to a quarter as much** at
   every damping ratio (1.7 to 6.5 mm against 10.5 to 34 mm). At 0.4 and above,
   though, the replay's ringing is mostly a fast snap back onto the path, over within
@@ -33,6 +33,12 @@ when the tracker rings less by itself.
   damping ratio. The reference velocity changes little after a disturbance. Its
   cost is a large torque at t = 0 from an offset start, where both references jump:
   up to 166 N m at 0.8.
+- **A 10 ms control period hurts only the lightly damped tracker, the replay most.**
+  With the torque computed every 10 ms and held, the replay's arm at 0.1 rings 32
+  to 43% more after a disturbance, comes back to the path 0.8 to 1.7 s later, and
+  no longer holds under the pushes; the ESN's rings 10 to 22% more and comes back as
+  before. At 0.4 and 0.8, the ringing rises by at most 10%, and the returns and
+  the holds are unchanged.
 
 ## 1. Question
 
@@ -43,6 +49,8 @@ when the tracker rings less by itself.
 2. **What does the reference velocity change?** With each tracker given the
    reference's velocity rather than a zero one, how do the two references compare,
    undisturbed, after a disturbance, and from offset starts?
+3. **And with a slower controller?** With the tracker's torque computed every 10 ms,
+   the ESN's period, and held between, what changes?
 
 ## 2. Setup
 
@@ -71,6 +79,13 @@ grows four and eight times from ζ = 0.1. At ζ = 0.1, the tracker overshoots a 
 by 73%, at 0.4 by 25%, and at 0.8 by 1.5%. ζ = 0.1 with a zero reference velocity
 repeats report 007; its runs here reproduce report 007's metrics exactly.
 
+As in reports 005 to 007, the tracker computes its torque at every simulation step
+of 2 ms. Every run is repeated with a control period of 10 ms
+(`control_period = 0.01`, Section 3.4): the tracker computes its torque every
+10 ms, at the ESN's instants, and holds it between, while the arm is still
+simulated every 2 ms. At each of these instants, the reference is the posture the
+ESN gave for it, as the tracker sees it at that instant every 2 ms.
+
 ### Measures
 
 Report 007's ([Section 2](../007-ringing-with-joint-pd/README.md#measures)): the
@@ -93,13 +108,14 @@ in [`manual_demonstration_v2_robot_damping`](../../experiments/manual_demonstrat
 | Runs | Command | Commit |
 | --- | --- | --- |
 | `<scenario>_robot_pd_{zero,reference}_velocity_filtered` (8) | `uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_damping/<name>.toml` | `9149131` |
+| `<scenario>_robot_pd_{zero,reference}_velocity_control10ms_filtered` (8) | as the first | `7b6c7b2` |
 | [`summary`](results/summary) | `uv run python reports/008-damping-and-reference-velocity/make_figures.py --logs --animations` | |
 
 All runs are deterministic, and every run record (`run.toml`) shows no uncommitted
 changes. Each run directory here holds its configuration, its run record, and its
 metrics (`metrics.csv`). [`make_figures.py`](make_figures.py) draws
-`undisturbed.png` and `disturbed.png` and prints the tables of Section 3 from the
-copies. With `--logs`, it reads the runs' logs under the storage root, which are
+`undisturbed.png`, `disturbed.png`, and `control_period.png` and prints the tables
+of Section 3 from the copies. With `--logs`, it reads the runs' logs under the storage root, which are
 not kept in Git, to draw each arm's distance from the taught path under the block
 and the pushes (`block_distances.png`, `pushes_distances.png`), and copies two of
 the runs' own figures (`pushes_joints.png`, `offset_torques.png`). With
@@ -271,6 +287,64 @@ velocity, from the run's own figure:
 
 ![Joint torques from an offset start, reference velocity](results/summary/offset_torques.png)
 
+### 3.4 A 10 ms control period
+
+The runs of Sections 3.1 to 3.3 again, with the tracker's torque computed every
+10 ms and held between. Below, given a zero reference velocity, each cell gives the
+torque computed every 2 ms (Section 3.2), then every 10 ms; the runs given the
+reference's velocity change in the same way (`make_figures.py` prints both).
+
+**The ringing over the next 2 s** (mm):
+
+| Tracker | Arm | The block's release | Push forward at 3 s | Push across at 7 s | Push across at 15 s |
+| --- | --- | ---: | ---: | ---: | ---: |
+| ζ 0.1 | ESN | 6.1 → 6.8 | 9.6 → 11.5 | 15.9 → 18.9 | 11.3 → 13.8 |
+| ζ 0.1 | replay | 33.9 → 44.7 | 19.1 → 27.4 | 25.8 → 35.5 | 21.6 → 30.2 |
+| ζ 0.4 | ESN | 2.9 → 3.1 | 4.7 → 5.0 | 7.5 → 8.0 | 5.8 → 6.2 |
+| ζ 0.4 | replay | 16.2 → 17.0 | 6.3 → 6.9 | 9.5 → 10.1 | 7.8 → 8.5 |
+| ζ 0.8 | ESN | 1.7 → 1.7 | 3.1 → 3.2 | 4.7 → 4.8 | 3.8 → 3.9 |
+| ζ 0.8 | replay | 10.5 → 10.7 | 3.7 → 3.9 | 5.7 → 5.8 | 4.8 → 5.0 |
+
+**Back within 5 mm of the taught path** (s after the disturbance's end):
+
+| Tracker | Arm | The block's release | Push forward at 3 s | Push across at 7 s | Push across at 15 s |
+| --- | --- | ---: | ---: | ---: | ---: |
+| ζ 0.1 | ESN | 2.98 → 2.98 | 2.45 → 2.42 | 3.61 → 3.60 | 3.15 → 3.16 |
+| ζ 0.1 | replay | 1.65 → 2.56 | 0.60 → 2.25 | 2.42 → 3.24 | 1.81 → 3.32 |
+| ζ 0.4 | ESN | 3.11 → 3.10 | 2.43 → 2.42 | 3.81 → 3.81 | 3.18 → 3.17 |
+| ζ 0.4 | replay | 0.42 → 0.42 | 0.03 → 0.03 | 0.38 → 0.38 | 0.45 → 0.45 |
+| ζ 0.8 | ESN | 4.49 → 4.49 | not back* | 4.10 → 4.10 | 3.37 → 3.37 |
+| ζ 0.8 | replay | 0.17 → 0.16 | 0.00 → 0.00 | 0.17 → 0.16 | 0.16 → 0.16 |
+
+\* As in Section 3.2.
+
+![After each disturbance, the torque computed every 2 ms or every 10 ms](results/summary/control_period.png)
+
+- **At ζ = 0.1, the replay suffers most.** Holding the torque over a period acts
+  roughly as a delay of half a period, which takes damping from the tracker, and at
+  0.1 there is little to spare. The replay's arm rings 32 to 43% more after each
+  disturbance and comes back to the path 0.8 to 1.7 s later; under the pushes it
+  arrives at 9.59 s still swinging from the push at 7 s, and leaves the goal during
+  the hold, with either reference velocity. The ESN's arm rings 10 to 22% more and
+  comes back as soon as before, so its ringing falls from 0.18 to 0.15 of the
+  replay's after the block, and from 0.50–0.62 to 0.42–0.53 after the pushes.
+- **At ζ = 0.4 and 0.8, almost nothing changes.** The ringing rises by at most 10%
+  for either arm, and the returns, the arrivals, and the holds are the same, so
+  Section 3.2's findings stand.
+- **Undisturbed,** only the replay at ζ = 0.1 changes noticeably: its path RMSE
+  rises from 0.85 to 1.13 mm (0.87 to 1.13 mm given the reference velocity).
+- **From the offset starts,** every arm still arrives and holds from all 49
+  starts, and the median path RMSE grows by 0.2 to 3.8 mm, most for the replay at
+  ζ = 0.1. The torque at t = 0 is computed while the reference is still at the
+  start posture, so the reference's first step reaches the tracker 10 ms later, as
+  a whole step of the proportional term, held for 10 ms. Given a zero reference
+  velocity, that step does not depend on the damping: the replay's median peak
+  torque is 13.1 N m at every damping ratio (9.7 to 12.4 N m every 2 ms), the ESN's
+  8.8 N m (7.5 to 8.5 N m). Given the reference velocity, the spike at t = 0 is as
+  high as every 2 ms at 0.4 and 0.8 (up to 79 to 83 N m and 157 to 166 N m), but
+  held for the whole 10 ms; at 0.1 it is lower (the replay's median: 13.1 N m,
+  against 21.7 N m).
+
 ## 4. Observations
 
 - **Following the arm and damping it do the same job.** The ESN reduces the ringing
@@ -289,12 +363,18 @@ velocity, from the run's own figure:
   gives the ESN its best undisturbed path, at any damping. The torque pulses that
   report 004 found with it show up here only at the offset starts, where both
   references jump at t = 0.
+- **A slower controller hurts the replay more.** With the torque computed every
+  10 ms, the ESN's period, the lightly damped replay rings a third to two-fifths
+  more and loses the hold under the pushes, while the ESN's arm rings only a little
+  more, likely because its reference goes with the arm. With ζ of 0.4 or more, the
+  control period hardly matters to either.
 
 ## 5. Next steps
 
 1. **The tracker for the next studies:** joint PD given the reference velocity,
    with ζ of 0.4 or 0.8, rather than report 007's ζ = 0.1 with a zero reference
-   velocity.
+   velocity. At these damping ratios, a control period of 10 ms, the ESN's, changes
+   little (Section 3.4).
 2. **A faster return in the score:** search the ESN with the chosen tracker, scored
    by the return to the path as well as the ringing, as report 007's first next
    step proposed; the slow swings now decide the comparison with the replay.

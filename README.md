@@ -363,7 +363,9 @@ The reports so far:
   as report 007's ESN after a push and returns to the path within 0.5 s, where the
   ESN still takes 2.4 to 4.5 s; under the block, the ESN presses with a twelfth of
   the replay's torque. Given the reference velocity, the ESN follows the taught path
-  within 0.6 mm at any damping, at the cost of torque spikes at offset starts.
+  within 0.6 mm at any damping, at the cost of torque spikes at offset starts. With
+  the torque computed every 10 ms, the lightly damped replay rings a third more and
+  the ESN only a little more.
 
 Each report has five parts:
 

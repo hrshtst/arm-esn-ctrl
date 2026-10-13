@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_damping/offsets_robot_pd_reference_velocity_control10ms_filtered.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_damping/offsets_robot_pd_reference_velocity_control10ms_filtered.toml"
+started = 2026-10-13 17:42:28+09:00
+host = "delbosque"
+commit = "7b6c7b26abde4bc4c204be13213362fa79aad2f6"
+uncommitted_changes = false
