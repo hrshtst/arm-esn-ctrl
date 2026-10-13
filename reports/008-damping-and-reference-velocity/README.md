@@ -115,12 +115,14 @@ All runs are deterministic, and every run record (`run.toml`) shows no uncommitt
 changes. Each run directory here holds its configuration, its run record, and its
 metrics (`metrics.csv`). [`make_figures.py`](make_figures.py) draws
 `undisturbed.png`, `disturbed.png`, and `control_period.png` and prints the tables
-of Section 3 from the copies. With `--logs`, it reads the runs' logs under the storage root, which are
-not kept in Git, to draw each arm's distance from the taught path under the block
-and the pushes (`block_distances.png`, `pushes_distances.png`), and copies two of
-the runs' own figures (`pushes_joints.png`, `offset_torques.png`). With
-`--animations`, it exports `block.gif` and `pushes.gif`, each arm rendered by
-skelarm's player.
+of Section 3 from the copies. With `--logs`, it reads the runs' logs under the
+storage root, which are not kept in Git, to draw each arm's distance from the
+taught path under the block and the pushes (`block_distances.png`,
+`pushes_distances.png`, and with the torque computed every 10 ms,
+`pushes_control10ms_distances.png`), and copies three of the runs' own figures
+(`pushes_joints.png`, `pushes_control10ms_joints.png`, `offset_torques.png`). With
+`--animations`, it exports `block.gif`, `pushes.gif`, and `pushes_control10ms.gif`,
+each arm rendered by skelarm's player.
 
 ## 3. Results
 
@@ -344,6 +346,25 @@ reference's velocity change in the same way (`make_figures.py` prints both).
   high as every 2 ms at 0.4 and 0.8 (up to 79 to 83 N m and 157 to 166 N m), but
   held for the whole 10 ms; at 0.1 it is lower (the replay's median: 13.1 N m,
   against 21.7 N m).
+
+Under the pushes with the torque computed every 10 ms, given a zero reference
+velocity: each arm's distance from the taught path, the joint angles from the run's
+own figure, and the animation, with the same arms as in Section 3.2, to compare
+with `pushes_distances.png`, `pushes_joints.png`, and `pushes.gif` there.
+
+![Under the pushes, the torque computed every 10 ms: each arm's distance from the taught path](results/summary/pushes_control10ms_distances.png)
+
+![Joint angles under the pushes, the torque computed every 10 ms, zero reference velocity](results/summary/pushes_control10ms_joints.png)
+
+![Animation: pushes, the torque computed every 10 ms](results/summary/pushes_control10ms.gif)
+
+- **Only the replay at ζ = 0.1 looks different.** Its hand swings about the path
+  for longer after each push: back within 5 mm at 5.75 s rather than 4.10 s after
+  the push at 3 s, at 10.74 s rather than 9.92 s after the push at 7 s, and at
+  18.82 s rather than 17.31 s after the push at 15 s. It arrives at 9.59 s still
+  swinging, and from 9.66 s to 9.75 s it is outside the goal's 20 mm radius, up to
+  23.6 mm from the target; every 2 ms, it stays within. The ESN's hand at
+  ζ = 0.1, and both arms at 0.4 and 0.8, take much the same course as every 2 ms.
 
 ## 4. Observations
 

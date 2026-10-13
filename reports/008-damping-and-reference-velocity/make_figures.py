@@ -22,10 +22,12 @@ metrics), it draws into ``results/summary``:
 and prints the tables of the report. With ``--logs``, it reads the runs' logs, which
 are not kept in Git, from the runs under the storage root, and also draws each arm's
 distance from the taught path under the block and the pushes, one panel per tracker
-(``block_distances.png``, ``pushes_distances.png``, Section 3.2), and copies two of
-the runs' own figures (FIGURES). With ``--animations``, it animates the block and the
-pushes with the arms of PANELS side by side, each rendered by skelarm's player
-(``block.gif``, ``pushes.gif``).
+(``block_distances.png``, ``pushes_distances.png``, Section 3.2), and under the pushes
+with the torque computed every 10 ms (``pushes_control10ms_distances.png``, Section
+3.4), and copies three of the runs' own figures (FIGURES). With ``--animations``, it
+animates the block and the pushes, and the pushes with the torque computed every
+10 ms, with the arms of PANELS side by side, each rendered by skelarm's player
+(``block.gif``, ``pushes.gif``, ``pushes_control10ms.gif``).
 """
 
 from __future__ import annotations
@@ -86,18 +88,19 @@ DISTURBANCE_COLOR = "#f0efec"
 COLORS = {"esn": ESN_COLOR, "replay": REPLAY_COLOR}
 LINESTYLES = {"zero": "-", "reference": "--"}
 
-# The animation of the pushes, given a zero reference velocity: per panel, the label (the arm's reference, then its
+# The animations, given a zero reference velocity: per panel, the label (the arm's reference, then its
 # tracker), the tracker setting, the arm, and the label's color.
 PANELS = [
     ("chosen ESN\ntracker: joint PD, damping ratio 0.8", "pd_w20_z0.8", "esn", ESN_COLOR),
     ("replay of the take by time\ntracker: joint PD, damping ratio 0.8", "pd_w20_z0.8", "replay", REPLAY_COLOR),
     ("replay of the take by time\ntracker: joint PD, damping ratio 0.1", "pd_w20_z0.1", "replay", REPLAY_LIGHT_COLOR),
 ]
-# The runs' own figures copied into the summary, by the name there: the scenario, the reference velocity, and the
-# figure in the run.
+# The runs' own figures copied into the summary, by the name there: the scenario, the reference velocity, the control
+# period (CONTROLS), and the figure in the run.
 FIGURES = {
-    "pushes_joints.png": ("pushes", "zero", "joints.png"),
-    "offset_torques.png": ("offsets", "reference", "torques_offset_+15_+15.png"),
+    "pushes_joints.png": ("pushes", "zero", "", "joints.png"),
+    "offset_torques.png": ("offsets", "reference", "", "torques_offset_+15_+15.png"),
+    "pushes_control10ms_joints.png": ("pushes", "zero", "_control10ms", "joints.png"),
 }
 ANIMATION_SPAN = (-0.2, 19.0)
 ANIMATION_FPS = 10.0
@@ -118,16 +121,21 @@ def main() -> None:
     }
     if args.logs:
         figures |= {f"{scenario}_distances.png": plot_distances(scenario) for scenario in ("block", "pushes")}
-        for name, (scenario, velocity, figure) in FIGURES.items():
+        figures["pushes_control10ms_distances.png"] = plot_distances("pushes", "_control10ms")
+        for name, (scenario, velocity, control, figure) in FIGURES.items():
             shutil.copyfile(
-                resolve_run_path(f"results/{run_name(stem_of(scenario, velocity))}") / figure, SUMMARY / name
+                resolve_run_path(f"results/{run_name(stem_of(scenario, velocity, control))}") / figure, SUMMARY / name
             )
     for name, fig in figures.items():
         fig.savefig(SUMMARY / name, dpi=150)
     print_tables()
     if args.animations:
-        export_animation("block", stem_of("block", "zero"), "the block, from 4.5 s to 5.5 s")
-        export_animation("pushes", stem_of("pushes", "zero"), "three pushes, at 3 s, 7 s, and 15 s")
+        pushes = "three pushes, at 3 s, 7 s, and 15 s, zero reference velocity"
+        export_animation("block", stem_of("block", "zero"), "the block, from 4.5 s to 5.5 s, zero reference velocity")
+        export_animation("pushes", stem_of("pushes", "zero"), pushes)
+        export_animation(
+            "pushes_control10ms", stem_of("pushes", "zero", "_control10ms"), f"{pushes}, the torque every 10 ms"
+        )
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -348,16 +356,17 @@ def path_distances(stem: str, setting: str, arm: str) -> tuple[NDArray[np.float6
     return log.times[task][::every], 1000 * distances_to_path(hand[::every], taught_hand())
 
 
-def plot_distances(scenario: str) -> Figure:
+def plot_distances(scenario: str, control: str = "") -> Figure:
     """Each arm's distance from the taught path over time in a scenario, one panel per tracker."""
     fig = Figure(figsize=(14, 6.6), facecolor=SURFACE_COLOR, layout="constrained")
+    held = f", the torque computed {CONTROLS[control]} and held" if control else ""
     fig.suptitle(
-        f"{scenario.capitalize()}, joint PD: how far each arm goes from the taught path, and how it comes back",
+        f"{scenario.capitalize()}, joint PD{held}: how far each arm goes from the taught path, and how it comes back",
         color="#0b0b0b",
     )
     axes = fig.subplots(len(VELOCITIES), len(DAMPINGS), sharex=True, sharey=True)
     for row, (velocity, velocity_name) in enumerate(VELOCITIES.items()):
-        stem = stem_of(scenario, velocity)
+        stem = stem_of(scenario, velocity, control)
         with (RESULTS / run_name(stem) / "config.toml").open("rb") as f:
             spans = disturbance_spans(tomllib.load(f)["disturbance"])
         for col, damping in enumerate(DAMPINGS):
@@ -436,7 +445,7 @@ def export_animation(name: str, stem: str, title: str) -> None:
         for table, (begin, end) in zip(tables, spans, strict=True):
             if begin <= t < end:
                 status = f"   pushed ({table['force']:g} N)" if table["type"] == "push" else "   blocked"
-        return f"{title}, zero reference velocity   t = {t:+.1f} s{status}"
+        return f"{title}   t = {t:+.1f} s{status}"
 
     # One font for every frame: the largest, up to 20, in which the header fits, with a status or the last time.
     lines = [header_line(t) for t in (*[begin for begin, _ in spans], ANIMATION_SPAN[1])]
