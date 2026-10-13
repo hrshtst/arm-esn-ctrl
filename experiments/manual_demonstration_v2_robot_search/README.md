@@ -128,3 +128,24 @@ held arm.
 A setting must, for all ten seeds, arrive and hold in every scenario, come back onto
 the path after every disturbance, and end at the target. The undisturbed runs
 repeat settings of stage 1, which they must reproduce.
+
+### Representatives of Step B to try
+
+Some settings of the star, trained by [`autonomous_esn.py`](../autonomous_esn.py)
+as the candidates above, so that their ESNs can be tried in the apps. Each takes its
+setting's typical seed: the one nearest the setting's medians over its ten seeds in
+the undisturbed path RMSE, the return onto the path after the first push and after
+the push at the target, and the reference lead and the farthest distance from the
+path under the block. Seed 8 is typical of #2's setting, of leak rate 0.02, and of
+input scaling 1.5, so those three share a reservoir.
+
+| Configuration | Why |
+| --- | --- |
+| `grid_lr0.03_sr1.35_is2_seed8_filtered.toml` | candidate #2's setting (#2 itself is seed 5) |
+| `grid_lr0.02_sr1.35_is2_seed8_filtered.toml` | a slower leak rate, which came back the most reliably after the push at the target |
+| `grid_lr0.025_sr1.35_is2_seed3_filtered.toml` | a leak rate between 0.02 and #2's 0.03 |
+| `grid_lr0.03_sr1.35_is1.5_seed8_filtered.toml` | a weaker input, which came back the fastest after the push at the target |
+| `grid_lr0.03_sr1.2_is2_seed2_filtered.toml` | a smaller spectral radius, at the low end of those that lost no seed |
+| `grid_lr0.03_sr1.75_is2_seed9_filtered.toml` | the largest spectral radius, whose reference ran furthest ahead under the block |
+| `grid_lr0.04_sr1.35_is2_seed7_filtered.toml` | a faster leak rate, which waited longer under the block but lost two of its ten seeds |
+| `grid_lr0.04_sr1.35_is2_seed8_filtered.toml` | a lost seed of that faster leak rate, with the reservoir of the leak rates 0.02 and 0.03 above: after the push at the target, its hand drifted away from the target |
