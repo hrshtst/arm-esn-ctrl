@@ -57,9 +57,11 @@ uv run python tools/robot_app.py experiments/demonstrations/reach_manual_single.
 `--kp 30,5 --kd 1,0.2`); a small `--kd` makes the tracking error oscillate.
 `--zero-reference-velocity` gives the tracking law a zero reference velocity, so
 that its derivative term damps the arm's own velocity rather than the velocity
-error. The reference generator and the tracker are fixed at launch, and the
-side panel shows them, with the tracking error's natural frequency and damping
-ratio for each joint.
+error. `--control-period 0.01` computes the tracker's torque every 10 ms and holds
+it between, while the arm is still simulated every step, as `control_period` in
+the experiments' `[tracker]`. The reference generator and the tracker are fixed at
+launch, and the side panel shows them, with the tracking error's natural frequency
+and damping ratio for each joint.
 
 Before Play, dragging the tip poses the arm. During a run, running or paused,
 dragging pulls the tip toward the cursor with a spring force (the drag stiffness

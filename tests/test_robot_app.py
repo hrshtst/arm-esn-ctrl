@@ -124,8 +124,16 @@ def test_the_launch_options_choose_the_mode(qapp, demo_config, esn, take):
 
 @pytest.mark.parametrize(
     "tracker",
-    [COMPUTED_TORQUE, TrackerConfig("pd", 20.0, 0.02, damping=0.1, reference_velocity=False)],
-    ids=["computed torque", "joint PD underdamped without the reference velocity"],
+    [
+        COMPUTED_TORQUE,
+        TrackerConfig("pd", 20.0, 0.02, damping=0.1, reference_velocity=False),
+        TrackerConfig("pd", 20.0, 0.02, damping=0.4, control_period=0.01),
+    ],
+    ids=[
+        "computed torque",
+        "joint PD underdamped without the reference velocity",
+        "joint PD with the torque held for 10 ms",
+    ],
 )
 def test_a_take_is_replayed_as_the_experiment_replays_it_without_a_demonstrator(qapp, demo_config, take, tracker):
     config = {name: table for name, table in demo_config.items() if name != "controller"}  # no demonstrator
@@ -146,6 +154,8 @@ def test_a_take_is_replayed_as_the_experiment_replays_it_without_a_demonstrator(
     assert app.skeleton.q == pytest.approx(log.channel("q")[-1], abs=1e-12)
     if not tracker.reference_velocity:
         assert "Reference velocity: zero" in app.mode_label.text()
+    if tracker.control_period is not None:
+        assert "Torque: computed every 10 ms, held between" in app.mode_label.text()
 
 
 def test_the_esn_mode_simulates_the_arm_as_the_experiment_does(qapp, demo_config, esn):
@@ -309,6 +319,11 @@ def test_gains_must_be_positive_and_one_per_joint(qapp, demo_config):
         make_app(demo_config, tracker=tracker, gains=(np.array([1.0]), np.array([1.0])))
 
 
+def test_the_control_period_must_be_a_whole_number_of_steps(qapp, demo_config):
+    with pytest.raises(ValueError, match="control period"):
+        make_app(demo_config, tracker=TrackerConfig("pd", 20.0, 0.02, control_period=0.005))  # 2.5 steps of 2 ms
+
+
 def test_one_gain_applies_to_every_joint():
     parser = build_parser()
 
@@ -344,6 +359,7 @@ def test_space_plays_while_a_number_box_has_the_focus(qapp, demo_config, box):
         (["--law", "pd", "--kp", "100"], "go together"),
         (["--demonstrator", "--kp", "100", "--kd", "10"], "does not use"),
         (["--demonstrator", "--zero-reference-velocity"], "does not use"),
+        (["--demonstrator", "--control-period", "0.01"], "does not use"),
         (["--law", "pd", "--kp", "100", "--kd", "10", "--damping", "0.1"], "with --omega"),
         (["--law", "pd", "--omega", "20", "--replay", "take.npz", "--model", "esn.toml"], "excludes"),
         (["--replay", "take.npz", "--demonstrator"], "excludes"),
@@ -375,5 +391,6 @@ def test_the_command_line_accepts_each_mode():
         ["--law", "pd", "--kp", "100,20", "--kd", "5,1"],
         ["--law", "pd", "--omega", "20", "--damping", "0.1", "--zero-reference-velocity", "--replay", "take.npz"],
         ["--law", "pd", "--omega", "20", "--damping", "0.1", "--zero-reference-velocity", "--model", "esn.toml"],
+        ["--law", "pd", "--omega", "20", "--damping", "0.4", "--control-period", "0.01", "--model", "esn.toml"],
     ):
         check_arguments(parser, parser.parse_args([str(CONFIG), *arguments]))

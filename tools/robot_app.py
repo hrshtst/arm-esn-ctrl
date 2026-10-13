@@ -35,7 +35,9 @@ The mode is fixed at launch:
 With ``--omega``, ``--damping`` sets the damping ratio of the tracking error (1,
 critically damped, by default). ``--zero-reference-velocity`` gives the tracking law
 a zero reference velocity, so that its derivative term damps the arm's own velocity
-rather than the velocity error.
+rather than the velocity error. ``--control-period`` computes the tracker's torque
+only that often and holds it between, as ``control_period`` in
+``experiments/robot_esn.py``; the arm is still simulated every step.
 
 External forces never act during the warm-up. The faint gray arm is the initial
 posture: the given posture, or else the start posture of the last run. When the
@@ -331,6 +333,10 @@ class RobotApp(QMainWindow):
         self.period = esn.config.dt if esn is not None else period
         self.hold = hold
         self.dt = float(config["simulator"]["dt"])
+        control_period = None if tracker is None else tracker.control_period
+        if control_period is not None and not np.isclose(round(control_period / self.dt) * self.dt, control_period):
+            msg = f"the control period {control_period} s must be a whole number of simulation steps of {self.dt} s"
+            raise ValueError(msg)
         self.enforce_limits = bool(config["simulator"].get("enforce_limits", True))
         self._lower = np.array([link.prop.qmin for link in skeleton.links[1:]])
         self._upper = np.array([link.prop.qmax for link in skeleton.links[1:]])
@@ -649,6 +655,8 @@ class RobotApp(QMainWindow):
             )
             if not self.tracker_config.reference_velocity:
                 controller += "\nReference velocity: zero (the derivative term damps the arm's own velocity)"
+            if self.tracker_config.control_period is not None:
+                controller += f"\nTorque: computed every {1000 * self.tracker_config.control_period:g} ms, held between"
         return f"Reference: {reference}\nController: {controller}"
 
     def _refresh(self) -> None:
@@ -783,6 +791,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="give the tracking law a zero reference velocity: its derivative term damps the arm's own velocity",
     )
     parser.add_argument(
+        "--control-period",
+        type=float,
+        help="compute the tracker's torque this often and hold it between (s): a whole number of simulation steps;"
+        " by default, at every step",
+    )
+    parser.add_argument(
         "--kp", help="the tracker's proportional gain instead of --omega: one value, or one per joint (comma-separated)"
     )
     parser.add_argument(
@@ -826,10 +840,13 @@ def check_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -
         parser.error("--replay excludes --model and --demonstrator: the take is the reference")
     gains = (args.omega, args.damping, args.kp, args.kd)
     if args.demonstrator and (
-        args.law is not None or any(value is not None for value in gains) or args.zero_reference_velocity
+        args.law is not None
+        or any(value is not None for value in gains)
+        or args.zero_reference_velocity
+        or args.control_period is not None
     ):
         parser.error(
-            "--law, --omega, --damping, --kp, --kd, and --zero-reference-velocity set the tracker,"
+            "--law, --omega, --damping, --kp, --kd, --zero-reference-velocity, and --control-period set the tracker,"
             " which the demonstrator's own controller does not use"
         )
     if args.demonstrator:
@@ -889,6 +906,7 @@ def main() -> None:
             args.acceleration_filter,
             damping=1.0 if args.damping is None else args.damping,
             reference_velocity=not args.zero_reference_velocity,
+            control_period=args.control_period,
         )
     if args.kp is not None:
         gains = (
