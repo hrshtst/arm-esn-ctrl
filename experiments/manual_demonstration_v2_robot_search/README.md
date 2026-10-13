@@ -189,3 +189,21 @@ The grid decides the ESN of Step C. A setting of the grid replaces #2's (leak ra
 If several settings do, the one with the largest median gain wins, and the ESN of
 Step C is its typical seed, chosen as for the representatives above. Otherwise, the
 ESN of Step C is #2 itself.
+
+Only input scaling 1.5, at leak rate 0.03 and spectral radius 1.35, replaced #2's
+setting: back sooner for 8 of the 10 seeds, by 0.41 s in the median. Its typical
+seed is 8 (`grid_lr0.03_sr1.35_is1.5_seed8_filtered.toml` above).
+
+## Step C: the chosen ESN in report 005's scenarios
+
+The chosen ESN (leak rate 0.03, spectral radius 1.35, input scaling 1.5, seed 8)
+runs report 005's validation, as the candidates of Step A, each against the replay
+of the take:
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_search/pushes_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml
+```
+
+| Configurations | Scenario |
+| --- | --- |
+| `{nominal,block,pushes,offsets}_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml` | as in Step A |
