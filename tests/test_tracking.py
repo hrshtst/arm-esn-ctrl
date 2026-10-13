@@ -4,6 +4,7 @@
 """Tests for the robot arm tracking a reference generated from its measured state."""
 
 import tomllib
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -247,3 +248,47 @@ def test_the_nearest_demonstration_is_found_by_its_start_posture():
     demos = {"demo_00": np.radians([[29.4, 88.2]]), "demo_07": np.radians([[18.2, 119.9]])}
 
     assert nearest_demonstration(np.radians([20.0, 115.0]), demos) == "demo_07"
+
+
+CONTROL_PERIOD = 0.01  # 5 simulation steps
+HELD = TrackerConfig("pd", omega=20.0, acceleration_filter=0.02, damping=0.1, control_period=CONTROL_PERIOD)
+
+
+def test_with_a_control_period_the_torque_is_computed_at_its_instants_and_held_between(demos):
+    demo = demos[1]
+
+    log = run(ReplaySource(demo), demo[0], HELD, duration=1.0)
+
+    tau = log.channel("tau")[:-1]  # skelarm records the last frame without advancing the controller
+    blocks = tau.reshape(-1, round(CONTROL_PERIOD / DT), tau.shape[1])
+    assert blocks == pytest.approx(np.repeat(blocks[:, :1], blocks.shape[1], axis=1), abs=0.0)
+    assert np.abs(np.diff(blocks[:, 0], axis=0)).max() > 0.0
+
+
+def test_a_control_period_of_one_simulation_step_changes_nothing(demos):
+    demo = demos[1]
+    every_step = TrackerConfig("pd", omega=20.0, acceleration_filter=0.02, damping=0.1)
+
+    held = run(ReplaySource(demo), demo[0], replace(HELD, control_period=DT), duration=1.0)
+    default = run(ReplaySource(demo), demo[0], every_step, duration=1.0)
+
+    for channel in ("q", "tau", "q_ref", "error"):
+        assert held.channel(channel) == pytest.approx(default.channel(channel), abs=0.0)
+
+
+def test_with_a_control_period_the_reference_and_the_error_are_still_logged_at_every_step(demos):
+    demo = demos[1]
+
+    held = run(ReplaySource(demo), demo[0], HELD, duration=1.0)
+    every_step = run(ReplaySource(demo), demo[0], replace(HELD, control_period=None), duration=1.0)
+
+    # A replay's reference does not depend on the arm, so it is the same, step by step.
+    assert held.channel("q_ref") == pytest.approx(every_step.channel("q_ref"), abs=1e-12)
+    assert held.channel("error") == pytest.approx(held.channel("q_ref") - held.channel("q"), abs=1e-12)
+
+
+def test_a_control_period_must_be_a_whole_number_of_simulation_steps(demos):
+    config = replace(HELD, control_period=0.005)
+
+    with pytest.raises(ValueError, match="control period"):
+        run(ReplaySource(demos[1]), demos[1][0], config, duration=0.1)

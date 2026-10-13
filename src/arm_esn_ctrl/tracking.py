@@ -12,7 +12,9 @@ tracking law of skelarm, computed torque or joint PD, turns the reference into
 joint torques at every simulation step. The tracking law can instead be given a
 zero reference velocity (``reference_velocity = False``): then its derivative term
 damps the arm's own velocity, as in PD control of a fixed posture, rather than the
-velocity error.
+velocity error. With a control period (``control_period``), the tracking law's
+torque is computed only at its instants and held between them, as by a controller
+slower than the simulation; the reference is still logged at every step.
 
 There are two sources:
 
@@ -62,6 +64,9 @@ class TrackerConfig:
     acceleration_filter: float  # time constant of the low-pass filter on the reference acceleration (s)
     damping: float = 1.0  # damping ratio of the tracking error: 1 is critically damped, less oscillates
     reference_velocity: bool = True  # False gives the tracking law a zero reference velocity
+    # How often the tracking law's torque is computed, then held (s): a whole number of simulation steps. None
+    # computes it at every simulation step.
+    control_period: float | None = None
 
 
 def tracking_gains(
@@ -212,6 +217,9 @@ class ReferenceTracker(Controller):
         self._start = np.zeros(len(kp))
         self._q_from = self._q_to = self._start  # the current segment of the reference
         self._velocity = np.zeros(len(kp))
+        self._q = self._start  # the arm's joint angles at the current step
+        self._due = True  # whether the tracking law's torque is computed at the current step
+        self._torque: NDArray[np.float64] | None = None  # the torque held since the last control instant
 
     def reset(self, skeleton: Skeleton) -> None:
         """Start a run from the arm's current posture."""
@@ -223,6 +231,9 @@ class ReferenceTracker(Controller):
         self.reference.q = self._start
         self.reference.dq = np.zeros_like(self._start)
         self.reference.ddq = np.zeros_like(self._start)
+        self._q = self._start
+        self._due = True
+        self._torque = None
 
     def update(self, t: float, skeleton: Skeleton, dt: float) -> None:
         """Ask the source for the next posture at each reference instant, and move along the segment."""
@@ -231,6 +242,15 @@ class ReferenceTracker(Controller):
             msg = f"the reference period {self.period} s must be a whole number of simulation steps of {dt} s"
             raise ValueError(msg)
         within = self._step % steps_per_period
+        if self.config.control_period is not None:
+            steps_per_control = round(self.config.control_period / dt)
+            if steps_per_control < 1 or not np.isclose(steps_per_control * dt, self.config.control_period):
+                msg = (
+                    f"the control period {self.config.control_period} s must be a whole number of simulation steps"
+                    f" of {dt} s"
+                )
+                raise ValueError(msg)
+            self._due = self._step % steps_per_control == 0
         if within == 0:
             k = self._step // steps_per_period - self.warmup_steps
             q_next = self.source.next_posture(k, skeleton.q.copy())
@@ -247,12 +267,19 @@ class ReferenceTracker(Controller):
         self._step += 1
 
     def control(self, t: float, skeleton: Skeleton) -> NDArray[np.float64]:
-        """The tracking law's torque for the current reference."""
-        return self.law.control(t, skeleton)
+        """The tracking law's torque for the current reference, or, with a control period, the one held."""
+        if self.config.control_period is None:
+            return self.law.control(t, skeleton)
+        self._q = skeleton.q.copy()
+        if self._due or self._torque is None:
+            self._torque = np.asarray(self.law.control(t, skeleton), dtype=np.float64)
+        return self._torque
 
     def log_channels(self) -> dict[str, Any]:
-        """The reference ``q_ref`` and the tracking error ``error = q_ref - q``."""
-        return self.law.log_channels()
+        """The reference ``q_ref`` and the tracking error ``error = q_ref - q``, at every step."""
+        if self.config.control_period is None:
+            return self.law.log_channels()
+        return {"q_ref": self.reference.q.copy(), "error": self.reference.q - self._q}
 
 
 def track(

@@ -1,0 +1,65 @@
+# As pushes_robot_pd_reference_velocity_filtered.toml, with the tracker's torque
+# computed every 10 ms, the ESN's period, and held between, while the arm is still
+# simulated every 2 ms. The tracker study (report 008): report 007's chosen ESN
+# (manual_demonstration_v2_robot_ringing/grid_lr0.02_sr1.35_is2_seed7_filtered.toml:
+# leak rate 0.02, spectral radius 1.35, input scaling 2, seed 7) against the replay
+# of the take, with joint PD at damping ratios 0.1, 0.4, and 0.8, given the
+# reference's velocity, the change of the reference over each 10 ms period, so that
+# the derivative term damps the velocity error: report 007's three pushes of 0.5 s
+# at the tip, forward at 3 s, across at 7 s, and across again at 15 s, after the
+# hold, from the demonstrated start.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_damping/pushes_robot_pd_reference_velocity_control10ms_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_ringing/20261013-153020-grid_lr0.02_sr1.35_is2_seed7_filtered/esn.toml"
+
+[tracker]
+# Joint PD at omega = 20 rad/s, at three damping ratios, given the reference's velocity.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.1, 0.4, 0.8]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 3.2, 2.9, and 1.9 Hz at the three damping ratios
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+# Without an effort_window, the torque, effort, and force are measured over the whole run.
+
+# Each push: a force of `force` N for `duration` s from `onset` (task time, s), at
+# `angle_deg` counterclockwise from the direction toward the target (0 forward, 90
+# across, 180 backward), fixed for the run by the start posture. The pushes across
+# keep report 006's forces: a push carries the replay farthest at its first
+# overshoot, about 0.16 s in, so the replay is carried as far as by report 006's
+# 0.2 s pushes. The push forward is gentler, 3 N rather than 4 N: it sends the ESN
+# ahead on a route of its own, from which it must settle before the push at 7 s.
+
+[[disturbance]]  # nearly forward: 10 deg off it, toward counterclockwise across (report 006's backward push, reversed)
+type = "push"
+force = 3.0            # N
+onset = 3.0            # task time (s): the take's hand is 18% of the way
+duration = 0.5         # s
+angle_deg = 10.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, counterclockwise: 10 deg off it, toward the target
+type = "push"
+force = 5.0            # N
+onset = 7.0            # task time (s): 62% of the way, and done 2.1 s before the take arrives
+duration = 0.5         # s
+angle_deg = 80.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, clockwise, after the hold: 10 deg off it, toward the target
+type = "push"
+force = 4.0            # N
+onset = 15.0           # task time (s)
+duration = 0.5         # s
+angle_deg = -80.0      # deg from the direction toward the target

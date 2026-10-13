@@ -21,7 +21,9 @@ law, or a table with a list for each law, such as
 ``omegas = {computed_torque = [10.0], pd = [20.0]}``. With ``reference_velocity =
 false`` (optional; the default is true), the tracking laws are given a zero
 reference velocity, so that their derivative term damps the arm's own velocity
-rather than the velocity error. Their runs start with the arm holding its
+rather than the velocity error. With ``control_period`` (optional, in seconds; a
+whole number of simulation steps), their torque is computed only that often and held
+between, as by a controller slower than the simulation. Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table, or several ``[[disturbance]]`` tables,
 push or block all three arms alike (see :mod:`arm_esn_ctrl.disturbances`): from the
@@ -151,6 +153,8 @@ def main() -> None:
     print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
     if not config["tracker"].get("reference_velocity", True):
         print("The tracking laws are given a zero reference velocity")
+    if "control_period" in config["tracker"]:
+        print(f"The tracking laws' torque is computed every {config['tracker']['control_period']} s and held between")
 
     def disturbance_from(i: int) -> Any:
         """A fresh disturbance for a run from start posture ``i``."""
@@ -182,8 +186,10 @@ def main() -> None:
             tracker["acceleration_filter"],
             damping=setting.damping,
             reference_velocity=tracker.get("reference_velocity", True),
+            control_period=tracker.get("control_period"),
         )
         gains = tracking_gains(tracker_config, setup.skeleton, end_posture)
+        held = {} if tracker_config.control_period is None else {"control_period": tracker_config.control_period}
         setting_dir = run_dir / setting.name
         setting_dir.mkdir()
         for i, start in enumerate(setup.starts):
@@ -212,7 +218,8 @@ def main() -> None:
                             "damping": setting.damping,
                             "reference_velocity": tracker_config.reference_velocity,
                             "start": start.origin,
-                        },
+                        }
+                        | held,
                     },
                     external_force=disturbance_from(i),
                 )

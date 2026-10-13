@@ -32,3 +32,4 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot
 | --- | --- |
 | `{nominal,block,pushes,offsets}_robot_pd_zero_velocity_filtered.toml` | joint PD at the three damping ratios, given a zero reference velocity |
 | `{nominal,block,pushes,offsets}_robot_pd_reference_velocity_filtered.toml` | the same, given the reference's velocity |
+| `{nominal,block,pushes,offsets}_robot_pd_{zero,reference}_velocity_control10ms_filtered.toml` | the same eight, but with the tracker's torque computed every 10 ms, the ESN's period, and held between (`control_period`), while the arm is still simulated every 2 ms |

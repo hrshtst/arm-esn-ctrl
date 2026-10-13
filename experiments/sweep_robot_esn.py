@@ -164,6 +164,7 @@ def main() -> None:
             tracker["acceleration_filter"],
             damping=setting.damping,
             reference_velocity=tracker.get("reference_velocity", True),
+            control_period=tracker.get("control_period"),
         )
         trackers[setting.name] = (tracker_config, tracking_gains(tracker_config, setup.skeleton, end_posture))
     duration = float(evaluation["duration"])
