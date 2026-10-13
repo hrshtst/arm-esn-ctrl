@@ -26,7 +26,8 @@ regularization is weighed against, so K copies weaken a given ridge K times.
 
 The noise is white unless ``teacher_noise_exponent`` colors it: its power spectrum
 is then proportional to 1/f^β, with β the exponent, such as 1 for pink noise and 2
-for brown noise, which drifts like a random walk. Colored noise is drawn white,
+for brown noise, which drifts like a random walk, or -1 for blue noise and -2 for
+violet noise, whose power rises with the frequency. Colored noise is drawn white,
 shaped in the frequency domain, without its mean, and scaled so that over each
 copy of a trajectory its standard deviation in each joint is ``teacher_noise_deg``.
 
@@ -83,7 +84,7 @@ class EsnConfig:
     seed: int  # random seed of the reservoir and input weights, and of the teacher noise
     teacher_noise_deg: float = 0.0  # standard deviation of the noise on the teacher-forced input (deg)
     teacher_copies: int = 1  # how many times each training trajectory is fed in, each with its own noise
-    teacher_noise_exponent: float = 0.0  # the noise's power spectrum goes as 1/f to this: 0 white, 1 pink, 2 brown
+    teacher_noise_exponent: float = 0.0  # its power spectrum goes as 1/f to this: 0 white, 1 pink, 2 brown, -1 blue
 
     @property
     def warmup_steps(self) -> int:

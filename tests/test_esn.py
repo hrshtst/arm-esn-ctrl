@@ -230,9 +230,9 @@ def test_white_teacher_noise_is_drawn_directly():
     )
 
 
-@pytest.mark.parametrize("exponent", [0.0, 1.0, 2.0])
+@pytest.mark.parametrize("exponent", [-2.0, -1.0, 0.0, 1.0, 2.0])
 def test_colored_noise_has_the_asked_power_spectrum(exponent):
-    """Over many draws, the log power falls with the log frequency at the exponent's slope."""
+    """Over many draws, the log power changes with the log frequency at the exponent's slope, falling or rising."""
     rng = np.random.default_rng(0)
     draws = np.stack([colored_noise(rng, (1024, 2), exponent) for _ in range(200)])
     power = np.mean(np.abs(np.fft.rfft(draws, axis=1)) ** 2, axis=(0, 2))
@@ -242,7 +242,7 @@ def test_colored_noise_has_the_asked_power_spectrum(exponent):
     assert draws.std(axis=1) == pytest.approx(1.0, abs=0.1)
 
 
-@pytest.mark.parametrize("exponent", [1.0, 2.0])
+@pytest.mark.parametrize("exponent", [-2.0, -1.0, 1.0, 2.0])
 def test_colored_noise_has_no_mean_and_a_unit_standard_deviation(exponent):
     noise = colored_noise(np.random.default_rng(0), (300, 2), exponent)
     assert noise.mean(axis=0) == pytest.approx(0.0, abs=1e-12)
@@ -253,7 +253,7 @@ def test_colored_teacher_noise_changes_the_readout():
     q = joint_reach()
     assert CONFIG.teacher_noise_exponent == 0.0
     white = trained(NOISY, q).generate(q[0], 150)
-    for exponent in (1.0, 2.0):
+    for exponent in (-1.0, 1.0, 2.0):
         config = dataclasses.replace(NOISY, teacher_noise_exponent=exponent)
         colored = trained(config, q).generate(q[0], 150)
         np.testing.assert_array_equal(colored, trained(config, q).generate(q[0], 150))
