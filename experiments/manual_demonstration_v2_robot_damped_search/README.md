@@ -161,3 +161,7 @@ They are report 008's configurations with the torque computed every 10 ms
 with the chosen ESN in place of report 007's, so that the replay repeats report
 008's runs: undisturbed, under the block, under the pushes, and from the 49 offset
 starts.
+
+[`robot_states.py`](../robot_states.py) then shows the chosen ESN's reservoir states in
+the runs given the reference's velocity, at the search's damping ratio of 0.4
+(`states_robot_white1deg_seed3_filtered.toml`), as report 007 did for its chosen ESN.
