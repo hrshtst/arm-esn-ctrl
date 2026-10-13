@@ -15,16 +15,19 @@ From report 005's copy of the take and the copies of the runs under ``results/``
 - ``star.png``: Step B, the star around candidate #2, every seed undisturbed,
   under the pushes, and under the block (Section 3.4);
 
-and prints the tables of the report. With ``--logs``, it reads the runs' logs,
-which are not kept in Git, from the runs under the storage root, and also draws,
-with ``experiments/robot_esn.py``'s own functions, the joint angles and the joint
-torques of the chosen ESN's arm and the replay in the undisturbed run, the block,
-the pushes, and the offset starts of OFFSETS (``<scenario>_joints.png`` and
-``<scenario>_torques.png``, Section 3.8), and how far the pushes carry each arm off
-the taught path (``flexibility.png`` and ``flexibility.csv``, Section 3.7). With
-``--animations``, it animates the undisturbed run, the block, the pushes, and the
-offset starts of OFFSETS (``<name>.gif``), the arms side by side, each rendered by
-skelarm's player. With ``--videos``, it exports every arm (the chosen ESN's and the
+and prints the tables of the report. The validation compares the arms of COMPARED:
+the chosen ESN and the replay with joint PD, and the replay with computed torque;
+the chosen ESN with computed torque is a note. With ``--logs``, it reads the runs'
+logs, which are not kept in Git, from the runs under the storage root, and also
+draws, with ``experiments/robot_esn.py``'s own functions, the joint angles and the
+joint torques of the chosen ESN's arm and the replay with joint PD in the
+undisturbed run, the block, the pushes, and the offset starts of OFFSETS
+(``<scenario>_joints.png`` and ``<scenario>_torques.png``, Section 3.8), and how far
+each compared arm goes from the taught path under the block and the pushes
+(``disturbances.png``, Section 3.7). With ``--animations``, it animates the
+undisturbed run, the block, the pushes, and the offset starts of OFFSETS
+(``<name>.gif``), the arms of PANELS side by side, each rendered by skelarm's
+player. With ``--videos``, it exports every arm (the chosen ESN's and the
 replay's) with each tracker in those five runs as an MP4 for slides, with the
 player's side panel, into VIDEOS under the storage root, since they are not kept in
 Git; report 005 exported the take's.
@@ -92,36 +95,44 @@ KEPT = (1, 2, 6, 7)  # the candidates of Step A
 LINES = {"sr": "spectral_radius", "lr": "leak_rate", "is": "input_scaling"}
 # The offset starts (deg) shown: the largest offset, and the one from which report 005's ESN failed.
 OFFSETS = [(15.0, 15.0), (0.0, -10.0)]
-PUSH_TIMES = [(4.0, 4.2, 8.0), (8.0, 8.2, 12.0), (13.0, 13.2, 17.0)]  # each push: onset, end, and window end (s)
-# A hand not back on the path by the next push, or by the end of the run, counts as back then (s after the push).
+# In the search's sweeps, a hand not back on the path by the next push, or by the end of the run, counts as back
+# then (s after the push; the last push came at 13 s, and the runs lasted 22 s).
 RETURN_CAPS = {1: 8.0 - 4.2, 3: 22.0 - 13.2}
 BACK_WITHIN = 5.0  # mm: an arm is back on the taught path once it stays within this of it
-FLEXIBILITY_CSV = SUMMARY / "flexibility.csv"
 
 ESN_COLOR = "#2a78d6"
-CT_COLOR = "#4a3aa7"  # the chosen ESN with computed torque, in the animations
 REPLAY_COLOR = "#eb6834"
+REPLAY_CT_COLOR = "#9a5b13"  # the replay with computed torque
 LOST_COLOR = "#c03c86"
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
 DISTURBANCE_COLOR = "#f0efec"
 
-# The arms compared, both in the chosen ESN's runs: their name and color.
-ARMS = {"esn": (CHOSEN_NAME, ESN_COLOR), "replay": ("replay", REPLAY_COLOR)}
+# The arms of the chosen ESN's runs, by name.
+ARMS = {"esn": CHOSEN_NAME, "replay": "replay"}
+PD = "pd_w20_z0.1"  # the tracker of the comparisons; the figures of the chosen ESN's runs show it alone
+# The arms compared: the arm, its tracker setting, its name, and its color. The chosen ESN with computed torque is
+# a note (NOTED).
+COMPARED = [
+    ("esn", PD, "chosen ESN, joint PD", ESN_COLOR),
+    ("replay", PD, "replay, joint PD", REPLAY_COLOR),
+    ("replay", "computed_torque_w20_z0.1", "replay, computed torque", REPLAY_CT_COLOR),
+]
+NOTED = ("esn", "computed_torque_w20_z0.1", "chosen ESN, computed torque")
 
 # The panels of every animation: the label (the arm's reference, then its tracker), the tracker setting, the arm,
 # and the label's color.
 PANELS = [
-    (f"{CHOSEN_NAME}\ntracker: joint PD", "pd_w20_z0.1", "esn", ESN_COLOR),
-    ("replay of the take by time\ntracker: joint PD", "pd_w20_z0.1", "replay", REPLAY_COLOR),
-    (f"{CHOSEN_NAME}\ntracker: computed torque", "computed_torque_w20_z0.1", "esn", CT_COLOR),
+    (f"{CHOSEN_NAME}\ntracker: joint PD", PD, "esn", ESN_COLOR),
+    ("replay of the take by time\ntracker: joint PD", PD, "replay", REPLAY_COLOR),
+    ("replay of the take by time\ntracker: computed torque", "computed_torque_w20_z0.1", "replay", REPLAY_CT_COLOR),
 ]
 # The animations: name, scenario, the start offset (deg) from the demonstrated start, and the title.
 ANIMATIONS = [
     ("nominal", "nominal", (0.0, 0.0), "undisturbed, from the demonstrated start"),
     ("block", "block", (0.0, 0.0), "the tip held from 4.5 s to 5.5 s"),
-    ("pushes", "pushes", (0.0, 0.0), "three pushes, at 4 s, 8 s, and 13 s"),
+    ("pushes", "pushes", (0.0, 0.0), "three pushes, at 4 s, 8 s, and 15 s"),
     (
         "offset",
         "offsets",
@@ -130,7 +141,7 @@ ANIMATIONS = [
     ),
     ("offset_straight", "offsets", OFFSETS[1], "start offset by -10 deg in joint 2 (the elbow straighter)"),
 ]
-ANIMATION_SPAN = (-0.2, 17.0)
+ANIMATION_SPAN = (-0.2, 19.0)
 ANIMATION_FPS = 10.0
 ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
 
@@ -198,8 +209,7 @@ def main() -> None:
         for name, scenario, offset, _ in ANIMATIONS:
             if scenario == "offsets":
                 figures[f"{name}_joints.png"], figures[f"{name}_torques.png"] = plot_runs(scenario, offset)
-        figures["flexibility.png"] = plot_flexibility()
-        write_flexibility()
+        figures["disturbances.png"] = plot_disturbances()
     for name, fig in figures.items():
         fig.savefig(SUMMARY / name, dpi=150)
     print_tables()
@@ -380,11 +390,14 @@ def plot_stage1() -> Figure:
     return fig
 
 
-def setting_measures(runs: dict[str, Path], values: dict[str, float]) -> list[dict[str, Any]]:
+def setting_measures(
+    runs: dict[str, Path], values: dict[str, float], tracker: str | None = None
+) -> list[dict[str, Any]]:
     """Each seed of one setting of a sweep run undisturbed, under the pushes, and under the block.
 
     ``runs`` gives the sweep run of each scenario ("nominal", "pushes", "block"),
-    and ``values`` the setting's swept values other than the seed. Per seed:
+    and ``values`` the setting's swept values other than the seed. Per seed, over
+    both trackers, or over ``tracker`` alone (such as PD):
 
     - ``lost``: a pushed run never arrives or ends away from the target;
     - ``failing``: a run fails undisturbed or under the block;
@@ -395,35 +408,38 @@ def setting_measures(runs: dict[str, Path], values: dict[str, float]) -> list[di
     - ``lead``: under the block, the reference's lead over the arm at the release (%
       of the path, the larger of the two trackers);
     - ``off``, ``back``: after the release, the farthest from the path (mm), and when
-      the hand is back on it (s, the slower tracker).
+      the hand is back on it (s, the slower tracker; NaN if one is not back).
     """
 
-    def rows(scenario: str, name: str) -> list[dict[str, Any]]:
-        return [r for r in read_csv(runs[scenario] / name) if all(r[k] == v for k, v in values.items())]
+    def rows(scenario: str) -> list[dict[str, Any]]:
+        return [
+            r
+            for r in read_csv(runs[scenario] / "runs.csv")
+            if all(r[k] == v for k, v in values.items()) and tracker in (None, r["setting"])
+        ]
 
-    nominal, block = rows("nominal", "sweep.csv"), rows("block", "sweep.csv")
-    pushed, blocked = rows("pushes", "runs.csv"), rows("block", "runs.csv")
+    nominal, pushed, blocked = rows("nominal"), rows("pushes"), rows("block")
     out = []
     for seed in sorted({r["seed"] for r in nominal}):
+        n = [r for r in nominal if r["seed"] == seed]
         p = [r for r in pushed if r["seed"] == seed]
         b = [r for r in blocked if r["seed"] == seed]
-        n = next(r for r in nominal if r["seed"] == seed)
-        k = next(r for r in block if r["seed"] == seed)
         back = {
             push: max(r[f"return_time_s_{push}"] if np.isfinite(r[f"return_time_s_{push}"]) else cap for r in p)
             for push, cap in RETURN_CAPS.items()
         }
+        returns = [r["return_time_s"] for r in b]
         out.append(
             {
                 "seed": int(seed),
                 "lost": any(r["final_distance_m"] > GOAL or not np.isfinite(r["arrival_time_s"]) for r in p),
-                "failing": n["failures"] + k["failures"] > 0,
-                "rmse": 1000 * n["worst_path_rmse_m"],
+                "failing": any(r["failed"] for r in n + b),
+                "rmse": 1000 * max(r["taught_path_rmse_m"] for r in n),
                 "back1": back[1],
                 "back3": back[3],
                 "lead": 100 * max(r["reference_lead"] for r in b),
-                "off": 1000 * k["worst_off_path_m"],
-                "back": k["latest_return_s"],
+                "off": 1000 * max(r["off_path_m"] for r in b),
+                "back": max(returns) if np.all(np.isfinite(returns)) else float("nan"),
             }
         )
     return out
@@ -508,15 +524,19 @@ def grid_runs(radius: float) -> dict[str, Path]:
     }
 
 
-def grid_settings() -> dict[tuple[float, float, float], list[dict[str, Any]]]:
-    """The seeds of every setting of the small grid, by (spectral radius, leak rate, input scaling)."""
+def grid_settings(tracker: str | None = None) -> dict[tuple[float, float, float], list[dict[str, Any]]]:
+    """The seeds of every setting of the small grid, by (spectral radius, leak rate, input scaling).
+
+    Over both trackers, or over ``tracker`` alone (see :func:`setting_measures`).
+    """
     out = {}
     for radius in (1.2, 1.35):
         runs = grid_runs(radius)
         rows = read_csv(runs["nominal"] / "sweep.csv")
         for leak in sorted({r["leak_rate"] for r in rows}):
             for scaling in sorted({r["input_scaling"] for r in rows}):
-                out[radius, leak, scaling] = setting_measures(runs, {"leak_rate": leak, "input_scaling": scaling})
+                values = {"leak_rate": leak, "input_scaling": scaling}
+                out[radius, leak, scaling] = setting_measures(runs, values, tracker)
     return out
 
 
@@ -539,15 +559,15 @@ def plot_runs(scenario: str, offset: tuple[float, float] = (0.0, 0.0)) -> tuple[
     """The joint angles and the joint torques of the chosen ESN's run of a scenario, by robot_esn.py's functions.
 
     The run is the one from the start offset by ``offset`` (deg) from the
-    demonstrated start.
+    demonstrated start, with joint PD; the figures show the replay with it too.
     """
     robot_esn = runner("robot_esn")
     stem = stem_of(scenario)
     setup, config = robot_setup(stem)
-    settings = robot_esn.tracker_settings(config["tracker"])
+    settings = [setting for setting in robot_esn.tracker_settings(config["tracker"]) if setting.name == PD]
     spans = disturbance_spans(config.get("disturbance"))
     start = start_of(stem, "esn", offset)
-    title = f"The chosen ESN on the robot: {scenario}"
+    title = f"The chosen ESN on the robot, joint PD: {scenario}"
     directory = run_dir(stem)
     return (
         robot_esn.plot_joints(directory, setup, settings, spans, title, start),
@@ -565,45 +585,30 @@ def path_distances(scenario: str, setting: str, arm: str) -> tuple[NDArray[np.fl
     return log.times[task][::every], 1000 * distances_to_path(hand[::every], taught_hand())
 
 
-def plot_flexibility() -> Figure:
-    """The hand's distance from the taught path under the pushes, for the chosen ESN and the replay, per tracker."""
+def plot_disturbances() -> Figure:
+    """Each compared arm's distance from the taught path under the block and under the pushes, over time."""
     fig = Figure(figsize=(13, 7), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle("Three pushes: how far each arm is carried off the taught path, and back", color="#0b0b0b")
-    axes = fig.subplots(len(SETTINGS), 1, sharex=True)
-    for ax, (setting, name) in zip(axes, SETTINGS.items(), strict=True):
+    fig.suptitle(
+        "The block and the pushes: how far each arm goes from the taught path, and how it comes back",
+        color="#0b0b0b",
+    )
+    axes = fig.subplots(2, 1, sharex=True)
+    for ax, scenario, title in zip(
+        axes, ("block", "pushes"), ("the tip held from 4.5 s to 5.5 s", "pushes at 4 s, 8 s, and 15 s"), strict=True
+    ):
         style(ax)
-        for onset, end, _ in PUSH_TIMES:
+        with (RESULTS / run_name(stem_of(scenario)) / "config.toml").open("rb") as f:
+            spans = disturbance_spans(tomllib.load(f)["disturbance"])
+        for onset, end in spans:
             ax.axvspan(onset, end, color=DISTURBANCE_COLOR, zorder=0)
-        for arm, (label, color) in ARMS.items():
-            times, distance = path_distances("pushes", setting, arm)
+        for arm, setting, label, color in COMPARED:
+            times, distance = path_distances(scenario, setting, arm)
             ax.plot(times, distance, color=color, linewidth=1.3, label=label)
         ax.axhline(BACK_WITHIN, color=TEXT_COLOR, linewidth=0.8, linestyle=":")
-        ax.set(title=name, ylabel="from the taught path (mm)", ylim=(0, None), xlim=(0, 18))
+        ax.set(title=title, ylabel="from the taught path (mm)", ylim=(0, None), xlim=(0, 20))
     axes[-1].set_xlabel("time (s)", color=TEXT_COLOR)
     axes[0].legend(frameon=False, labelcolor=TEXT_COLOR)
     return fig
-
-
-def write_flexibility() -> None:
-    """Per tracker, arm, and push: the farthest from the taught path, and when the hand settles back within 5 mm.
-
-    The window of a push runs from its onset to the next push, or 4 s; the hand
-    settles when it stays within BACK_WITHIN of the path to the window's end (NaN if
-    it does not), counted from the push's end.
-    """
-    out = []
-    for setting, name in SETTINGS.items():
-        for arm, (label, _) in ARMS.items():
-            times, distance = path_distances("pushes", setting, arm)
-            row: dict[str, Any] = {"tracker": name, "arm": label}
-            for k, (onset, end, stop) in enumerate(PUSH_TIMES, start=1):
-                window = (times >= onset) & (times < stop)
-                outside = np.flatnonzero(window & (distance > BACK_WITHIN))
-                settled = len(outside) and times[outside[-1]] < stop - 0.05
-                row[f"push{k}_farthest_mm"] = float(distance[window].max())
-                row[f"push{k}_settles_s"] = float(times[outside[-1] + 1] - end) if settled else float("nan")
-            out.append(row)
-    write_csv(FLEXIBILITY_CSV, out)
 
 
 def print_block() -> None:
@@ -616,35 +621,30 @@ def print_block() -> None:
     and when it is back within BACK_WITHIN of it for good (counted from the release,
     up to 12 s).
     """
-    print(
-        "\n== 3.6 The block, from the logs: arm, tracker: force at the tip (N) at the grip (peak, first 0.1 s) and at"
-    )
-    print("the release (mean, last 0.1 s); the reference's hand ahead of the arm's at the release (mm); after the")
-    print("release, the farthest from the taught path (mm), and back within 5 mm (s)")
+    print("\n== 3.6 The block, from the logs: arm and tracker: force at the tip (N) at the grip (peak, first 0.1 s)")
+    print("and at the release (mean, last 0.1 s); the reference's hand ahead of the arm's at the release (mm); after")
+    print("the release, the farthest from the taught path (mm), and back within 5 mm (s)")
     skeleton = Skeleton.from_toml(TAKE_RUN / "config.toml")
     stem = stem_of("block")
     with (RESULTS / run_name(stem) / "config.toml").open("rb") as f:
         block = tomllib.load(f)["disturbance"]
     onset, release = block["onset"], block["release"]
-    for arm, (label, _) in ARMS.items():
-        for setting, name in SETTINGS.items():
-            log = StateLog.load(run_dir(stem) / setting / f"{arm}_00.sklog.npz")
-            t = log.times
-            force = np.linalg.norm(log.channel("ext_force").reshape(len(t), -1), axis=1)
-            grip = force[(t >= onset) & (t < onset + 0.1)].max()
-            pressing = force[(t >= release - 0.1) & (t < release)].mean()
-            held = int(np.searchsorted(t, release)) - 1  # the last sample held
-            hand, reference = (
-                endpoint_positions(skeleton, log.channel(channel).reshape(len(t), -1)[held : held + 1])
-                for channel in ("q", "q_ref")
-            )
-            ahead = 1000 * float(np.linalg.norm(reference - hand))
-            times, distance = path_distances("block", setting, arm)
-            after = (times >= release) & (times < 12.0)
-            back = times[np.flatnonzero(after & (distance > BACK_WITHIN))[-1] + 1] - release
-            print(
-                f"  {label}, {name}: {grip:.1f}, {pressing:.1f}; {ahead:.0f}; {distance[after].max():.0f}, {back:.1f}"
-            )
+    for arm, setting, label, *_ in [*COMPARED, NOTED]:
+        log = StateLog.load(run_dir(stem) / setting / f"{arm}_00.sklog.npz")
+        t = log.times
+        force = np.linalg.norm(log.channel("ext_force").reshape(len(t), -1), axis=1)
+        grip = force[(t >= onset) & (t < onset + 0.1)].max()
+        pressing = force[(t >= release - 0.1) & (t < release)].mean()
+        held = int(np.searchsorted(t, release)) - 1  # the last sample held
+        hand, reference = (
+            endpoint_positions(skeleton, log.channel(channel).reshape(len(t), -1)[held : held + 1])
+            for channel in ("q", "q_ref")
+        )
+        ahead = 1000 * float(np.linalg.norm(reference - hand))
+        times, distance = path_distances("block", setting, arm)
+        after = (times >= release) & (times < 12.0)
+        back = times[np.flatnonzero(after & (distance > BACK_WITHIN))[-1] + 1] - release
+        print(f"  {label}: {grip:.1f}, {pressing:.1f}; {ahead:.0f}; {distance[after].max():.0f}, {back:.1f}")
 
 
 # ---------------------------------------------------------------------------- animations
@@ -691,9 +691,7 @@ def export_videos() -> None:
             start = start_of(stem, arm, offset)
             for setting, tracker in VIDEO_TRACKERS.items():
                 log = run_dir(stem) / setting / f"{arm}_{start:02d}.sklog.npz"
-                videos.append(
-                    (VIDEOS / f"{name}_{arm_name}_{tracker}.mp4", title, ARMS[arm][0], SETTINGS[setting], log)
-                )
+                videos.append((VIDEOS / f"{name}_{arm_name}_{tracker}.mp4", title, ARMS[arm], SETTINGS[setting], log))
     rows = []
     for video, scenario, arm, tracker, log in videos:
         player_export(log, video, VIDEO_FPS, panel=True)
@@ -818,6 +816,7 @@ def print_tables() -> None:
     print_step_a()
     print_star()
     print_small_grid()
+    print_small_grid(PD)
     print_validation()
 
 
@@ -984,17 +983,18 @@ def print_star() -> None:
             )
 
 
-def print_small_grid() -> None:
-    settings = grid_settings()
+def print_small_grid(tracker: str | None = None) -> None:
+    """The small grid, judged by its rule over both trackers, or over ``tracker`` alone."""
+    settings = grid_settings(tracker)
     reference = settings[CENTER["spectral_radius"], CENTER["leak_rate"], CENTER["input_scaling"]]
     ref_back = np.array([s["back3"] for s in reference])
     ref_rmse = np.median([s["rmse"] for s in reference])
     ref_off = np.median([s["off"] for s in reference])
-    print(
-        "\n== 3.5 The small grid, by the rule: each setting (spectral radius, leak rate, input scaling): lost, failing"
-    )
-    print("seeds | median worst path RMSE (mm) | after the push at the target: median / slowest (s), seeds back sooner")
-    print("than with #2's setting, median gain (s) | block: median farthest from the path (mm) | verdict")
+    judged = "the worse of the two trackers" if tracker is None else f"{tracker} alone"
+    print(f"\n== 3.5 The small grid, by the rule, on {judged}: each setting (spectral radius, leak rate, input")
+    print("scaling): lost, failing seeds | median worst path RMSE (mm) | after the push at the target: median /")
+    print("slowest (s), seeds back sooner than with #2's setting, median gain (s) | block: median farthest from the")
+    print("path (mm) | verdict")
     verdicts = {}
     for setting, seeds in settings.items():
         gain = ref_back - np.array([s["back3"] for s in seeds])
@@ -1066,69 +1066,58 @@ def print_validation() -> None:
     filtered, velocity = tracker["acceleration_filter"], tracker["reference_velocity"]
     print(f"  acceleration filter {filtered:g} s, reference velocity: {velocity}")
 
-    print("\n== 3.6 Validation: arm, scenario, tracker: arrival (s), holds, path RMSE (mm); block: peak force (N),")
-    print("reference lead at the release (% of the path), after it the farthest from the path (mm) and back within")
-    print("5 mm (s); offsets: starts that hold, median path RMSE (mm), median peak torque (N m), failed starts")
-    for arm, (label, _) in ARMS.items():
-        for scenario in ("nominal", "block"):
-            for r in rows_of(stem_of(scenario)):
-                if r["arm"] != arm:
-                    continue
-                force = (
-                    f", {r['peak_external_force_n']:.2f} N, {100 * r['reference_lead']:.1f}%,"
-                    f" {1000 * r['off_path_m']:.0f} mm, {r['return_time_s']:.1f} s"
-                    if scenario == "block"
-                    else ""
-                )
-                print(
-                    f"  {label}, {scenario}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f}, {r['success']},"
-                    f" {1000 * r['taught_path_rmse_m']:.2f}{force}"
-                )
-        offsets = [r for r in rows_of(stem_of("offsets")) if r["arm"] == arm]
-        for setting, name in SETTINGS.items():
-            group = [r for r in offsets if setting_of(r) == setting]
-            fails = [r["origin"].split()[1] for r in group if not r["success"]]
-            never = sum(not r["arrived"] for r in group if not r["success"])
-            print(
-                f"  {label}, offsets, {name}: {len(group) - len(fails)}/{len(group)},"
-                f" {1000 * np.median([r['taught_path_rmse_m'] for r in group]):.1f},"
-                f" {np.median([r['peak_torque_nm'] for r in group]):.2f}, {fails} ({never} never arrive)"
-            )
-        for r in rows_of(stem_of("offsets")):
-            if r["arm"] == arm and offset_of(r["origin"]) in OFFSETS:
-                print(
-                    f"  {label}, offset {offset_of(r['origin'])}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f},"
-                    f" {r['success']}, {1000 * r['taught_path_rmse_m']:.1f}, peak torque {r['peak_torque_nm']:.1f}"
-                )
+    def runs_of(scenario: str) -> list[tuple[str, dict[str, Any]]]:
+        """The compared arms' runs of a scenario from the demonstrated start, then the noted one, by name."""
+        rows = [r for r in rows_of(stem_of(scenario)) if r["start"] == 0]
+        return [
+            (label, next(r for r in rows if r["arm"] == arm and setting_of(r) == setting))
+            for arm, setting, label, *_ in [*COMPARED, NOTED]
+        ]
 
-    print(
-        "\n== 3.7 Pushes: arm, tracker: arrival (s), holds, path RMSE (mm), distance from the target at the end (mm);"
-    )
-    print("each push: the reference's lead at its end (fraction of the path), the farthest from the path (mm), and")
-    print("back within 5 mm (s, before the next push or the end)")
-    for r in rows_of(stem_of("pushes")):
+    print("\n== 3.6 Validation, from the demonstrated start: arm and tracker: arrival (s), holds, path RMSE (mm)")
+    for label, r in runs_of("nominal"):
+        print(f"  nominal, {label}: {r['arrival_time_s']:.2f}, {r['success']}, {1000 * r['taught_path_rmse_m']:.2f}")
+    print("block: also the peak force (N); at the release, the reference's lead (% of the path) and its gap from the")
+    print("arm (deg); after it, the farthest from the path (mm), back within 5 mm (s), and the ringing (mm)")
+    for label, r in runs_of("block"):
+        print(
+            f"  block, {label}: {r['arrival_time_s']:.2f}, {r['success']}, {1000 * r['taught_path_rmse_m']:.2f},"
+            f" {r['peak_external_force_n']:.1f} N; {100 * r['reference_lead']:.1f}%, {r['end_gap_deg']:.1f} deg;"
+            f" {1000 * r['off_path_m']:.0f} mm, {r['return_time_s']:.1f} s, {1000 * r['ringing_m']:.1f} mm"
+        )
+    print("pushes: also the distance from the target at the end (mm); each push: at its end, the lead (% of the path)")
+    print("and the gap (deg); after it, the farthest from the path (mm), back within 5 mm (s), and the ringing (mm)")
+    for label, r in runs_of("pushes"):
         each = " | ".join(
-            f"{r[f'reference_lead_{k}']:+.3f}, {1000 * r[f'off_path_m_{k}']:.0f}, {r[f'return_time_s_{k}']:.2f}"
+            f"{100 * r[f'reference_lead_{k}']:+.1f}%, {r[f'end_gap_deg_{k}']:.1f} deg;"
+            f" {1000 * r[f'off_path_m_{k}']:.0f} mm, {r[f'return_time_s_{k}']:.2f} s,"
+            f" {1000 * r[f'ringing_m_{k}']:.1f} mm"
             for k in (1, 2, 3)
         )
         print(
-            f"  {ARMS[r['arm']][0]}, {SETTINGS[setting_of(r)]}: {r['arrival_time_s']:.2f}, {r['success']},"
-            f" {1000 * r['taught_path_rmse_m']:.1f}, {1000 * r['final_distance_m']:.1f} | {each}"
+            f"  pushes, {label}: {r['arrival_time_s']:.2f}, {r['success']}, {1000 * r['taught_path_rmse_m']:.1f},"
+            f" {1000 * r['final_distance_m']:.1f} | {each}"
         )
-    if FLEXIBILITY_CSV.exists():
+
+    print(
+        "\n== 3.6 Offsets: arm and tracker: starts that hold, median path RMSE (mm), median peak torque (N m), failed"
+    )
+    print("starts; then the offset starts shown: arrival (s), holds, path RMSE (mm), peak torque (N m)")
+    offsets = rows_of(stem_of("offsets"))
+    for arm, setting, label, *_ in [*COMPARED, NOTED]:
+        group = [r for r in offsets if r["arm"] == arm and setting_of(r) == setting]
+        fails = [r["origin"].split()[1] for r in group if not r["success"]]
         print(
-            "\n== 3.7 Each push, from the logs: the farthest from the taught path (mm), and when the hand settles"
-            " within 5 mm (s)"
+            f"  {label}: {len(group) - len(fails)}/{len(group)},"
+            f" {1000 * np.median([r['taught_path_rmse_m'] for r in group]):.1f},"
+            f" {np.median([r['peak_torque_nm'] for r in group]):.2f}, {fails}"
         )
-        for r in read_csv(FLEXIBILITY_CSV):
-            pushes = []
-            for k in (1, 2, 3):
-                settle = r[f"push{k}_settles_s"]
-                pushes.append(
-                    f"{r[f'push{k}_farthest_mm']:.0f} mm, "
-                    + (f"{settle:.1f} s" if np.isfinite(settle) else "not within the window")
+        for r in group:
+            if offset_of(r["origin"]) in OFFSETS:
+                print(
+                    f"    offset {offset_of(r['origin'])}: {r['arrival_time_s']:.2f}, {r['success']},"
+                    f" {1000 * r['taught_path_rmse_m']:.1f}, {r['peak_torque_nm']:.1f}"
                 )
-            print(f"  {r['arm']}, {r['tracker']}: " + " | ".join(pushes))
 
 
 if __name__ == "__main__":

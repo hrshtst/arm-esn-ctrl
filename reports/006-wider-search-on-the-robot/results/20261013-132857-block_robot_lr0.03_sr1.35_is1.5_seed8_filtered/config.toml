@@ -27,6 +27,9 @@ duration = 22.0        # task (s), after the warm-up, as in the sweeps; the take
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
 effort_window = [4.5, 6.0]  # torque, effort, and force are measured from the block's onset to 0.5 s after its release (s)
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 3.2 Hz
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
 
 [disturbance]
 type = "block"

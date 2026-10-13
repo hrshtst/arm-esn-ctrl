@@ -27,14 +27,17 @@ seed.
   grid around #2, came back onto the path after the push at the target sooner than
   #2's setting: for 8 of the 10 seeds, by 0.41 s in the median. In the apps, it felt
   no different from its neighbors.
-- **Against the replay of the take,** it follows the taught path within 0.8 to
-  0.9 mm undisturbed (the replay 0.1 to 0.9 mm) and arrives with the take; it
-  arrives and holds from all 49 offset starts, as the replay does; pushed, it gives
-  way, carried 1.2 to 2.5 times as far off the path as the replay, and is back on
-  it within 1.7 to 3.4 s after every push, at the target too. Held in mid-reach, it
-  waits only in part: its reference is 36 mm ahead of the held hand at the release
-  (the replay's 155 mm), so it presses with 3 to 5 N (the replay 18 to 20 N), and
-  then lurches 44 to 51 mm off the path, as far as the replay's arm.
+- **With joint PD, against the replay of the take,** the chosen ESN follows the
+  taught path within 0.92 mm undisturbed (the replay 0.85 mm, and 0.13 mm with
+  computed torque), and arrives and holds from all 49 offset starts, as the replay
+  does. Its arm rings a seventh as much as the replay's after the block, and a half
+  to two-thirds as much after every push, whether the replay is tracked with joint
+  PD or computed torque: 4.9 mm against 33 to 34 mm after the release, 15 to 18 mm
+  against 26 to 32 mm after a push. Its
+  reference goes with the arm, so the tracker starts from a smaller gap. But the
+  hand strays farther, in slower swings, and is back on the path later, except
+  after the push at the target; held in mid-reach, the ESN waits only in part, its
+  reference 36 mm ahead of the held hand at the release (the replay's 155 mm).
 - **Its reservoir states,** recomputed from the runs' logs, follow the take's
   undisturbed, hold still while the tip is held, swing off and back after each
   push, and, from both offset starts shown, join the take's course, ahead of it or
@@ -51,7 +54,9 @@ settings, and met the disturbances only after choosing its ESN. Here:
 3. **Leak rates above 0.05:** how do they do?
 4. **Disturbances in the search:** with the pushes and the block run for every
    setting and seed, which settings keep the hand on the path and at the target,
-   and how does an ESN chosen that way compare with the replay of the take?
+   and how does an ESN chosen that way compare with the replay of the take? In
+   particular, since its reference follows the measured arm, does the tracker ring
+   less after a disturbance than with the replay?
 
 ## 2. Setup
 
@@ -62,7 +67,10 @@ remade arm, the take filtered at 2 Hz, an ESN of 400 neurons with sparsity 0.05,
 ridge 1e-2, and a 1 s warm-up, driven by the arm's measured joint angles, and the
 tracker, computed torque and joint PD at ω = 20 rad/s with damping ratio 0.1, given
 a zero reference velocity. Every robot run lasts 22 s, from the demonstrated start
-unless stated.
+unless stated. The search judged every setting by the worse of the two trackers;
+the validation (Section 3.6 on) compares the chosen ESN and the replay with joint PD,
+and the replay with computed torque, the model-based tracker, with the chosen ESN
+with computed torque as a note.
 
 Every setting is tried with ten seeds, 0 to 9. A seed draws the reservoir, its
 input weights, and its biases, which the spectral radius and the input scaling only
@@ -80,7 +88,12 @@ rescale, so the settings compare seed by seed (`arm_esn_ctrl.sweeps`).
   (`reference_lead`, as a fraction of the path, 1.26 m long); the farthest the hand
   strays from the taught path (`off_path_m`), and when it is back within 5 mm of it
   (`return_time_s`, counted from the disturbance's end), each before the next
-  disturbance starts or the run ends.
+  disturbance starts or the run ends. In Step C, also the gap between the reference
+  and the arm's joint angles at the disturbance's end (`end_gap_deg`), the error the
+  tracker starts from, and how much the hand rings after it (`ringing_m`,
+  `arm_esn_ctrl.metrics.disturbance_ringing`): the RMS size of its motion above
+  1.5 Hz over the next 2 s, between the reach, under about 0.5 Hz, and the trackers'
+  ringing, at 3.2 Hz.
 - **A lost seed:** a pushed run that never arrives, or ends more than 20 mm from the
   target.
 
@@ -108,7 +121,10 @@ undisturbed (nominal); the tip held by a stiff spring-damper from 4.5 s to 5.5 s
 in mid-reach (block); three pushes of 0.2 s at the tip, 4 N nearly backward at
 4 s, 5 N nearly across at 8 s, and 4 N nearly across the other way at 13 s, after
 the arrival and its hold (pushes); and the demonstrated start offset by −15° to 15°
-in each joint, every 5° (offsets, 49 starts).
+in each joint, every 5° (offsets, 49 starts). In Step C, the last push comes at
+15 s instead, after the hold window of every arrival seen under the pushes in the
+search (11.7 s at the latest), and the pushed run lasts 24 s, to leave the hand as
+long to come back.
 
 ### Reproducing the results
 
@@ -127,8 +143,8 @@ in [`manual_demonstration_v2_robot_search`](../../experiments/manual_demonstrati
 | `sweep_robot_star_<line>_<scenario>_filtered` (9) | as stage 1 | `7c85003` (undisturbed), `d0b6c1d` |
 | `grid_<representative>_filtered` (8) | as the candidates | `731897e` |
 | `sweep_robot_small_grid_sr<spectral radius>_<scenario>_filtered` (6) | as stage 1 | `0526792` |
-| `<scenario>_robot_lr0.03_sr1.35_is1.5_seed8_filtered` (4) | as Step A | `aa053ea` |
-| `states_robot_lr0.03_sr1.35_is1.5_seed8_filtered` (1) | `uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_search/<name>.toml` | `09b7793` |
+| `<scenario>_robot_lr0.03_sr1.35_is1.5_seed8_filtered` (4) | as Step A | `aa053ea` (nominal, offsets), `a91b8e9` (block, pushes) |
+| `states_robot_lr0.03_sr1.35_is1.5_seed8_filtered` (1) | `uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_search/<name>.toml` | `37590e2` |
 | [`summary`](results/summary) | `uv run python reports/006-wider-search-on-the-robot/make_figures.py --logs --animations` | |
 
 A `<candidate>` or `<representative>` is named by its setting and seed, such as
@@ -141,10 +157,11 @@ trained ESN; the offsets runs hold their map, the chosen ESN's also its hand pat
 (`paths.png`), and the states run only its figures.
 [`make_figures.py`](make_figures.py) draws `stage1.png` and `star.png` and prints the
 tables of Section 3 from those copies. With `--logs`, it reads the runs' logs under
-the storage root, which are not kept in Git, to draw the chosen ESN's joint angles
-and torques (`<scenario>_joints.png`, `<scenario>_torques.png`, with `robot_esn.py`'s
-own functions) and the arms' distance from the taught path under the pushes
-(`flexibility.png`, `flexibility.csv`), and to print the forces under the block.
+the storage root, which are not kept in Git, to draw the joint angles and torques of
+the chosen ESN and the replay with joint PD (`<scenario>_joints.png`,
+`<scenario>_torques.png`, with `robot_esn.py`'s own functions) and each compared
+arm's distance from the taught path under the block and the pushes
+(`disturbances.png`), and to print the forces under the block.
 With `--animations`, it exports `nominal.gif`, `block.gif`, `pushes.gif`,
 `offset.gif`, and `offset_straight.gif`, each arm rendered by skelarm's player. With
 `--videos`, it exports the runs of those five animations, for both arms and both
@@ -332,6 +349,11 @@ the star repeat it exactly.
   s, for 8 seeds) but gave up 0.12 mm undisturbed.
 - **The chosen ESN is its typical seed, 8,** which had been tried in the apps as a
   representative of input scaling 1.5.
+- **Judged on joint PD alone,** the tracker of the validation, the same rule would
+  have chosen spectral radius 1.2 with the same leak rate and input scaling (back
+  sooner for 8 of the 10 seeds, by 0.68 s), and the chosen setting would have
+  missed narrowly (7 of 10, by 0.52 s): the two lie within the seeds' spread on a
+  flat plateau. The search is reported as it was decided.
 
 ### 3.6 Validation: the chosen ESN against the replay
 
@@ -353,89 +375,100 @@ The ESN validated (`grid_lr0.03_sr1.35_is1.5_seed8_filtered`), its parameters
 | Warm-up | 1 s of the held start posture, from a reset reservoir |
 | Seed | 8, of the reservoir, its input weights, and its biases |
 
-The trackers are report 005's ([Section 3.7](../005-tuned-on-the-robot/README.md#37-validation-the-chosen-esn-against-the-replay)):
-computed torque with K_p = 400 s⁻² and K_d = 4 s⁻¹ on both joints, and joint PD with
-K_p = 74.96 and 8.96 N m/rad and K_d = 0.750 and 0.0896 N m s/rad, both given a
-zero reference velocity.
+The trackers are report 005's ([Section 3.7](../005-tuned-on-the-robot/README.md#37-validation-the-chosen-esn-against-the-replay)),
+both given a zero reference velocity: joint PD with K_p = 74.96 and 8.96 N m/rad and
+K_d = 0.750 and 0.0896 N m s/rad, and computed torque with K_p = 400 s⁻² and
+K_d = 4 s⁻¹ on both joints. The comparisons are made with joint PD: the chosen ESN
+with it against the replay with it, and against the replay with computed torque,
+the model-based tracker, which cancels the arm's dynamics.
 
-| Scenario | Chosen ESN | Replay |
-| --- | --- | --- |
-| Nominal: path RMSE (computed torque / joint PD) | 0.80 / 0.92 mm | 0.13 / 0.85 mm |
-| Nominal: arrival | 9.67 / 9.67 s | 9.60 / 9.59 s |
-| Block: path RMSE | 12.6 / 13.3 mm | 7.5 / 16.6 mm |
-| Block: force at the grip (peak) | 10.7 / 10.6 N | 9.4 / 11.3 N |
-| Block: force at the release (pressing) | 2.8 / 4.7 N | 18.5 / 20.0 N |
-| Block: reference ahead of the hand at the release | 36 / 36 mm | 154 / 156 mm |
-| Block: after the release, farthest from the path | 51 / 44 mm | 39 / 53 mm |
-| Block: after the release, back within 5 mm of it | 2.3 / 2.9 s | 1.3 / 1.6 s |
-| Block: arrival | 10.19 / 10.20 s | 9.60 / 9.59 s |
-| Pushes: path RMSE | 47.9 / 42.1 mm | 34.1 / 32.7 mm |
-| Pushes: distance from the target at the end | 3.2 / 3.2 mm | 2.8 / 2.8 mm |
-| Offsets: starts that arrive and hold | 49 / 49 of 49 | 49 / 49 of 49 |
-| Offsets: median path RMSE | 17.5 / 22.8 mm | 14.6 / 27.0 mm |
-| Offsets: median peak torque | 81 / 7.0 N m | 125 / 12 N m |
+| Scenario | Chosen ESN, joint PD | Replay, joint PD | Replay, computed torque |
+| --- | --- | --- | --- |
+| Nominal: path RMSE | 0.92 mm | 0.85 mm | 0.13 mm |
+| Nominal: arrival | 9.67 s | 9.59 s | 9.60 s |
+| Block: path RMSE | 13.3 mm | 16.6 mm | 7.5 mm |
+| Block: force at the grip (peak) | 10.6 N | 11.3 N | 9.4 N |
+| Block: force at the release (pressing) | 4.7 N | 20.0 N | 18.5 N |
+| Block: reference ahead of the hand at the release | 36 mm | 156 mm | 154 mm |
+| Block: ringing after the release | 4.9 mm | 33.9 mm | 33.4 mm |
+| Block: arrival | 10.20 s | 9.59 s | 9.60 s |
+| Pushes: path RMSE | 42.1 mm | 32.8 mm | 34.2 mm |
+| Pushes: ringing after each push | 15–18 mm | 30–32 mm | 26–32 mm |
+| Pushes: distance from the target at the end | 3.2 mm | 2.8 mm | 2.8 mm |
+| Offsets: starts that arrive and hold | 49 of 49 | 49 of 49 | 49 of 49 |
+| Offsets: median path RMSE | 22.8 mm | 27.0 mm | 14.6 mm |
+| Offsets: median peak torque | 7.0 N m | 12 N m | 125 N m |
 
 The force at the grip is the damper stopping the moving hand; the force at the
 release is the mean over the block's last 0.1 s, how hard the arm then presses.
-Offset runs: [the map of the 49 starts](results/20261013-114518-offsets_robot_lr0.03_sr1.35_is1.5_seed8_filtered/grid.png).
+The ringing is the hand's motion above 1.5 Hz over the 2 s after a disturbance
+ends (Section 2). Offset runs: [the map of the 49 starts](results/20261013-114518-offsets_robot_lr0.03_sr1.35_is1.5_seed8_filtered/grid.png).
+For reference, the chosen ESN with computed torque follows the taught path within
+0.80 mm undisturbed, presses with 2.8 N at the release and rings 7.9 mm after it,
+rings 22 to 32 mm after the pushes, as much as the replays, and arrives from all 49
+offset starts with a median peak torque of 81 N m.
 
-- **Undisturbed, the ESN follows the taught path within 0.8 to 0.9 mm** and arrives
-  0.07 s after the take; the replay follows it within 0.13 mm with computed torque
-  and 0.85 mm with joint PD.
-- **Under the block, the ESN waits only in part.** While the tip is held, its
-  output creeps on, 36 mm ahead of the hand at the release, so its arm presses with
-  3 to 5 N, against the replay's 18 to 20 N, whose reference runs 155 mm ahead. The
-  peak force, about 10 N for both, is the grip's.
-- **After the release, the ESN's arm lurches as far as the replay's,** 44 to 51 mm
-  off the taught path (the replay 39 to 53 mm, ringing), and is back within 5 mm in
-  2.3 to 2.9 s (the replay 1.3 to 1.6 s). It then carries on about 0.6 s behind the
-  take and arrives at 10.2 s. Report 005's ESN waited more: 14 mm ahead at the
-  release, lurching 20 to 23 mm.
-- **From every offset start, the ESN arrives and holds,** with either tracker, as
-  the replay does; report 005's ESN failed from 19 of the 21 starts with the elbow
-  straighter. With computed torque, the reference's first step from an offset costs
-  a median peak torque of 81 N m, against the replay's 125 N m (7.0 and 12 N m with
-  joint PD).
+- **Undisturbed, the ESN follows the taught path within 0.92 mm** with joint PD,
+  as the replay does (0.85 mm), and arrives 0.08 s after the take; the replay with
+  computed torque follows it within 0.13 mm.
+- **Under the block, the ESN waits in part.** While the tip is held, its output
+  creeps on, 36 mm ahead of the hand at the release, so its arm presses with 4.7 N,
+  against the replays' 18.5 to 20 N, whose reference runs 155 mm ahead. The peak
+  force, about 10 N for all three, is the grip's.
+- **From every offset start, all three arrive and hold.** Report 005's ESN failed
+  from 19 of the 21 starts with the elbow straighter. With computed torque, the
+  replay's reference jumps to the take's start and costs a median peak torque of
+  125 N m; with joint PD, the ESN's first step from an offset costs 7.0 N m.
 
-### 3.7 Pushes: how the ESN yields
+### 3.7 The block and the pushes: ringing and return
 
-![Distance from the taught path under the pushes](results/summary/flexibility.png)
+![Distance from the taught path under the block and the pushes](results/summary/disturbances.png)
 
-The farthest each arm is carried off the taught path after each push, and when it
-settles back within 5 mm (counted from the push's end, until the next push or 4 s
-after its onset):
+| Chosen ESN, joint PD / replay, joint PD / replay, computed torque | Block, after the release | Push at 4 s | Push at 8 s | Push at 15 s |
+| --- | --- | --- | --- | --- |
+| Gap between the reference and the arm at the end | 5.9 / 15.6 / 15.4° | 12.3 / 15.2 / 16.3° | 15.6 / 17.0 / 17.1° | 11.0 / 13.3 / 17.8° |
+| Ringing over the next 2 s | **4.9** / 33.9 / 33.4 mm | **15.4** / 30.6 / 26.3 mm | **17.7** / 30.2 / 32.4 mm | **16.1** / 32.2 / 25.6 mm |
+| Farthest from the taught path | 44 / 53 / 39 mm | 35 / 14 / 34 mm | 173 / 150 / 149 mm | 149 / 116 / 118 mm |
+| Back within 5 mm of it | 2.9 / 1.7 / 1.3 s | 3.4 / 1.7 / 1.4 s | 2.5 / 2.0 / 1.6 s | 1.6 / 2.2 / 1.4 s |
 
-| Arm | Tracker | Push at 4 s | Push at 8 s | Push at 13 s | Path RMSE |
-| --- | --- | --- | --- | --- | --- |
-| Chosen ESN | computed torque | 49 mm, 3.3 s | 198 mm, 2.5 s | 165 mm, 1.8 s | 47.9 mm |
-| Chosen ESN | joint PD | 35 mm, 3.4 s | 173 mm, 2.5 s | 149 mm, 1.7 s | 42.1 mm |
-| Replay | computed torque | 34 mm, 1.4 s | 149 mm, 1.6 s | 116 mm, 1.3 s | 34.1 mm |
-| Replay | joint PD | 14 mm, 1.7 s | 150 mm, 2.0 s | 115 mm, 2.2 s | 32.7 mm |
+The gap is the norm of the reference minus the arm's joint angles when the
+disturbance ends; the return is counted from then, until the next push or the end
+of the run. All three arms arrive under the pushes (the ESN at 10.5 s) and hold,
+and end within 3.2 mm of the target. With computed torque, the chosen ESN's gaps
+are 16 to 18° after the pushes and 5.9° at the release, and its ringing 22 to
+32 mm and 7.9 mm.
 
-Both arms arrive (the ESN's at 10.5 to 10.6 s) and hold, and end within 3.2 mm of
-the target.
-
-- **The ESN yields.** Every push carries its arm farther off the path than the
-  replay's, 1.2 to 2.5 times as far, and it settles back more slowly, in 1.7 to
-  3.4 s, against the replay's 1.3 to 2.2 s. Its reference gives way at once: at the
-  end of the pushes at 8 and 13 s, it is within 0.8% of the path of the arm, and
-  after the backward push at 4 s 7 to 9% ahead, as the replay's (9%).
-- **But it always comes back,** after the push at the target too, in 1.7 to 1.8 s,
-  where report 005's ESN wandered off for about 4 s with computed torque. That
-  return is what the search tuned for (Sections 3.4 and 3.5).
-- **The replay is the stiffer.** Its reference ignores the arm, so the tracker drags
-  the arm straight back onto the take's course, ringing at ζ = 0.1.
+- **With joint PD, the ESN rings a half to two-thirds as much as either replay
+  after every push, and a seventh as much after the block.** Its reference goes with
+  the arm, so the tracker starts from a smaller gap: 5.9° against 15.5° at the
+  release, and 11 to 16° against 13 to 18° at the end of a push. Its joint torques
+  ring less, too, and die out within about 1 s, where the replay's ring for 2 to
+  3 s.
+- **The replay rings about as much with computed torque as with joint PD.**
+  Cancelling the arm's dynamics does not remove the ringing: the tracker still
+  pulls the arm toward a reference that ignores it, at ζ = 0.1.
+- **But the ESN's hand strays farther and returns more slowly.** Its reference
+  returns to the taught path at the ESN's own pace, in slow swings of about 1 Hz
+  (the figure) rather than the tracker's ringing at 3.2 Hz: the hand is back within
+  5 mm of the path 2.5 to 3.4 s after the block and the first two pushes, against
+  the replays' 1.3 to 2.0 s; after the push at the target it is back in 1.6 s,
+  sooner than the replay with joint PD (2.2 s).
+- **A push is quicker than the ESN.** A push lasts 0.2 s, and the ESN follows the
+  arm over about 0.3 s (its period, 10 ms, divided by its leak rate, 0.03): at the
+  end of a push, the gap is still 11 to 16°, close to the replay's. Under the block,
+  held for 1 s, the ESN has time to follow; with computed torque, it does not ring
+  less than the replays after the pushes (22 to 32 mm), a difference not examined
+  here.
 
 ### 3.8 The chosen ESN, scenario by scenario
 
 The animations show three arms side by side on one clock, each rendered by
 skelarm's player; the purple dot is the target, the red arrow the force at the
-tip. Each panel names the arm's reference, the chosen ESN or the replay of the
-take by time, and its tracker: the chosen ESN and the replay through joint PD, and
-the chosen ESN through computed torque. The figures show the chosen ESN's joint
-angles (the taught motion, thick gray; the ESN's output, dashed blue; the ESN's
-arm, blue; the replay's arm, orange) and the joint torques, with both trackers;
-the disturbances are shaded.
+tip. Each panel names the arm's reference and its tracker: the chosen ESN and the
+replay of the take by time through joint PD, and the replay through computed
+torque. The figures show the joint angles with joint PD (the taught motion, thick
+gray; the ESN's output, dashed blue; the ESN's arm, blue; the replay's arm,
+orange) and the joint torques; the disturbances are shaded.
 
 #### Nominal
 
@@ -446,9 +479,9 @@ the disturbances are shaded.
 ![Joint torques: nominal](results/summary/nominal_torques.png)
 
 The ESN's arm follows the taught joint path, its output on it, and arrives at
-9.67 s, with the take. Its torques stay within about 0.1 N m after its first step
-(0.57 N m at the start with computed torque); the replay's, tracking the take's
-remaining pixel steps, jitter and ring, up to 0.86 N m with computed torque.
+9.67 s, with the take. Its torques stay within 0.11 N m; the replay's, tracking
+the take's remaining pixel steps, jitter and ring, up to 0.36 N m (0.86 N m with
+computed torque).
 
 #### Block
 
@@ -461,9 +494,10 @@ remaining pixel steps, jitter and ring, up to 0.86 N m with computed torque.
 While the tip is held, from 4.5 s to 5.5 s, the ESN's output for joint 1 waits
 with the arm, but joint 2's creeps on, from 96° to about 102°: 36 mm ahead of the
 hand at the release. Its torques stay under 1.5 N m; the replay's climb to 12 N m
-until the release, and its arm snaps forward and rings for about 1.5 s. The ESN's
-arm lurches 44 to 51 mm off the path at the release, then carries on about 0.6 s
-behind the take and arrives at 10.2 s.
+until the release, with either tracker, and its arm snaps forward and rings for
+about 1.5 s. The ESN's
+arm lurches 44 mm off the path at the release, without ringing, then carries on
+about 0.6 s behind the take and arrives at 10.2 s.
 
 #### Pushes
 
@@ -474,9 +508,9 @@ behind the take and arrives at 10.2 s.
 ![Joint torques: pushes](results/summary/pushes_torques.png)
 
 After each push, the chosen ESN's output goes with the arm and carries on from
-where it was pushed; its torques peak at 2.2 to 4.5 N m, as high as the replay's
-or lower, and, with joint PD, die out within about 1 s, while the replay's ring for
-2 to 3 s.
+where it was pushed; its torques peak at 3.0 to 3.2 N m after each push, lower
+than the replay's (3.3 to 4.6 N m), and die out within about 1 s, while the
+replay's ring for 2 to 3 s.
 
 #### Offset starts
 
@@ -489,13 +523,13 @@ or lower, and, with joint PD, die out within about 1 s, while the replay's ring 
 From the start offset by +15° in both joints, the arm turned counterclockwise and
 the elbow more bent, the ESN's output brings the hand onto the taught path within
 its first 0.2 m, farther along it than the take: the arm then runs about 0.5 s
-ahead of the take and arrives at 8.9 s, its path 32 mm off the taught one with
-joint PD (36 mm with computed torque), having skipped the path's first part. From
-every offset start, the hand joins the taught path near its start in the same way
+ahead of the take and arrives at 8.9 s, its path 32 mm off the taught one, having
+skipped the path's first part. From every offset start, the hand joins the taught
+path near its start in the same way
 ([the hand paths](results/20261013-114518-offsets_robot_lr0.03_sr1.35_is1.5_seed8_filtered/paths.png)).
 The replay's reference jumps back to the take's start: its arm swings there and
-rings for about 2 s with joint PD (68 mm off the path), and with computed torque
-the jump costs a peak torque of 257 N m, against the ESN's 121 N m.
+rings for about 2 s with joint PD (68 mm off the path), and with computed torque the
+jump costs a peak torque of 257 N m.
 
 ![Animation: the offset start from which report 005's ESN failed](results/summary/offset_straight.gif)
 
@@ -506,25 +540,23 @@ the jump costs a peak torque of 257 N m, against the ESN's 121 N m.
 From the start offset by −10° in joint 2, the elbow straighter, one of the starts
 from which report 005's ESN failed, the chosen ESN barely moves the arm for about
 0.8 s, then reaches along a path close to the taught one, about 1 s behind the
-take, and arrives at 10.7 s, its path 10 mm off the taught one. The replay's reference
-jumps to the take's start, and its arm follows it there before replaying the take
-(7 to 8 mm off the path).
+take, and arrives at 10.7 s, its path 10 mm off the taught one. The replay's
+reference jumps to the take's start, and its arm follows it there before replaying
+the take (7 to 8 mm off the path).
 
 ### 3.9 The reservoir states
 
 As in report 005 ([Section 3.10](../005-tuned-on-the-robot/README.md#310-the-reservoir-states)),
 [`robot_states.py`](../../experiments/robot_states.py) recomputes the chosen ESN's
-reservoir states from the runs' logs, and refuses a log whose reference the
-recomputed ESN does not reproduce; every one here passes. The figures
-([run](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered))
+reservoir states from the runs' logs with joint PD, and refuses a log whose
+reference the recomputed ESN does not reproduce; every one here passes. The figures
+([run](results/20261013-132948-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered))
 draw the states of the ESN driving the robot (blue) over those of the take fed in as
 in training (thick gray), with the warm-up and the disturbances shaded.
 
 #### Eight neurons over the whole run
 
-![Neurons over the whole run, joint PD](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/neurons_pd_w20_z0.1.png)
-
-![Neurons over the whole run, computed torque](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/neurons_computed_torque_w20_z0.1.png)
+![Neurons over the whole run, joint PD](results/20261013-132948-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/neurons_pd_w20_z0.1.png)
 
 The same eight of the 400 neurons as in report 005 (picked at random, seed 0),
 from the reset to the run's end, in this ESN's reservoir. Most switch between
@@ -533,7 +565,7 @@ plateaus near ±1 during the reach and settle once the arm holds at the target.
 - **Undisturbed,** each neuron follows the take's states.
 - **Under the block,** the states hold nearly still while the tip is held, then
   resume the take's course about 0.5 s late.
-- **Each push** makes some of them swing; after the push at 13 s, neurons 16 and 106
+- **Each push** makes some of them swing; after the push at 15 s, neurons 16 and 106
   swing the farthest and settle back within 2 to 3 s.
 - **From (+15°, +15°),** they leave the take's course early and stay about 0.5 s
   ahead of it to the end of the reach; **from (0°, −10°),** they stay about 1 s
@@ -541,9 +573,7 @@ plateaus near ±1 during the reach and settle once the arm holds at the target.
 
 #### The warm-up
 
-![Neurons over the warm-up, joint PD](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/neurons_warmup_pd_w20_z0.1.png)
-
-![Neurons over the warm-up, computed torque](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/neurons_warmup_computed_torque_w20_z0.1.png)
+![Neurons over the warm-up, joint PD](results/20261013-132948-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/neurons_warmup_pd_w20_z0.1.png)
 
 The same neurons over the warm-up and the task's first 3 s, for the undisturbed run
 and the two offset starts.
@@ -559,18 +589,14 @@ and the two offset starts.
 
 #### The principal components
 
-![Principal components over time, joint PD](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/pca_pd_w20_z0.1.png)
+![Principal components over time, joint PD](results/20261013-132948-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/pca_pd_w20_z0.1.png)
 
-![Principal components over time, computed torque](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/pca_computed_torque_w20_z0.1.png)
+![Planes of the principal components, joint PD](results/20261013-132948-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/pca_planes_pd_w20_z0.1.png)
 
-![Planes of the principal components, joint PD](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/pca_planes_pd_w20_z0.1.png)
-
-![Planes of the principal components, computed torque](results/20261013-120124-states_robot_lr0.03_sr1.35_is1.5_seed8_filtered/pca_planes_computed_torque_w20_z0.1.png)
-
-The principal components are those of all five runs' states with both trackers,
-warm-up included: PC1, PC2, and PC3 hold 73.7%, 20.7%, and 2.5% of the variance. In
-the planes, the warm-up is dashed, a hollow dot marks the state just after the
-reset, and a filled one the state at the task's start.
+The principal components are those of all five runs' states, warm-up included:
+PC1, PC2, and PC3 hold 74.0%, 20.5%, and 2.4% of the variance. In the planes, the
+warm-up is dashed, a hollow dot marks the state just after the reset, and a filled
+one the state at the task's start.
 
 - **The take's states trace an arc** in the plane of PC1 and PC2, from the task's
   start, at the upper right, down and around to the target, at the left. The
@@ -578,7 +604,7 @@ reset, and a filled one the state at the task's start.
   the arc.
 - **Under the block, the states pause** along the arc while the tip is held (flat
   over time), then go on behind the take.
-- **Each push throws the states off the arc** and back, the push at 13 s in a small
+- **Each push throws the states off the arc** and back, the push at 15 s in a small
   loop near its end.
 - **From both offset starts,** the warm-up ends off the arc's start, below it from
   (+15°, +15°) and above it from (0°, −10°), and the states join the arc within the
@@ -596,6 +622,11 @@ reset, and a filled one the state at the task's start.
   from 19, although offsets were never in the score. Not every seed does: on its own,
   the representative of spectral radius 1.2 (seed 2) never arrives from 11 of the
   49.
+- **An ESN that follows the arm rings less, with joint PD.** After the block and
+  after every push, the chosen ESN's arm with joint PD rings a seventh to two-thirds
+  as much as the replay's, with joint PD or with computed torque: its reference goes
+  with the arm, so the tracker starts from a smaller gap. The ringing gives way to
+  slower swings, at the ESN's own pace, and a slower return onto the path.
 - **The pushes, not the undisturbed runs, separate the settings.** Undisturbed and
   under the block, every setting of the star holds for every seed; after the push at
   the target, some seeds lose the target, a failure the undisturbed score cannot
@@ -608,7 +639,8 @@ reset, and a filled one the state at the task's start.
   medians differ by at most a few tenths of a millimeter undisturbed and of a second
   in the return after the push at the target, which the apps did not show: the
   representatives felt alike. The choice among them rests on a rule fixed
-  beforehand, over ten seeds, and it was a narrow one.
+  beforehand, over ten seeds, and it was a narrow one: judged on joint PD alone, the
+  same rule would have chosen spectral radius 1.2 instead (Section 3.5).
 - **A rule is a measurement too.** The first rule under the pushes failed nearly
   every setting for reasons of its own, a hold window overlapping a push and a
   return deadline too tight for an underdamped tracker, until the runs were looked
@@ -616,12 +648,13 @@ reset, and a filled one the state at the task's start.
 
 ## 5. Next steps
 
-1. **The pushes and the hold:** move the push at the target after the hold window
-   ends for every arrival, or measure the hold before it, so that the hold check
-   and the push no longer overlap.
-2. **Waiting, scored:** if the ESN should wait for a held arm as report 005's did,
-   put the block's lead into the score next to the return after the push at the
-   target, and search between leak rates 0.03 and 0.04, where the two pull apart.
+1. **A search scored on what the ESN does for joint PD:** with the last push after
+   the hold window, as in Step C, so that the hold check holds again, and the ringing
+   and the return after the block and the pushes measured with joint PD, by a rule
+   fixed beforehand; the block's ringing also scores how well the ESN waits.
+2. **Computed torque:** find why the chosen ESN does not ring less than the replays
+   after the pushes with computed torque, for instance by running it without the
+   reference's acceleration.
 3. **Offset starts in the score:** add a few offset starts to the sweeps on the
    robot, as report 005 proposed: a representative of the star (spectral radius 1.2,
    seed 2) never arrives from 11 of the 49 starts on its own.

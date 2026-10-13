@@ -347,8 +347,10 @@ The reports so far:
 - [006 A wider search on the robot, under disturbances](reports/006-wider-search-on-the-robot/README.md)
   (Stage 2): ten random reservoirs per setting; a spectral radius over 1 helps at a
   slow leak rate, and pushes, not undisturbed runs, separate the settings around
-  the one chosen by hand. The ESN chosen by a rule over ten seeds arrives from all
-  49 offset starts and comes back after every push, but waits less for a held arm.
+  the one chosen by hand. With joint PD, the ESN chosen by a rule over ten seeds
+  arrives from all 49 offset starts, and its arm rings a seventh to two-thirds as
+  much as the replay's after a block or a push, though it strays farther and comes
+  back more slowly.
 
 Each report has five parts:
 

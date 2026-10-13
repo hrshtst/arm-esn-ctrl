@@ -1,9 +1,11 @@
 # Step C of the wider ESN search on the robot: the chosen ESN, the typical seed of
 # the small grid's winner (grid_lr0.03_sr1.35_is1.5_seed8_filtered.toml: leak rate
 # 0.03, spectral radius 1.35, input scaling 1.5, seed 8), in report 005's validation
-# scenarios: three pushes at the tip, at 4 s, 8 s, and 13 s, from the demonstrated
-# start.
-# As pushes_robot_fine_best_filtered.toml (report 005) otherwise.
+# scenarios: three pushes at the tip, at 4 s, 8 s, and 15 s, from the demonstrated
+# start. As pushes_robot_fine_best_filtered.toml (report 005) otherwise, but for the
+# last push, moved from 13 s to 15 s so that it comes after the hold window of every
+# arrival seen under the pushes (11.7 s at the latest, the hold ending by 13.7 s),
+# and the run, lengthened from 22 s to 24 s to leave the hand as long to come back.
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_search/pushes_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml
 
@@ -23,9 +25,12 @@ acceleration_filter = 0.02  # time constant of the low-pass filter on the refere
 reference_velocity = false
 
 [evaluation]
-duration = 22.0        # task (s), after the warm-up; the take lasts 18.5 s
+duration = 24.0        # task (s), after the warm-up; the take lasts 18.5 s
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 3.2 Hz
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
 # Without an effort_window, the torque, effort, and force are measured over the whole run.
 
 # Each push: a force of `force` N for `duration` s from `onset` (task time, s), at
@@ -49,6 +54,6 @@ angle_deg = 80.0       # deg from the direction toward the target
 [[disturbance]]  # nearly across, clockwise, after the hold: 10 deg off it, toward the target
 type = "push"
 force = 4.0            # EDIT: N
-onset = 13.0           # EDIT: task time (s)
+onset = 15.0           # EDIT: task time (s)
 duration = 0.2         # s
 angle_deg = -80.0      # deg from the direction toward the target
