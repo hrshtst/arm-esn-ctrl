@@ -1,0 +1,32 @@
+# A shortlisted ESN of the ringing study's grid, ranked 1 of the three settings that
+# qualify by its rule (median ringing 10.1 mm, undisturbed path RMSE 1.22 mm, with
+# joint PD): leak rate 0.02, spectral radius 0.99, input scaling 1.5, and seed 8,
+# its setting's typical seed. Trained and run on its own here from a grid of start
+# postures, so that its ESN is saved for the interactive apps and robot_esn.py.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_ringing/grid_lr0.02_sr0.99_is1.5_seed8_filtered.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 0.99
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.02
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 8
+
+[evaluation]
+duration = 20.0        # autonomous run (s); the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint, every 5 deg (49 start postures)
+step_deg = 5.0

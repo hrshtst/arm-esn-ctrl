@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_ringing/states_robot_lr0.02_sr1.35_is2_seed7_filtered.toml"
+command = "experiments/robot_states.py experiments/manual_demonstration_v2_robot_ringing/states_robot_lr0.02_sr1.35_is2_seed7_filtered.toml"
+started = 2026-10-13 15:51:05+09:00
+host = "delbosque"
+commit = "5d2eebc0e059caf2218157cbdee1d65f34467c8c"
+uncommitted_changes = false

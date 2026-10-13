@@ -249,7 +249,7 @@ that run them are shared:
 | [manual_demonstration_v2_autonomous_reaching](experiments/manual_demonstration_v2_autonomous_reaching/README.md) | the same on a remade arm, with a new take (Stage 1) | [005](reports/005-tuned-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_tracking](experiments/manual_demonstration_v2_robot_tracking/README.md) | ESNs tuned on the robot, by how it follows the taught path (Stage 2) | [005](reports/005-tuned-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_search](experiments/manual_demonstration_v2_robot_search/README.md) | a wider search on the robot, with ten random reservoirs per setting (Stage 2) | [006](reports/006-wider-search-on-the-robot/README.md) |
-| [manual_demonstration_v2_robot_ringing](experiments/manual_demonstration_v2_robot_ringing/README.md) | the ringing after a block or a push, with joint PD, and an ESN search scored by it (Stage 2) | |
+| [manual_demonstration_v2_robot_ringing](experiments/manual_demonstration_v2_robot_ringing/README.md) | the ringing after a block or a push, with joint PD, and an ESN search scored by it (Stage 2) | [007](reports/007-ringing-with-joint-pd/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -352,6 +352,11 @@ The reports so far:
   arrives from all 49 offset starts, and its arm rings a seventh to two-thirds as
   much as the replay's after a block or a push, though it strays farther and comes
   back more slowly.
+- [007 Less ringing with joint PD](reports/007-ringing-with-joint-pd/README.md)
+  (Stage 2): with pushes long enough for the ESN to follow the arm, an ESN searched
+  with joint PD by the ringing after a block or a push makes the arm ring a fifth to
+  two-thirds as much as the replay, with joint PD or computed torque, at the cost of
+  slower swings back onto the path.
 
 Each report has five parts:
 

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_ringing/sweep_robot_ringing_lr0.03_pushes_filtered.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_ringing/sweep_robot_ringing_lr0.03_pushes_filtered.toml"
+started = 2026-10-13 15:06:42+09:00
+host = "delbosque"
+commit = "c648fcb24b8d734e873250175b0440cb3e0aafb3"
+uncommitted_changes = false

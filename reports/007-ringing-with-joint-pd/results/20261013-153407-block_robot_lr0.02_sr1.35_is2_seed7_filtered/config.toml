@@ -1,0 +1,39 @@
+# The ringing study's validation: the chosen ESN, B of the shortlist
+# (grid_lr0.02_sr1.35_is2_seed7_filtered.toml: leak rate 0.02, spectral radius 1.35,
+# input scaling 2, seed 7), against the replay of the take, with joint PD and with
+# computed torque: the tip held by a stiff spring-damper from 4.5 s to 5.5 s, in
+# mid-reach, then let go, from the demonstrated start.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_ringing/block_robot_lr0.02_sr1.35_is2_seed7_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_ringing/20261013-153020-grid_lr0.02_sr1.35_is2_seed7_filtered/esn.toml"
+
+[tracker]
+# Joint PD, the study's tracker, and computed torque, for the replay with it, at
+# omega = 20 rad/s, underdamped (damping ratio 0.1), given a zero reference velocity.
+laws = ["computed_torque", "pd"]
+omegas = [20.0]
+dampings = [0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+effort_window = [4.5, 6.0]  # torque, effort, and force: from the block's onset to 0.5 s after its release (s)
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 3.2 Hz
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+
+# Report 005's block, as in report 006.
+[disturbance]
+type = "block"
+onset = 4.5            # task time when the tip is gripped (s)
+release = 5.5          # task time when it is let go (s)
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m
