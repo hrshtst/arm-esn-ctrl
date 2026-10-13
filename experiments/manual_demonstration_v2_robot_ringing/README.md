@@ -98,3 +98,22 @@ uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_
 With them, report 006's chosen ESN
 (`manual_demonstration_v2_robot_search/grid_lr0.03_sr1.35_is1.5_seed8_filtered.toml`,
 already trained).
+
+B, `grid_lr0.02_sr1.35_is2_seed7_filtered.toml`, was chosen in the apps.
+
+## Step 3: the chosen ESN against the replay
+
+The chosen ESN (leak rate 0.02, spectral radius 1.35, input scaling 2, seed 7)
+against the replay of the take, with joint PD and, for the replay, computed torque,
+in runs of 24 s, with [`robot_esn.py`](../robot_esn.py):
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_ringing/pushes_robot_lr0.02_sr1.35_is2_seed7_filtered.toml
+```
+
+| Configurations | Scenario |
+| --- | --- |
+| `nominal_robot_lr0.02_sr1.35_is2_seed7_filtered.toml` | undisturbed, from the demonstrated start |
+| `block_robot_lr0.02_sr1.35_is2_seed7_filtered.toml` | the tip held from 4.5 s to 5.5 s |
+| `pushes_robot_lr0.02_sr1.35_is2_seed7_filtered.toml` | the study's three pushes |
+| `offsets_robot_lr0.02_sr1.35_is2_seed7_filtered.toml` | the 49 start postures, −15° to 15° from the demonstrated start in each joint |
