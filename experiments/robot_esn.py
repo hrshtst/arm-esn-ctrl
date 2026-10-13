@@ -26,8 +26,10 @@ start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table, or several ``[[disturbance]]`` tables,
 push or block all three arms alike (see :mod:`arm_esn_ctrl.disturbances`): from the
 same start posture, the same forces at the same times. The metrics then measure how
-far each disturbance sends the hand from the taught hand path, and how soon the hand
-comes back within ``return_tolerance`` of it (in ``[evaluation]``; 5 mm by default).
+far each disturbance sends the hand from the taught hand path, how soon the hand
+comes back within ``return_tolerance`` of it (in ``[evaluation]``; 5 mm by default),
+and how much it rings afterwards: its motion above ``ringing_cutoff_hz`` (1.5 Hz by
+default) over ``ringing_window`` seconds (2 s by default).
 Start postures away from the demonstrated
 ones (``start_offsets_deg`` in ``[evaluation]``) make the initial-offset scenario.
 
@@ -84,7 +86,14 @@ from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_r
 from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
 from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
-from arm_esn_ctrl.metrics import distances_to_path, disturbance_returns, hand_speed, path_progress, path_rmse
+from arm_esn_ctrl.metrics import (
+    distances_to_path,
+    disturbance_returns,
+    disturbance_ringing,
+    hand_speed,
+    path_progress,
+    path_rmse,
+)
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import (
     EsnSource,
@@ -111,6 +120,11 @@ DISTURBANCE_COLOR = "#f0efec"
 # How near the taught hand path the hand must come back after a disturbance, unless
 # [evaluation] gives a return_tolerance (m).
 RETURN_TOLERANCE = 0.005
+# After a disturbance, the hand's motion above this frequency is its ringing, measured over this
+# window, unless [evaluation] gives a ringing_cutoff_hz (Hz) and a ringing_window (s). The cutoff lies
+# between the reach, under about 0.5 Hz, and a tracker at omega = 20 rad/s, which rings at 3.2 Hz.
+RINGING_CUTOFF_HZ = 1.5
+RINGING_WINDOW = 2.0
 
 
 def main() -> None:
@@ -132,6 +146,7 @@ def main() -> None:
     spans = disturbance_spans(disturbance)
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
     tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
+    ringing = ringing_settings(evaluation)
     print(f"ESN {config['esn']['model']}, trained on {len(setup.demos)} demonstrations")
     print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
     if not config["tracker"].get("reference_velocity", True):
@@ -153,7 +168,7 @@ def main() -> None:
         rows.append(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
-            | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance)
+            | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing)
         )
 
     tracker = config["tracker"]
@@ -206,7 +221,7 @@ def main() -> None:
                     {"law": law, "omega": omega, "damping": setting.damping, "arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm == "replay" else ""}
-                    | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance)
+                    | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing)
                 )
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
@@ -283,6 +298,11 @@ def posed(skeleton: Skeleton, q: NDArray[np.float64]) -> Skeleton:
     return arm
 
 
+def ringing_settings(evaluation: dict[str, Any]) -> tuple[float, float]:
+    """The cutoff (Hz) and the window (s) of the ringing after a disturbance, from ``[evaluation]``."""
+    return evaluation.get("ringing_cutoff_hz", RINGING_CUTOFF_HZ), evaluation.get("ringing_window", RINGING_WINDOW)
+
+
 def arm_metrics(
     log: StateLog,
     i: int,
@@ -291,6 +311,7 @@ def arm_metrics(
     window: list[float],
     spans: list[tuple[float, float]],
     tolerance: float,
+    ringing: tuple[float, float],
 ) -> dict[str, Any]:
     """The metrics of one arm's run from start posture ``i``, compared with the demonstrator's undisturbed reach.
 
@@ -324,7 +345,12 @@ def arm_metrics(
     - ``return_time_s``: the time from its end until the hand is back within
       ``tolerance`` (m) of the taught hand path until the next disturbance starts or
       the run ends: 0 if it never strays farther after the end, NaN if it is not
-      back by then (see :func:`arm_esn_ctrl.metrics.disturbance_returns`).
+      back by then (see :func:`arm_esn_ctrl.metrics.disturbance_returns`);
+    - ``end_gap_deg``: at its end, how far the reference is from the arm's joint
+      angles, the norm of ``q_ref - q``: the error the tracker starts from;
+    - ``ringing_m``: how much the hand rings after its end, the RMS size of its
+      motion above ``ringing[0]`` (Hz) over ``ringing[1]`` seconds, or until the next
+      disturbance starts (see :func:`arm_esn_ctrl.metrics.disturbance_ringing`).
 
     Without a disturbance, these are NaN. With several, ``reference_lead_1``,
     ``reference_lead_2``, ..., ``off_path_m_1``, ... measure each, in the order
@@ -353,6 +379,7 @@ def arm_metrics(
         settling_time = float(setup.times[outside[-1] + 1])
     reference_speed = nan
     leads = [nan] * len(spans)
+    gaps = [nan] * len(spans)
     if tracked:
         q_ref = log.channel("q_ref")[task]
         reference_speed = float(np.degrees(np.abs(np.diff(q_ref, axis=0)).max() / np.diff(times[task]).min()))
@@ -360,12 +387,15 @@ def arm_metrics(
             k = int(np.argmin(np.abs(times - end)))
             ahead = progress(log.channel("q_ref")[k : k + 1], setup.starts[i].q, setup)
             leads[n] = float(ahead[0] - progress(log.channel("q")[k : k + 1], setup.starts[i].q, setup)[0])
+            gaps[n] = float(np.degrees(np.linalg.norm(log.channel("q_ref")[k] - log.channel("q")[k])))
     taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
     returns = disturbance_returns(setup.times, distances_to_path(hand, taught_hand), spans, tolerance) if spans else []
     measured = {
         "reference_lead": leads,
         "off_path_m": [farthest for farthest, _ in returns],
         "return_time_s": [back for _, back in returns],
+        "end_gap_deg": gaps,
+        "ringing_m": disturbance_ringing(setup.times, hand, spans, *ringing) if spans else [],
     }
     disturbance_metrics: dict[str, float] = {}
     for metric, values in measured.items():

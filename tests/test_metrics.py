@@ -10,6 +10,7 @@ from arm_esn_ctrl.metrics import (
     arrival_index,
     count_speed_peaks,
     disturbance_returns,
+    disturbance_ringing,
     hold_metrics,
     jitter,
     join_index,
@@ -258,3 +259,46 @@ def test_a_disturbance_that_lasts_past_the_run_has_no_return():
 
     assert farthest == 0.0
     assert np.isnan(back)
+
+
+def ringing_after(times, end, amplitude=0.02, frequency=3.2, damping=0.1):
+    """A damped oscillation at ``frequency`` (Hz) along x that starts at ``end``, as a tracker rings."""
+    t = np.clip(times - end, 0.0, None)
+    omega = 2 * np.pi * frequency
+    return np.where(times >= end, amplitude * np.exp(-damping * omega * t) * np.sin(omega * t), 0.0)
+
+
+def test_slow_motion_does_not_ring():
+    times = np.arange(0.0, 20.0, 0.01)
+    points = np.column_stack([0.3 * (1 - np.cos(2 * np.pi * 0.2 * times)), 0.1 * np.sin(2 * np.pi * 0.1 * times)])
+
+    (ringing,) = disturbance_ringing(times, points, [(8.0, 8.2)], cutoff_hz=1.5, window=2.0)
+
+    assert ringing < 1e-4  # under 0.1 mm, against a motion 0.6 m wide
+
+
+def test_ringing_is_the_rms_of_the_oscillation_after_the_disturbance():
+    times = np.arange(0.0, 20.0, 0.01)
+    slow = 0.3 * (1 - np.cos(2 * np.pi * 0.2 * times))
+    oscillation = ringing_after(times, 8.2)
+    points = np.column_stack([slow + oscillation, np.zeros_like(times)])
+
+    (ringing,) = disturbance_ringing(times, points, [(8.0, 8.2)], cutoff_hz=1.5, window=2.0)
+
+    after = (times >= 8.2) & (times < 10.2)
+    expected = np.sqrt(np.mean(oscillation[after] ** 2))
+    assert ringing == pytest.approx(expected, rel=0.15)  # the filter passes about 90% of a decaying 3.2 Hz
+
+
+def test_ringing_is_measured_until_the_next_disturbance_starts():
+    times = np.arange(0.0, 20.0, 0.01)
+    points = np.column_stack([ringing_after(times, 9.0), np.zeros_like(times)])  # rings only from 9 s
+
+    first, _ = disturbance_ringing(times, points, [(8.0, 8.2), (9.0, 9.2)], cutoff_hz=1.5, window=2.0)
+    (alone,) = disturbance_ringing(times, points, [(8.0, 8.2)], cutoff_hz=1.5, window=2.0)
+    (late,) = disturbance_ringing(times, points, [(19.0, 21.0)], cutoff_hz=1.5, window=2.0)
+
+    # Its window ends at 9 s, when the ringing starts; alone, it would run to 10.2 s. The zero-phase filter
+    # spreads the ringing's start back by a few tenths of a second, which the shortened window still catches.
+    assert first < 0.3 * alone
+    assert np.isnan(late)  # no sample after the disturbance ends

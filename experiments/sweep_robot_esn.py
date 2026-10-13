@@ -14,7 +14,8 @@ swept values is trained on the demonstrations and generates the reference of the
 simulated arm from every start posture, with every tracker setting, as the ESN arm
 of ``robot_esn.py`` does: undisturbed, or pushed and blocked by the optional
 ``[disturbance]`` table or ``[[disturbance]]`` tables of ``robot_esn.py``, with the
-``effort_window`` and the ``return_tolerance`` of its ``[evaluation]``.
+``effort_window``, the ``return_tolerance``, and the ringing's cutoff and window of its
+``[evaluation]``.
 
 The combinations are ranked by
 
@@ -38,8 +39,8 @@ The run directory receives:
   next disturbance or the end of the run), the latest return over the runs and
   disturbances, and the hand's farthest distance from the path after one; then,
   for each tracker setting from the first start posture, each disturbance's
-  ``reference_lead``, ``off_path_m``, and ``return_time_s`` (see
-  ``robot_esn.arm_metrics``), and the peak disturbance force;
+  ``reference_lead``, ``off_path_m``, ``return_time_s``, ``end_gap_deg``, and
+  ``ringing_m`` (see ``robot_esn.arm_metrics``), and the peak disturbance force;
 - ``runs.csv``: the metrics of every run (see ``robot_esn.arm_metrics``);
 - ``sweep.png``, with two or three swept hyperparameters: heatmaps of the worst
   path RMSE, the failed runs, and the latest arrival, and with disturbances, of the
@@ -73,7 +74,15 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from robot_esn import RETURN_TOLERANCE, Setting, arm_metrics, per_disturbance, posed, tracker_settings
+from robot_esn import (
+    RETURN_TOLERANCE,
+    Setting,
+    arm_metrics,
+    per_disturbance,
+    posed,
+    ringing_settings,
+    tracker_settings,
+)
 from sweep_esn import plot_sweep
 
 from arm_esn_ctrl.autonomous import load_setup
@@ -162,6 +171,7 @@ def main() -> None:
     disturbance = config.get("disturbance")
     spans = disturbance_spans(disturbance)
     tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
+    ringing = ringing_settings(evaluation)
     print(
         f"{len(setup.starts)} start postures, {len(settings)} tracker settings"
         f" ({', '.join(setting.label for setting in settings)}), {duration:g} s runs"
@@ -191,7 +201,7 @@ def main() -> None:
                         disturbance, endpoint_positions(setup.skeleton, start.q[np.newaxis])[0], setup.target
                     ),
                 )
-                metrics = arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance)
+                metrics = arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing)
                 hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, duration))
                 runs.append(
                     {"setting": setting.name, "start": i, "origin": start.origin}
@@ -279,7 +289,7 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances:
             "latest_return_s": float(returns.max()) if np.all(np.isfinite(returns)) else float("nan"),
             "worst_off_path_m": float(np.max(farthest)),
         }
-        for metric in ("reference_lead", "off_path_m", "return_time_s"):
+        for metric in ("reference_lead", "off_path_m", "return_time_s", "end_gap_deg", "ringing_m"):
             columns |= {name: name for name in per_disturbance(metric, disturbances)}
         columns["peak_external_force_n"] = "peak_external_force_n"
     for setting in settings:

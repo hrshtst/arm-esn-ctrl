@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from skelarm import butterworth_lowpass
 
 # The movement lasts while the hand speed exceeds this fraction of its peak.
 MOVING_THRESHOLD = 0.05
@@ -242,6 +243,37 @@ def disturbance_returns(
             back = float(times[after][outside[-1] + 1] - end) if outside.size else 0.0
         returns.append((farthest, back))
     return returns
+
+
+def disturbance_ringing(
+    times: NDArray[np.float64],
+    points: NDArray[np.float64],
+    spans: list[tuple[float, float]],
+    cutoff_hz: float,
+    window: float,
+) -> list[float]:
+    """Return how much the ``points``, such as the hand, ring after each disturbance.
+
+    The ringing is their motion above ``cutoff_hz``: the points, sampled at
+    ``times`` and shaped ``(n, d)``, minus their zero-phase Butterworth low-pass of
+    order 2 (skelarm's, applied forward and backward). Pick a cutoff between the
+    frequencies of the motion itself and of a tracker's ringing. For each span
+    ``(onset, end)`` of ``spans``, when a disturbance acts, the result is the RMS
+    size of the ringing over ``window`` seconds from its end, or until the next
+    disturbance starts if that is sooner: NaN if no sample is left. The zero-phase
+    filter spreads a sudden motion over about ``1 / cutoff_hz`` on either side, so
+    a window that ends within that much of the next disturbance catches the start of
+    the response to it.
+    """
+    period = float(np.median(np.diff(times)))
+    ringing = np.linalg.norm(points - butterworth_lowpass(points, period, cutoff_hz=cutoff_hz), axis=1)
+    onsets = [onset for onset, _ in spans]
+    result = []
+    for onset, end in spans:
+        stop = min([end + window] + [other for other in onsets if other > onset])
+        after = (times > end - 1e-9) & (times < stop - 1e-9)
+        result.append(float(np.sqrt(np.mean(ringing[after] ** 2))) if after.any() else float("nan"))
+    return result
 
 
 def path_progress(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:

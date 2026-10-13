@@ -52,6 +52,8 @@ EVALUATION_KEYS = {
     "extra_starts",
     "effort_window",
     "return_tolerance",
+    "ringing_cutoff_hz",
+    "ringing_window",
 }
 # A demonstrator's reach this close to the training path, on average, has no course of its own to
 # compare with: from a start along the demonstrated path, the ratio would divide by almost nothing (rad).
