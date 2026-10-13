@@ -117,3 +117,10 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot
 | `block_robot_lr0.02_sr1.35_is2_seed7_filtered.toml` | the tip held from 4.5 s to 5.5 s |
 | `pushes_robot_lr0.02_sr1.35_is2_seed7_filtered.toml` | the study's three pushes |
 | `offsets_robot_lr0.02_sr1.35_is2_seed7_filtered.toml` | the 49 start postures, −15° to 15° from the demonstrated start in each joint |
+
+Its reservoir states in those runs, with joint PD, recomputed from their logs, with
+[`robot_states.py`](../robot_states.py):
+
+```bash
+uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_ringing/states_robot_lr0.02_sr1.35_is2_seed7_filtered.toml
+```
