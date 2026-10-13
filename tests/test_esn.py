@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
+from arm_esn_ctrl.esn import EsnConfig, ReachingEsn, colored_noise
 
 DT = 0.01
 CONFIG = EsnConfig(
@@ -218,5 +218,43 @@ def test_an_esn_saved_before_the_teacher_noise_loads_without_it(tmp_path):
     text = path.read_text()
     path.write_text("".join(line for line in text.splitlines(keepends=True) if not line.startswith("teacher_")))
     loaded = ReachingEsn.load(path)
-    assert (loaded.config.teacher_noise_deg, loaded.config.teacher_copies) == (0.0, 1)
+    config = loaded.config
+    assert (config.teacher_noise_deg, config.teacher_copies, config.teacher_noise_exponent) == (0.0, 1, 0.0)
     np.testing.assert_array_equal(loaded.generate(q[0], 150), trained(CONFIG, q).generate(q[0], 150))
+
+
+def test_white_teacher_noise_is_drawn_directly():
+    """The white noise is the generator's own draws, so ESNs trained with it before the colors are trained alike."""
+    np.testing.assert_array_equal(
+        colored_noise(np.random.default_rng(3), (50, 2), 0.0), np.random.default_rng(3).normal(size=(50, 2))
+    )
+
+
+@pytest.mark.parametrize("exponent", [0.0, 1.0, 2.0])
+def test_colored_noise_has_the_asked_power_spectrum(exponent):
+    """Over many draws, the log power falls with the log frequency at the exponent's slope."""
+    rng = np.random.default_rng(0)
+    draws = np.stack([colored_noise(rng, (1024, 2), exponent) for _ in range(200)])
+    power = np.mean(np.abs(np.fft.rfft(draws, axis=1)) ** 2, axis=(0, 2))
+    frequency = np.fft.rfftfreq(1024)
+    slope = np.polyfit(np.log(frequency[1:]), np.log(power[1:]), 1)[0]
+    assert slope == pytest.approx(-exponent, abs=0.1)
+    assert draws.std(axis=1) == pytest.approx(1.0, abs=0.1)
+
+
+@pytest.mark.parametrize("exponent", [1.0, 2.0])
+def test_colored_noise_has_no_mean_and_a_unit_standard_deviation(exponent):
+    noise = colored_noise(np.random.default_rng(0), (300, 2), exponent)
+    assert noise.mean(axis=0) == pytest.approx(0.0, abs=1e-12)
+    assert noise.std(axis=0) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_colored_teacher_noise_changes_the_readout():
+    q = joint_reach()
+    assert CONFIG.teacher_noise_exponent == 0.0
+    white = trained(NOISY, q).generate(q[0], 150)
+    for exponent in (1.0, 2.0):
+        config = dataclasses.replace(NOISY, teacher_noise_exponent=exponent)
+        colored = trained(config, q).generate(q[0], 150)
+        np.testing.assert_array_equal(colored, trained(config, q).generate(q[0], 150))
+        assert not np.allclose(colored, white)

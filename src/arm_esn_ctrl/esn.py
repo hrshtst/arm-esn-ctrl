@@ -24,6 +24,12 @@ noise immunization of Lukoševičius's practical guide to ESNs (2012, section 5.
 which makes teacher-forced feedback stable. Every copy adds to the data the ridge
 regularization is weighed against, so K copies weaken a given ridge K times.
 
+The noise is white unless ``teacher_noise_exponent`` colors it: its power spectrum
+is then proportional to 1/f^β, with β the exponent, such as 1 for pink noise and 2
+for brown noise, which drifts like a random walk. Colored noise is drawn white,
+shaped in the frequency domain, without its mean, and scaled so that over each
+copy of a trajectory its standard deviation in each joint is ``teacher_noise_deg``.
+
 Before they enter the ESN, joint angles are normalized by the range each joint
 covers in the training data, so that the training data span [-1, 1], and the
 outputs are converted back. Unlike the mean and standard deviation, the range does
@@ -43,6 +49,24 @@ import tomli_w
 from numpy.typing import ArrayLike, NDArray
 
 
+def colored_noise(rng: np.random.Generator, shape: tuple[int, ...], exponent: float) -> NDArray[np.float64]:
+    """Gaussian noise along the first axis of ``shape``, with a power spectrum proportional to 1/f^``exponent``.
+
+    With the exponent 0, the noise is white, drawn with a standard deviation of 1.
+    Otherwise it is white noise shaped in the frequency domain, without its mean
+    (the frequency 0), and scaled to a standard deviation of 1 along the first axis.
+    """
+    white = rng.normal(size=shape)
+    if exponent == 0:
+        return white
+    frequency = np.fft.rfftfreq(shape[0])
+    gain = np.zeros_like(frequency)
+    gain[1:] = frequency[1:] ** (-exponent / 2)
+    gain = gain.reshape((-1,) + (1,) * (len(shape) - 1))
+    noise = np.fft.irfft(np.fft.rfft(white, axis=0) * gain, n=shape[0], axis=0)
+    return noise / noise.std(axis=0)
+
+
 @dataclass(frozen=True)
 class EsnConfig:
     """ESN hyperparameters, read from the ``[esn]`` table of a configuration file."""
@@ -59,6 +83,7 @@ class EsnConfig:
     seed: int  # random seed of the reservoir and input weights, and of the teacher noise
     teacher_noise_deg: float = 0.0  # standard deviation of the noise on the teacher-forced input (deg)
     teacher_copies: int = 1  # how many times each training trajectory is fed in, each with its own noise
+    teacher_noise_exponent: float = 0.0  # the noise's power spectrum goes as 1/f to this: 0 white, 1 pink, 2 brown
 
     @property
     def warmup_steps(self) -> int:
@@ -116,7 +141,11 @@ class ReachingEsn:
         inputs, targets = [], []
         for sequence in sequences:
             for _ in range(self.config.teacher_copies):
-                noise = rng.normal(size=sequence[:-1].shape) * noise_std if self.config.teacher_noise_deg else 0.0
+                noise = (
+                    colored_noise(rng, sequence[:-1].shape, self.config.teacher_noise_exponent) * noise_std
+                    if self.config.teacher_noise_deg
+                    else 0.0
+                )
                 inputs.append(sequence[:-1] + noise)
                 targets.append(sequence[1:])
         self.model.fit_sequences(inputs, targets, washout_len=self.config.warmup_steps)
