@@ -1,0 +1,36 @@
+# A shortlisted ESN of the damped search's noise sweep, the best qualifying setting
+# with pink noise (score 0.919: median ringing 8.15 mm, median return 1.18 s):
+# report 007's chosen setting with its take fed in four times, each with pink noise
+# of 0.5 deg on the input, at ridge 4e-2, and seed 8, its setting's typical seed.
+# Trained and run on its own here from a grid of start postures, so that its ESN is
+# saved for the robot app and robot_esn.py.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_damped_search/noise_pink0.5deg_ridge4e-2_seed8_filtered.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.35
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.02
+input_scaling = 2.0
+bias = true
+ridge = 4e-2
+seed = 8
+teacher_noise_deg = 0.5  # the noise's standard deviation over each copy of the take, in each joint (deg)
+teacher_copies = 4     # the take is fed in four times, each with its own noise
+teacher_noise_exponent = 1.0  # pink noise: its power spectrum goes as 1/f
+
+[evaluation]
+duration = 20.0        # autonomous run (s); the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint, every 5 deg (49 start postures)
+step_deg = 5.0

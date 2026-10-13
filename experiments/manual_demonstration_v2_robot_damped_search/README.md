@@ -111,12 +111,36 @@ the same each time. The rule, fixed before the runs, is step 1's:
    the shortlist with its typical seed, if it scores below 1: at most three more
    ESNs.
 
+## Step 2: the shortlist, chosen in the app
+
+The shortlisted ESNs, each trained by [`autonomous_esn.py`](../autonomous_esn.py)
+with its setting's typical seed and run on its own from the 49 offset starts, so
+that they can be tried in [the robot app](../../tools/README.md) with the search's
+tracker:
+
+```bash
+uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_damped_search/noise_white1deg_ridge4e-2_seed3_filtered.toml
+uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml \
+    --law pd --omega 20 --damping 0.4 --control-period 0.01 --model <run directory>/esn.toml
+```
+
+| Configuration | Score | Ringing | Return | Undisturbed path RMSE |
+| --- | --- | --- | --- | --- |
+| `grid_lr0.02_sr1.35_is1.5_seed0_filtered.toml` | 1.060 | 6.07 mm | 2.88 s | 0.67 mm |
+| `grid_lr0.02_sr0.99_is1.5_seed6_filtered.toml` | 1.142 | 5.59 mm | 3.54 s | 0.83 mm |
+| `noise_white1deg_ridge4e-2_seed3_filtered.toml` | 0.821 | 7.87 mm | 0.80 s | 0.60 mm |
+| `noise_pink0.5deg_ridge4e-2_seed8_filtered.toml` | 0.919 | 8.15 mm | 1.18 s | 0.72 mm |
+
+The score and the medians are those of each ESN's setting over its seeds, step 1's
+or step 1b's. No setting with brown noise qualifies. With them, report 007's chosen
+ESN
+([`manual_demonstration_v2_robot_ringing/grid_lr0.02_sr1.35_is2_seed7_filtered.toml`](../manual_demonstration_v2_robot_ringing/grid_lr0.02_sr1.35_is2_seed7_filtered.toml),
+already trained), whose setting scores 1: ringing 5.86 mm, return 2.66 s, path RMSE
+0.58 mm.
+
 ## Then
 
-The shortlisted ESNs are trained by [`autonomous_esn.py`](../autonomous_esn.py), so
-that they can be tried in [the robot app](../../tools/README.md) with the search's
-tracker (`--law pd --omega 20 --damping 0.4 --control-period 0.01`), where one is
-chosen by hand. The chosen ESN then runs against the replay with joint PD at damping
-ratios 0.1, 0.4, and 0.8, each given a zero reference velocity or the reference's,
-all with the torque computed every 10 ms: undisturbed, under the block, under the
-pushes, and from the 49 offset starts.
+The chosen ESN runs against the replay with joint PD at damping ratios 0.1, 0.4, and
+0.8, each given a zero reference velocity or the reference's, all with the torque
+computed every 10 ms: undisturbed, under the block, under the pushes, and from the
+49 offset starts.
