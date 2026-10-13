@@ -250,7 +250,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_tracking](experiments/manual_demonstration_v2_robot_tracking/README.md) | ESNs tuned on the robot, by how it follows the taught path (Stage 2) | [005](reports/005-tuned-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_search](experiments/manual_demonstration_v2_robot_search/README.md) | a wider search on the robot, with ten random reservoirs per setting (Stage 2) | [006](reports/006-wider-search-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_ringing](experiments/manual_demonstration_v2_robot_ringing/README.md) | the ringing after a block or a push, with joint PD, and an ESN search scored by it (Stage 2) | [007](reports/007-ringing-with-joint-pd/README.md) |
-| [manual_demonstration_v2_robot_damping](experiments/manual_demonstration_v2_robot_damping/README.md) | that ESN with joint PD better damped, and given the reference velocity (Stage 2) | |
+| [manual_demonstration_v2_robot_damping](experiments/manual_demonstration_v2_robot_damping/README.md) | that ESN with joint PD better damped, and given the reference velocity (Stage 2) | [008](reports/008-damping-and-reference-velocity/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -358,6 +358,12 @@ The reports so far:
   with joint PD by the ringing after a block or a push makes the arm ring a fifth to
   two-thirds as much as the replay, with joint PD or computed torque, at the cost of
   slower swings back onto the path.
+- [008 Damping and the reference velocity](reports/008-damping-and-reference-velocity/README.md)
+  (Stage 2): with joint PD damped at 0.4 or 0.8, the replay rings nearly as little
+  as report 007's ESN after a push and returns to the path within 0.5 s, where the
+  ESN still takes 2.4 to 4.5 s; under the block, the ESN presses with a twelfth of
+  the replay's torque. Given the reference velocity, the ESN follows the taught path
+  within 0.6 mm at any damping, at the cost of torque spikes at offset starts.
 
 Each report has five parts:
 

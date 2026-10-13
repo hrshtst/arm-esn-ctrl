@@ -1,0 +1,27 @@
+# The tracker study (report 008): report 007's chosen ESN
+# (manual_demonstration_v2_robot_ringing/grid_lr0.02_sr1.35_is2_seed7_filtered.toml:
+# leak rate 0.02, spectral radius 1.35, input scaling 2, seed 7) against the replay
+# of the take, with joint PD at damping ratios 0.1, 0.4, and 0.8, given a zero
+# reference velocity, so that the derivative term damps the arm's own velocity, as
+# in reports 005 to 007: undisturbed, from the demonstrated start.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_damping/nominal_robot_pd_zero_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_ringing/20261013-153020-grid_lr0.02_sr1.35_is2_seed7_filtered/esn.toml"
+
+[tracker]
+# Joint PD at omega = 20 rad/s, at three damping ratios, given a zero reference velocity.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.1, 0.4, 0.8]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start

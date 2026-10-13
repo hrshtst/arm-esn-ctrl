@@ -1,5 +1,7 @@
 # Manual-demonstration robot damping, v2 (Stage 2)
 
+Results: [report 008](../../reports/008-damping-and-reference-velocity/README.md).
+
 The study after [the ringing study](../manual_demonstration_v2_robot_ringing/README.md)
 (report 007). There, with joint PD at a damping ratio of 0.1, given a zero reference
 velocity, the chosen ESN made the arm ring less after a block or a push than the
