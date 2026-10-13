@@ -250,6 +250,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_tracking](experiments/manual_demonstration_v2_robot_tracking/README.md) | ESNs tuned on the robot, by how it follows the taught path (Stage 2) | [005](reports/005-tuned-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_search](experiments/manual_demonstration_v2_robot_search/README.md) | a wider search on the robot, with ten random reservoirs per setting (Stage 2) | [006](reports/006-wider-search-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_ringing](experiments/manual_demonstration_v2_robot_ringing/README.md) | the ringing after a block or a push, with joint PD, and an ESN search scored by it (Stage 2) | [007](reports/007-ringing-with-joint-pd/README.md) |
+| [manual_demonstration_v2_robot_damping](experiments/manual_demonstration_v2_robot_damping/README.md) | that ESN with joint PD better damped, and given the reference velocity (Stage 2) | |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so

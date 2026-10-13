@@ -41,6 +41,7 @@ experiments/
 | [manual_demonstration_v2_robot_tracking](manual_demonstration_v2_robot_tracking/README.md) | as manual-demonstration robot tracking, on that arm, and ESN sweeps on the robot | `robot_esn.py`, `sweep_robot_esn.py`, `robot_states.py` | [005](../reports/005-tuned-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_search](manual_demonstration_v2_robot_search/README.md) | a wider ESN search on that robot: spectral radius over 1, input scaling, larger leak rates, ten reservoirs each; then one setting's neighbors, and a small grid combining them, under pushes and a block | `sweep_robot_esn.py`, `autonomous_esn.py`, `robot_esn.py`, `robot_states.py` | [006](../reports/006-wider-search-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_ringing](manual_demonstration_v2_robot_ringing/README.md) | the ringing after a block or a push, with joint PD: lengthened pushes, then an ESN search scored by it | `robot_esn.py`, `sweep_robot_esn.py`, `autonomous_esn.py`, `robot_states.py` | [007](../reports/007-ringing-with-joint-pd/README.md) |
+| [manual_demonstration_v2_robot_damping](manual_demonstration_v2_robot_damping/README.md) | report 007's chosen ESN against the replay with joint PD at damping ratios 0.1 to 0.8, with and without the reference velocity | `robot_esn.py` | |
 
 Run a configuration with its runner:
 
