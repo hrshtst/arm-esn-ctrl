@@ -74,3 +74,27 @@ ends within the goal, 20 mm from the target. Its **ringing** is the mean of
 
 The shortlisted ESNs are trained by [`autonomous_esn.py`](../autonomous_esn.py), so
 that they can be tried in the apps, where one is chosen by hand.
+
+The rule shortlisted three settings, all at leak rate 0.02: under the pushes, most
+of the others have seeds that reach the goal while still swinging after the push at
+7 s and leave it during the hold, or that end away from the target. Report 006's
+setting has four such seeds, but its chosen ESN, seed 8, qualifies.
+
+## Step 2: the shortlist, chosen in the apps
+
+The shortlisted ESNs, each trained by [`autonomous_esn.py`](../autonomous_esn.py)
+with its setting's typical seed, so that they can be tried in the apps:
+
+```bash
+uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_ringing/grid_lr0.02_sr0.99_is1.5_seed8_filtered.toml
+```
+
+| Configuration | Ringing (median over the seeds) | Undisturbed path RMSE |
+| --- | --- | --- |
+| `grid_lr0.02_sr0.99_is1.5_seed8_filtered.toml` | 10.1 mm | 1.22 mm |
+| `grid_lr0.02_sr1.35_is2_seed7_filtered.toml` | 10.7 mm | 0.96 mm |
+| `grid_lr0.02_sr1.35_is1.5_seed6_filtered.toml` | 11.0 mm | 0.94 mm |
+
+With them, report 006's chosen ESN
+(`manual_demonstration_v2_robot_search/grid_lr0.03_sr1.35_is1.5_seed8_filtered.toml`,
+already trained).
