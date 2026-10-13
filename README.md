@@ -248,7 +248,7 @@ that run them are shared:
 | [manual_demonstration_robot_tracking](experiments/manual_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | [004](reports/004-manual-demonstration/README.md) |
 | [manual_demonstration_v2_autonomous_reaching](experiments/manual_demonstration_v2_autonomous_reaching/README.md) | the same on a remade arm, with a new take (Stage 1) | [005](reports/005-tuned-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_tracking](experiments/manual_demonstration_v2_robot_tracking/README.md) | ESNs tuned on the robot, by how it follows the taught path (Stage 2) | [005](reports/005-tuned-on-the-robot/README.md) |
-| [manual_demonstration_v2_robot_search](experiments/manual_demonstration_v2_robot_search/README.md) | a wider search on the robot, with ten random reservoirs per setting (Stage 2) | |
+| [manual_demonstration_v2_robot_search](experiments/manual_demonstration_v2_robot_search/README.md) | a wider search on the robot, with ten random reservoirs per setting (Stage 2) | [006](reports/006-wider-search-on-the-robot/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -344,6 +344,11 @@ The reports so far:
   with it follows it within about 1 mm; the more compliant of two candidates was
   chosen, at a cost in robustness from offset starts. Its reservoir states,
   recomputed from the runs' logs, wait with a held arm.
+- [006 A wider search on the robot, under disturbances](reports/006-wider-search-on-the-robot/README.md)
+  (Stage 2): ten random reservoirs per setting; a spectral radius over 1 helps at a
+  slow leak rate, and pushes, not undisturbed runs, separate the settings around
+  the one chosen by hand. The ESN chosen by a rule over ten seeds arrives from all
+  49 offset starts and comes back after every push, but waits less for a held arm.
 
 Each report has five parts:
 

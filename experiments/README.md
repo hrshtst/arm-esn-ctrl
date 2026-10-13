@@ -39,7 +39,7 @@ experiments/
 | [manual_demonstration_robot_tracking](manual_demonstration_robot_tracking/README.md) | that ESN as the reference generator of the simulated robot (Stage 2) | `robot_esn.py` | [004](../reports/004-manual-demonstration/README.md) |
 | [manual_demonstration_v2_autonomous_reaching](manual_demonstration_v2_autonomous_reaching/README.md) | as manual-demonstration autonomous reaching, on a remade arm with its own start posture and target (base configurations) | the same | [005](../reports/005-tuned-on-the-robot/README.md) |
 | [manual_demonstration_v2_robot_tracking](manual_demonstration_v2_robot_tracking/README.md) | as manual-demonstration robot tracking, on that arm, and ESN sweeps on the robot | `robot_esn.py`, `sweep_robot_esn.py`, `robot_states.py` | [005](../reports/005-tuned-on-the-robot/README.md) |
-| [manual_demonstration_v2_robot_search](manual_demonstration_v2_robot_search/README.md) | a wider ESN search on that robot: spectral radius over 1, input scaling, larger leak rates, ten reservoirs each; then one setting's neighbors, and a small grid combining them, under pushes and a block | `sweep_robot_esn.py` | |
+| [manual_demonstration_v2_robot_search](manual_demonstration_v2_robot_search/README.md) | a wider ESN search on that robot: spectral radius over 1, input scaling, larger leak rates, ten reservoirs each; then one setting's neighbors, and a small grid combining them, under pushes and a block | `sweep_robot_esn.py`, `autonomous_esn.py`, `robot_esn.py`, `robot_states.py` | [006](../reports/006-wider-search-on-the-robot/README.md) |
 
 Run a configuration with its runner:
 

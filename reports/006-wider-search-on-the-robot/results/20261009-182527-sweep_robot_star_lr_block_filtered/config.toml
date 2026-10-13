@@ -1,0 +1,57 @@
+# The wider ESN search on the robot, Step B: a line of the star around candidate #2
+# (leak rate 0.03, spectral radius 1.35, input scaling 2): the leak rate from 0.015
+# to 0.05, the other settings those of #2, each with ten random reservoirs (seeds 0
+# to 9), with the tip held from 4.5 s to 5.5 s, in mid-reach, then let go (report
+# 005's block), from the demonstrated start. Otherwise as stage 1
+# (sweep_robot_wide_lr0.03_filtered.toml).
+#
+#   uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_search/sweep_robot_star_lr_block_filtered.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# Candidate #2's settings (grid_lr0.03_sr1.35_is2_seed5_filtered.toml); the swept
+# leak_rate and seed are replaced by each swept value.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.35
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.03
+input_scaling = 2.0
+bias = true
+ridge = 1e-2
+seed = 5
+
+[sweep]
+# The heatmap axes of sweep.png: x, then y.
+leak_rate = [0.015, 0.02, 0.025, 0.03, 0.04, 0.05]
+seed = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # the random reservoir, its input weights, and its biases
+
+[tracker]
+# Report 005's tracker: computed torque and joint PD at omega = 20 rad/s,
+# underdamped (damping ratio 0.1), given a zero reference velocity.
+laws = ["computed_torque", "pd"]
+omegas = [20.0]
+dampings = [0.1]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+
+[evaluation]
+duration = 22.0        # task (s), after the warm-up; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+effort_window = [4.5, 6.0]  # torque, effort, and force: from the block's onset to 0.5 s after its release (s)
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+
+# Report 005's block, as block_robot_<candidate>_filtered.toml of Step A.
+[disturbance]
+type = "block"
+onset = 4.5            # task time when the tip is gripped (s)
+release = 5.5          # task time when it is let go (s)
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_search/sweep_robot_star_sr_pushes_filtered.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_search/sweep_robot_star_sr_pushes_filtered.toml"
+started = 2026-10-09 18:25:27+09:00
+host = "delbosque"
+commit = "d0b6c1df0a3473ca7ff54b9f7fbb04e82af9658f"
+uncommitted_changes = false
