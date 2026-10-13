@@ -206,7 +206,14 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot
 
 | Configurations | Scenario |
 | --- | --- |
-| `{nominal,block,pushes,offsets}_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml` | as in Step A |
+| `{nominal,block,pushes,offsets}_robot_lr0.03_sr1.35_is1.5_seed8_filtered.toml` | as in Step A, but for the last push |
+
+The last push comes at 15 s rather than 13 s, after the hold window of every
+arrival seen under the pushes (11.7 s at the latest), and the pushed run lasts 24 s
+rather than 22 s, so that the hand has as long to come back after it. Under the
+block and the pushes, the runs also measure the gap between the reference and the
+arm at each disturbance's end (`end_gap_deg`), and how much the hand rings after it
+(`ringing_m`: its motion above 1.5 Hz, over 2 s; the tracker rings at 3.2 Hz).
 
 Its reservoir states in those runs, recomputed from their logs, with
 [`robot_states.py`](../robot_states.py):
