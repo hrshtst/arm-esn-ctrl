@@ -138,9 +138,26 @@ ESN
 already trained), whose setting scores 1: ringing 5.86 mm, return 2.66 s, path RMSE
 0.58 mm.
 
-## Then
+`noise_white1deg_ridge4e-2_seed3_filtered.toml`, trained with white noise, was
+chosen in the app.
 
-The chosen ESN runs against the replay with joint PD at damping ratios 0.1, 0.4, and
-0.8, each given a zero reference velocity or the reference's, all with the torque
-computed every 10 ms: undisturbed, under the block, under the pushes, and from the
-49 offset starts.
+## Step 3: the chosen ESN against the replay
+
+[`robot_esn.py`](../robot_esn.py) runs the chosen ESN and the replay of the take with
+joint PD at damping ratios 0.1, 0.4, and 0.8, each given a zero reference velocity
+or the reference's, all with the torque computed every 10 ms and held between:
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_damped_search/pushes_robot_white1deg_seed3_reference_velocity_filtered.toml
+```
+
+| Configurations | Tracker |
+| --- | --- |
+| `{nominal,block,pushes,offsets}_robot_white1deg_seed3_zero_velocity_filtered.toml` | joint PD at the three damping ratios, given a zero reference velocity |
+| `{nominal,block,pushes,offsets}_robot_white1deg_seed3_reference_velocity_filtered.toml` | the same, given the reference's velocity |
+
+They are report 008's configurations with the torque computed every 10 ms
+(`*_control10ms_filtered.toml` of [the damping study](../manual_demonstration_v2_robot_damping/README.md)),
+with the chosen ESN in place of report 007's, so that the replay repeats report
+008's runs: undisturbed, under the block, under the pushes, and from the 49 offset
+starts.

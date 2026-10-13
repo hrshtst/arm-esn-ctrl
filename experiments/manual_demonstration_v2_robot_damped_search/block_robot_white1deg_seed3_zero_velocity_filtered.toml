@@ -1,0 +1,43 @@
+# The damped search's validation (step 3): the chosen ESN
+# (noise_white1deg_ridge4e-2_seed3_filtered.toml: report 007's chosen setting, leak
+# rate 0.02, spectral radius 1.35, input scaling 2, trained with white noise of 1
+# deg on the input at ridge 4e-2, seed 3) against the replay of the take, with joint
+# PD at damping ratios 0.1, 0.4, and 0.8, given a zero reference velocity, so that
+# the derivative term damps the arm's own velocity, its torque computed every 10 ms
+# and held between, while the arm is still simulated every 2 ms: the tip held from
+# 4.5 s to 5.5 s, in mid-reach, then let go, from the demonstrated start. As report
+# 008's block_robot_pd_zero_velocity_control10ms_filtered.toml otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_damped_search/block_robot_white1deg_seed3_zero_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_damped_search/20261014-000719-noise_white1deg_ridge4e-2_seed3_filtered/esn.toml"
+
+[tracker]
+# Joint PD at omega = 20 rad/s, at three damping ratios, given a zero reference velocity.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.1, 0.4, 0.8]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+effort_window = [4.5, 6.0]  # torque, effort, and force: from the block's onset to 0.5 s after its release (s)
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 3.2, 2.9, and 1.9 Hz at the three damping ratios
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+
+# Report 005's block, as in report 006.
+[disturbance]
+type = "block"
+onset = 4.5            # task time when the tip is gripped (s)
+release = 5.5          # task time when it is let go (s)
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m
