@@ -54,13 +54,40 @@ The rule, fixed before the runs:
 3. Stage B trains with the noise of the qualifying setting that scores the lowest
    here, its exponent and its level.
 
+## Stage B: the grid, trained with the noise
+
+Stage A's best qualifying setting was white noise of 1°, report 009's, so stage B
+trains report 009's grid with it: leak rate 0.015 to 0.1, spectral radius 0.99 to
+1.75, input scaling 1 to 2, ten seeds each, the take fed in four times at ridge
+4e-2, each with white noise of 1° on the input:
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_noisy_search/sweep_robot_noisy_lr0.05_pushes_filtered.toml
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `sweep_robot_noisy_lr{0.015,0.02,0.03,0.04,0.05,0.07,0.1}_{nominal,block,pushes}_filtered.toml` | spectral radius 0.99, 1.2, 1.35, 1.5, 1.75 × input scaling 1, 1.5, 2 × seeds 0–9, at one leak rate |
+
+Report 007's setting (leak rate 0.02, spectral radius 1.35, input scaling 2) is in
+the grid: with this noise, it is report 009's chosen setting, whose runs it repeats.
+
+The rule, fixed before the runs:
+
+1. A setting qualifies, and is scored, as in stage A, against the same reference:
+   report 007's chosen setting without noise, in report 009's grid. Report 009's
+   chosen setting scores 0.821.
+2. Alongside, report 009's medians over the seeds: the undisturbed path RMSE; after
+   each disturbance, the ringing, the farthest from the path, and the return; and
+   under the block, the reference lead and the peak torque.
+3. The shortlist is the top three settings, each with its typical seed (the one
+   nearest its medians of the undisturbed path RMSE, the ringing, and the return,
+   each scaled by its interquartile range over the seeds), and report 009's chosen
+   ESN. They are trained by [`autonomous_esn.py`](../autonomous_esn.py) and tried in
+   [the robot app](../../tools/README.md) with the tracker, where one is chosen.
+
 ## Then
 
-- **Stage B:** report 009's grid (leak rate 0.015 to 0.1, spectral radius 0.99 to
-  1.75, input scaling 1 to 2, ten seeds each), trained with stage A's noise at ridge
-  4e-2 with four copies, scored as there, against the same reference; the top three
-  settings, each with its typical seed, and report 009's chosen ESN are tried in the
-  robot app, where one is chosen.
 - **The validation:** the chosen ESN against the replay, as in report 009, and under
   disturbances the search did not use: single pushes at other times, in other
   directions, and of other forces, and a block at another time.
