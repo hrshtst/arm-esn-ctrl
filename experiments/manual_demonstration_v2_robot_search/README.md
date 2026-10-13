@@ -125,9 +125,19 @@ outside the goal, which the undisturbed runs of stage 1 could not show. Under th
 block, the reference's lead at the release shows how long the ESN waits for the
 held arm.
 
-A setting must, for all ten seeds, arrive and hold in every scenario, come back onto
-the path after every disturbance, and end at the target. The undisturbed runs
-repeat settings of stage 1, which they must reproduce.
+The undisturbed runs repeat settings of stage 1, which they must reproduce. A
+setting must, for all ten seeds, arrive and hold undisturbed and under the block,
+and lose no seed under the pushes. A seed is lost if a pushed run never arrives or
+ends more than 20 mm from the target: the lost ones drift back along the path,
+toward the start. Settings are then compared by how soon the hand is back on the
+path after the push at the target, with the slower of the two trackers.
+
+A first rule also required every seed to arrive and hold under the pushes and to be
+back on the path before each next push. It proved wrong, failing nearly every
+setting: the push at 13 s falls inside the 2 s hold window when the hand arrives
+after 11 s, and a hand still settling 5 to 7.5 mm from the path at the next push
+counted as not back. Under the pushes, the `failures` of `sweep.csv` still count
+these hold failures.
 
 ### Representatives of Step B to try
 
@@ -149,3 +159,33 @@ input scaling 1.5, so those three share a reservoir.
 | `grid_lr0.03_sr1.75_is2_seed9_filtered.toml` | the largest spectral radius, whose reference ran furthest ahead under the block |
 | `grid_lr0.04_sr1.35_is2_seed7_filtered.toml` | a faster leak rate, which waited longer under the block but lost two of its ten seeds |
 | `grid_lr0.04_sr1.35_is2_seed8_filtered.toml` | a lost seed of that faster leak rate, with the reservoir of the leak rates 0.02 and 0.03 above: after the push at the target, its hand drifted away from the target |
+
+### A small grid
+
+Step B varied one setting at a time. Around #2, a slower leak rate (0.02, 0.025)
+and a weaker input (input scaling 1.5) brought the hand back onto the path sooner
+after the push at the target, and a smaller spectral radius (1.2) kept the
+reference from running as far ahead under the block. The small grid combines them,
+with ten seeds each, in the three scenarios of Step B. `sweep_robot_esn.py` sweeps
+at most three hyperparameters, so each spectral radius has its own configurations:
+
+| Configurations | What they sweep |
+| --- | --- |
+| `sweep_robot_small_grid_sr{1.2,1.35}_{nominal,pushes,block}_filtered.toml` | leak rate 0.02, 0.025, 0.03 × input scaling 1.5, 2 × seeds 0–9, at one spectral radius |
+
+The grid decides the ESN of Step C. A setting of the grid replaces #2's (leak rate
+0.03, spectral radius 1.35, input scaling 2) if, over its ten seeds:
+
+1. it passes Step B's rule above: every seed arrives and holds undisturbed and
+   under the block, and no seed is lost under the pushes;
+2. after the push at the target, its hand is back on the path sooner than with
+   #2's setting for at least 8 of the 10 seeds, seed by seed, with a median gain
+   over 0.3 s (the slower of the two trackers; a hand not back by the end of the
+   run counts as back at the end);
+3. it gives up no more than 0.1 mm in the median worst path RMSE undisturbed, and
+   no more than 10 mm in the median farthest distance from the path under the
+   block (the farther of the two trackers).
+
+If several settings do, the one with the largest median gain wins, and the ESN of
+Step C is its typical seed, chosen as for the representatives above. Otherwise, the
+ESN of Step C is #2 itself.
