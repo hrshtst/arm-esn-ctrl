@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_damped_search/pushes_robot_white1deg_seed3_reference_velocity_filtered.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_damped_search/pushes_robot_white1deg_seed3_reference_velocity_filtered.toml"
+started = 2026-10-14 00:34:51+09:00
+host = "delbosque"
+commit = "4d02144b3c4ab0d51d6a9cfb7522e104df1003ba"
+uncommitted_changes = false

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_damped_search/sweep_robot_damped_noise_ridge4e-2_nominal_filtered.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_damped_search/sweep_robot_damped_noise_ridge4e-2_nominal_filtered.toml"
+started = 2026-10-13 23:32:50+09:00
+host = "delbosque"
+commit = "87e1d9b93aee0fecdce39c563d9ac09571c4fdf7"
+uncommitted_changes = false

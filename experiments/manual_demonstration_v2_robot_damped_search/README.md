@@ -1,5 +1,7 @@
 # Manual-demonstration robot damped search, v2 (Stage 2)
 
+Results: [report 009](../../reports/009-noisy-training-for-a-faster-return/README.md).
+
 The study after [the damping study](../manual_demonstration_v2_robot_damping/README.md)
 (report 008). There, with joint PD at a damping ratio of 0.4 or more, the tracker
 removed most of the ringing by itself, and what set report 007's chosen ESN apart
