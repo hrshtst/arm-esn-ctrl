@@ -58,6 +58,15 @@ undisturbed from eight offset starts, by configurations written once those are
 known: the demonstrated start offset by −15°, 0, or 15° in each joint, but for
 (0, 0).
 
+| Configurations | What they run |
+| --- | --- |
+| `sweep_robot_following_offsets_lr<leak rate>_sr<spectral radius>_is<input scaling>_filtered.toml` (13) | one setting that passes the three scenarios × seeds 0–9, undisturbed from the eight offset starts |
+
+The 13 settings: leak rate 0.015 with (spectral radius, input scaling) (0.99, 1.5),
+(1.2, 1.5), (1.2, 2), and (1.35, 1.5); leak rate 0.02 with (0.99, 1.5), (1.2, 1.5),
+(1.2, 2), (1.35, 1.5), and (1.35, 2); and leak rate 0.03 with (1.2, 1), (1.2, 1.5),
+(1.35, 1), and (1.35, 1.5).
+
 The rule, fixed before the runs:
 
 1. **A setting qualifies** if every one of its ten seeds:
