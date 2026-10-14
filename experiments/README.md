@@ -15,6 +15,7 @@ experiments/
 ├── sweep_robot_esn.py
 ├── reservoir_states.py
 ├── robot_states.py
+├── compare_arms.py
 ├── warmup_esn.py
 ├── demonstrations/                            # one directory per experiment: README.md and configurations
 ├── single_demonstration_autonomous_reaching/
@@ -119,6 +120,7 @@ that holds its configuration.
 ```text
 <storage root>/
 ├── data/                                       # demonstrations taught by hand (*.sklog.npz)
+│   └── recorded_forces/                        # runs pushed by hand in tools/robot_app.py, to replay their forces
 └── results/
     ├── demonstrations/
     │   └── 20261002-194644-reach_tvs/          # one directory per run: <date>-<time>-<configuration name>
@@ -130,8 +132,8 @@ that holds its configuration.
 ```
 
 `data/` holds what cannot be regenerated, such as demonstrations taught with the
-mouse. Everything a runner produces, including scripted demonstrations, goes into
-a run directory under `results/`.
+mouse and the forces of runs pushed by hand. Everything a runner produces,
+including scripted demonstrations, goes into a run directory under `results/`.
 
 A configuration names the runs it builds on by their paths under the storage
 root, such as `run = "results/demonstrations/20261002-194644-reach_tvs"` for its
@@ -143,6 +145,45 @@ configuration's old path can be traced with `git log --follow`.
 
 Git tracks only the data and results behind a specific report. They are copied
 into that report's directory (see [Reports](../README.md#reports)).
+
+## Recorded forces
+
+To compare arms under the same pushes given by hand, push the arm in
+`tools/robot_app.py` with one ESN and tracker, and save the run's log (Save log,
+`Ctrl+S`), by default under `data/recorded_forces/` in the storage root. Then replay
+its force with `experiments/robot_esn.py`, for each ESN and with every tracker:
+
+```toml
+[disturbance]
+type = "recorded"
+log = "data/recorded_forces/<log>.sklog.npz"
+# time_offset = 0.0   # s: shifts the recorded force on the task clock
+# threshold = 0.5     # N: the force counts as a push above this, for the measures after each push
+# min_gap = 0.2       # s: pushes closer than this count as one
+```
+
+- **Every arm meets the same force at the same times,** on the task clock, whatever
+  it does: the recorded force is replayed, not the drag. With the log's simulation
+  step, each step gets the recorded sample itself; with another, the mean recorded
+  force over it, which keeps every push's impulse.
+- **The runs start from the log's start posture,** so `[evaluation]` lists no start
+  postures, and they must last until the recorded pushes end. A log recorded with
+  another arm, or a second recorded log, is refused; scripted disturbances may be
+  added, with a warning.
+- **The run directory keeps a copy of the log,** with its SHA-256 in
+  `recorded_forces.toml`.
+- **The tracker may differ from the one recorded with:** every run, the recording's
+  tracker included, meets the same force, so the runs compare with each other. The
+  recording run itself is retraced exactly by the experiments' run with its ESN and
+  tracker for computed torque; for joint PD, the app sets the gains at another
+  posture than the experiments, so it differs slightly.
+
+`experiments/compare_arms.py` then overlays the arms of such runs, such as two ESNs
+and the replay: its `[[arm]]` tables name each arm's run, the arm in it (`esn` or
+`replay`), a label, and a color. It draws the tip force and each joint's angle
+(`joints.png`) and torque (`torques.png`) over time, one column per tracker setting
+the runs share, the ESNs' lines over the replay's, and refuses arms that met
+different forces.
 
 ## Adding an experiment
 

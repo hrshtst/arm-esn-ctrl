@@ -53,6 +53,7 @@ select = ["E", "W", "F", "I", "B", "UP", "NPY", "SIM", "RUF"]
 # [tool.basedpyright] would be ignored by plain pyright.
 [tool.pyright]
 include = ["src", "tests", "experiments", "tools"]
+extraPaths = ["experiments"]  # the runners import each other as modules of their own directory, and tests import them
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"

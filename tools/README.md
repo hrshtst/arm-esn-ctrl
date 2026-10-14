@@ -72,3 +72,22 @@ faint gray arm shows the initial posture (the given one, or else the last run's
 start), and a faint colored arm the reference posture. The side panel shows the
 arrival and the hold, the tracking error and the reference's joint speed, and the
 joint torque, its squared integral, and the external force, live.
+
+**Save log** (`Ctrl+S`) saves the run so far as a log in the format of the
+experiments' runs, on the task clock, with every simulation step's joint angles,
+torques, and external force, and the reference and the tracker in its metadata. It
+is saved by default under `data/recorded_forces/` in the storage root, where
+experiments share it: a `[disturbance]` of `type = "recorded"` replays its force in
+`experiments/robot_esn.py` and `experiments/sweep_robot_esn.py` (see
+[the experiments](../experiments/README.md#recorded-forces)).
+
+`--forces <log>` replays a saved log's force in every run instead of the drag, from
+the log's start posture, with posing and dragging off, to watch another ESN, the
+replay, or another tracker meet the same forces. The force is drawn as an arrow,
+scaled as a drag of the set stiffness would draw it.
+
+```bash
+uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml \
+    --law pd --omega 20 --damping 0.4 --control-period 0.01 --model <run directory>/esn.toml \
+    --forces <storage root>/data/recorded_forces/<log>.sklog.npz
+```
