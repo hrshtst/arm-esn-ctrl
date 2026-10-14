@@ -86,6 +86,35 @@ The rule, fixed before the runs:
    ESN. They are trained by [`autonomous_esn.py`](../autonomous_esn.py) and tried in
    [the robot app](../../tools/README.md) with the tracker, where one is chosen.
 
+## Stage B: the grid's edge
+
+Stage B's top three settings all sat at its grid's corner, its fastest leak rate
+(0.1), its largest input scaling (2), and its smallest spectral radii (0.99 to 1.35),
+so its grid is extended beyond the corner before the shortlist: leak rate 0.1 to 0.3,
+spectral radius 0.8 to 0.99, input scaling 2 to 3, ten seeds each, trained as in
+stage B:
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_noisy_search/sweep_robot_noisy_edge_lr0.2_pushes_filtered.toml
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `sweep_robot_noisy_edge_lr{0.1,0.15,0.2,0.3}_{nominal,block,pushes}_filtered.toml` | spectral radius 0.8, 0.9, 0.99 × input scaling 2, 2.5, 3 × seeds 0–9, at one leak rate |
+
+Stage B's top setting (leak rate 0.1, spectral radius 0.99, input scaling 2) is in
+the extension, whose runs of it repeat stage B's.
+
+The rule, fixed before the runs:
+
+1. A setting qualifies, and is scored, as in stage B, against the same reference,
+   with the same medians alongside.
+2. Stage B's shortlist is drawn from both grids together: the top three qualifying
+   settings of stage B's grid and the extension, each with its typical seed, and
+   report 009's chosen ESN.
+3. The search stops here: if the top setting is again at the extension's edge, the
+   report says so, and the grid is not extended further.
+
 ## Then
 
 - **The validation:** the chosen ESN against the replay, as in report 009, and under
