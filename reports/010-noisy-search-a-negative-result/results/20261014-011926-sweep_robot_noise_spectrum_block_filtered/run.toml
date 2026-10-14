@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_noisy_search/sweep_robot_noise_spectrum_block_filtered.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_noisy_search/sweep_robot_noise_spectrum_block_filtered.toml"
+started = 2026-10-14 01:19:26+09:00
+host = "delbosque"
+commit = "8dd01b423ac92a3c39f4a81673d95d975842116c"
+uncommitted_changes = false

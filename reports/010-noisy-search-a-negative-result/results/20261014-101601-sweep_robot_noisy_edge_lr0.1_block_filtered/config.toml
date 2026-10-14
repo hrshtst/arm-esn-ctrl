@@ -1,0 +1,66 @@
+# The noisy search's edge check: beyond stage B's grid's corner, at leak rate 0.1
+# (one of 0.1, 0.15, 0.2, 0.3, one configuration each), spectral radius 0.8 to 0.99,
+# and input scaling 2 to 3, each setting with ten random reservoirs (seeds 0 to 9),
+# trained as in stage B: the take fed in four times at ridge 4e-2, each with white
+# noise of 1 deg added to the input, with the tip held from 4.5 s to 5.5 s, in
+# mid-reach, then let go (report 005's block), from the demonstrated start. As
+# sweep_robot_noisy_lr0.1_block_filtered.toml otherwise.
+#
+#   uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_noisy_search/sweep_robot_noisy_edge_lr0.1_block_filtered.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# The settings not swept, those of reports 005 to 007 but for the noise and the
+# ridge; a swept key's value here is replaced by each swept value.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.35
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.1
+input_scaling = 1.5
+bias = true
+ridge = 4e-2           # with the four copies, as 1e-2 with one: report 007's
+seed = 8               # also seeds the teacher noise
+teacher_noise_deg = 1.0  # stage A's: its standard deviation over each copy of the take, in each joint (deg)
+teacher_copies = 4     # the take is fed in four times, each with its own noise
+teacher_noise_exponent = 0.0  # white noise
+
+[sweep]
+# The heatmap axes of sweep.png: x, then y.
+spectral_radius = [0.8, 0.9, 0.99]
+input_scaling = [2.0, 2.5, 3.0]
+seed = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # the random reservoir, its input weights and biases, and the noise
+
+[tracker]
+# Joint PD at omega = 20 rad/s and a damping ratio of 0.4, given the reference's
+# velocity, as report 008 proposed, with its torque computed every 10 ms, the ESN's
+# period, and held between.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up; the take lasts 18.5 s, and the last push comes at 15 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+effort_window = [4.5, 6.0]  # torque, effort, and force: from the block's onset to 0.5 s after its release (s)
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 2.9 Hz
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+
+# Report 005's block, as in reports 006 to 008.
+[disturbance]
+type = "block"
+onset = 4.5            # task time when the tip is gripped (s)
+release = 5.5          # task time when it is let go (s)
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m

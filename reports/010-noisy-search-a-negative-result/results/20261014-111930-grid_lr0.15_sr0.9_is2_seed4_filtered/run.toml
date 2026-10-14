@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_noisy_search/grid_lr0.15_sr0.9_is2_seed4_filtered.toml"
+command = "experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_noisy_search/grid_lr0.15_sr0.9_is2_seed4_filtered.toml"
+started = 2026-10-14 11:19:30+09:00
+host = "delbosque"
+commit = "c8f329bd4440c6793ab27707a7055c37ce4fde7d"
+uncommitted_changes = false

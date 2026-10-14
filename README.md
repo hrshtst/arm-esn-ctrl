@@ -252,7 +252,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_ringing](experiments/manual_demonstration_v2_robot_ringing/README.md) | the ringing after a block or a push, with joint PD, and an ESN search scored by it (Stage 2) | [007](reports/007-ringing-with-joint-pd/README.md) |
 | [manual_demonstration_v2_robot_damping](experiments/manual_demonstration_v2_robot_damping/README.md) | that ESN with joint PD better damped, and given the reference velocity (Stage 2) | [008](reports/008-damping-and-reference-velocity/README.md) |
 | [manual_demonstration_v2_robot_damped_search](experiments/manual_demonstration_v2_robot_damped_search/README.md) | an ESN search with that better-damped tracker, its torque computed every 10 ms, then with white, pink, and brown teacher noise, scored by the ringing and the return (Stage 2) | [009](reports/009-noisy-training-for-a-faster-return/README.md) |
-| [manual_demonstration_v2_robot_noisy_search](experiments/manual_demonstration_v2_robot_noisy_search/README.md) | blue and violet teacher noise against white, then the search trained with the best noise (Stage 2) | |
+| [manual_demonstration_v2_robot_noisy_search](experiments/manual_demonstration_v2_robot_noisy_search/README.md) | blue and violet teacher noise against white, then the search trained with the best noise (Stage 2) | [010](reports/010-noisy-search-a-negative-result/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -375,6 +375,14 @@ The reports so far:
   the taught path during a push, as the replay's does, while under the block it
   still yields, pressing with an eighth of the replay's torque. Brown noise spoils
   the reach, and with ζ = 0.1 the noisy ESN rings much as the replay does.
+- [010 The noisy search: a negative result](reports/010-noisy-search-a-negative-result/README.md)
+  (Stage 2): blue and violet noise do no better than white, and with white noise of
+  1° nearly every setting of report 009's grid qualifies, the best returning about
+  as fast as the replay. But in the robot app no ESN trained with noise did better
+  than report 007's: after a push, its reference holds the taught path and the arm
+  is snapped back, as with the replay, where a reference that adapts to the arm's
+  actual state is wanted. The fastest reservoirs also settle on a resting posture
+  off the taught motion from many offset starts.
 
 Each report has five parts:
 

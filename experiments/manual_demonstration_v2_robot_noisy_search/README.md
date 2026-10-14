@@ -1,5 +1,7 @@
 # Manual-demonstration robot noisy search, v2 (Stage 2)
 
+Results: [report 010](../../reports/010-noisy-search-a-negative-result/README.md).
+
 The study after [the damped search](../manual_demonstration_v2_robot_damped_search/README.md)
 (report 009). There, training report 007's chosen setting with white noise of 1° on
 the input brought its return onto the taught path after a disturbance from 2.66 s to
@@ -141,8 +143,14 @@ radius. With them, report 009's chosen ESN
 already trained), whose setting scores 0.821: ringing 7.87 mm, return 0.80 s, path
 RMSE 0.60 mm.
 
+None was chosen in the app: no ESN trained with noise, report 009's chosen ESN
+included, did better than report 007's chosen ESN. After a push, their reference
+holds to the taught path and the tracker snaps the arm back, as with the replay,
+where a reference that adapts to the arm's actual state is wanted. On their own, the
+three new ESNs also reach the target from only 24, 33, and 25 of the 48 offset
+starts.
+
 ## Then
 
-- **The validation:** the chosen ESN against the replay, as in report 009, and under
-  disturbances the search did not use: single pushes at other times, in other
-  directions, and of other forces, and a block at another time.
+The validation planned here (the chosen ESN against the replay, also under
+disturbances the search did not use) was not run, since no ESN was chosen.
