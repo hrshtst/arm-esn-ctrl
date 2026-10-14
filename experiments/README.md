@@ -174,9 +174,9 @@ log = "data/recorded_forces/<log>.sklog.npz"
   `recorded_forces.toml`.
 - **The tracker may differ from the one recorded with:** every run, the recording's
   tracker included, meets the same force, so the runs compare with each other. The
-  recording run itself is retraced exactly by the experiments' run with its ESN and
-  tracker for computed torque; for joint PD, the app sets the gains at another
-  posture than the experiments, so it differs slightly.
+  experiments' run with the recording's ESN and tracker retraces the recording run
+  exactly, since the app sets joint PD's gains as the experiments do, where the
+  ESN's training takes end.
 
 `experiments/compare_arms.py` then overlays the arms of such runs, such as two ESNs
 and the replay: its `[[arm]]` tables name each arm's run, the arm in it (`esn` or
