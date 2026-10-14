@@ -6,7 +6,8 @@ pushes given by hand: the arm was pushed in [the robot app](../../tools/README.m
 the run's log saved with its force, and the same force replayed by time for each ESN
 and the replay of the take, with every tracker (see
 [Recorded forces](../README.md#recorded-forces)). There is no search and no rule:
-every arm is shown.
+every arm is shown. The results are in
+[report 012](../../reports/012-pushes-by-hand/README.md).
 
 - **The recordings:** three runs of report 011's ESN #2 with joint PD at ω = 20 rad/s
   and a damping ratio of 0.4, given the reference velocity, its torque computed every

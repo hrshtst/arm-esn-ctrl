@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_recorded_pushes/compare_recorded000_zero_velocity.toml"
+command = "experiments/compare_arms.py experiments/manual_demonstration_v2_robot_recorded_pushes/compare_recorded000_zero_velocity.toml"
+started = 2026-10-14 20:34:10+09:00
+host = "delbosque"
+commit = "abdebfabcdb7ffed6af9c582a2141df7da57ab29"
+uncommitted_changes = false

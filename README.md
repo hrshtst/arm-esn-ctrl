@@ -254,7 +254,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_damped_search](experiments/manual_demonstration_v2_robot_damped_search/README.md) | an ESN search with that better-damped tracker, its torque computed every 10 ms, then with white, pink, and brown teacher noise, scored by the ringing and the return (Stage 2) | [009](reports/009-noisy-training-for-a-faster-return/README.md) |
 | [manual_demonstration_v2_robot_noisy_search](experiments/manual_demonstration_v2_robot_noisy_search/README.md) | blue and violet teacher noise against white, then the search trained with the best noise (Stage 2) | [010](reports/010-noisy-search-a-negative-result/README.md) |
 | [manual_demonstration_v2_robot_following_search](experiments/manual_demonstration_v2_robot_following_search/README.md) | an ESN search scored by how much its reference follows the arm, waiting under the block and yielding to a push, then compared with the replay across joint PD trackers (Stage 2) | [011](reports/011-following-the-arm/README.md) |
-| [manual_demonstration_v2_robot_recorded_pushes](experiments/manual_demonstration_v2_robot_recorded_pushes/README.md) | the two ESNs of the following search and the replay under pushes given by hand, recorded once and replayed by time across joint PD trackers (Stage 2) | |
+| [manual_demonstration_v2_robot_recorded_pushes](experiments/manual_demonstration_v2_robot_recorded_pushes/README.md) | the two ESNs of the following search and the replay under pushes given by hand, recorded once and replayed by time across joint PD trackers (Stage 2) | [012](reports/012-pushes-by-hand/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -393,6 +393,15 @@ The reports so far:
   velocity, both complete every run and follow alike; they ring half as much as the
   replay after a push when lightly damped and about as much at 0.8, wait under the
   block with a sixth of its torque, and return to the taught path more slowly.
+- [012 Pushes by hand](reports/012-pushes-by-hand/README.md) (Stage 2): the arm
+  pushed by hand in the robot app, three times, and the recorded force replayed by
+  time for report 011's two ESNs and the replay across six joint PD trackers. The ESNs
+  follow the ten pushes by about 0.7, as the scripted ones, and every run reaches the
+  target. A strong push backward, given a zero reference velocity, takes ESN #1's
+  reference back toward the start, and the arm reaches again. After a push at the
+  target, the ESNs ring less than the replay when lightly damped, but over all ten
+  pushes their edge is smaller than under the scripted pushes, and they come back to
+  the taught path in seconds where the replay's arm does within 1.2 s.
 
 Each report has five parts:
 
