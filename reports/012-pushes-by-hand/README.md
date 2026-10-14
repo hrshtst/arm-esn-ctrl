@@ -127,7 +127,10 @@ animations of Section 3.6.
 
 ## 3. Results
 
-In each comparison figure, the columns are the damping ratios. In the time series, the
+Each log's section shows its six comparison figures: the tip's path, the joint angles,
+and the joint torques, given the reference velocity and given a zero reference
+velocity. In each figure, the columns are the damping ratios, so that every tracker is
+shown. In the time series, the
 ESNs' lines are drawn over the replay's, each ESN's reference dashed, and the pushes
 are shaded. In the paths, the rows are the arms: each panel draws the arm at its
 initial posture (faint gray), the taught path (thick gray), the goal, and the tip's
@@ -138,18 +141,25 @@ before the next push or the run's end.
 
 ### 3.1 Log 000: four short pushes
 
-The tip's path, given the reference velocity (given a zero reference velocity:
-[paths](results/20261014-203410-compare_recorded000_zero_velocity/paths.png)):
+The tip's path, given the reference velocity and given a zero reference velocity:
 
 ![Log 000: the tip's path, reference velocity](results/20261014-203410-compare_recorded000_reference_velocity/paths.png)
 
-The joint angles and torques over time, given the reference velocity (given a zero
-reference velocity: [joint angles](results/20261014-203410-compare_recorded000_zero_velocity/joints.png),
-[torques](results/20261014-203410-compare_recorded000_zero_velocity/torques.png)):
+![Log 000: the tip's path, zero reference velocity](results/20261014-203410-compare_recorded000_zero_velocity/paths.png)
+
+The joint angles over time, given the reference velocity and given a zero reference
+velocity:
 
 ![Log 000: joint angles, reference velocity](results/20261014-203410-compare_recorded000_reference_velocity/joints.png)
 
+![Log 000: joint angles, zero reference velocity](results/20261014-203410-compare_recorded000_zero_velocity/joints.png)
+
+The joint torques over time, given the reference velocity and given a zero reference
+velocity:
+
 ![Log 000: joint torques, reference velocity](results/20261014-203410-compare_recorded000_reference_velocity/torques.png)
+
+![Log 000: joint torques, zero reference velocity](results/20261014-203410-compare_recorded000_zero_velocity/torques.png)
 
 **The following gain**, ESN #1 / ESN #2:
 
@@ -223,10 +233,12 @@ velocity:
 
 ![Log 001: joint angles, zero reference velocity](results/20261014-203410-compare_recorded001_zero_velocity/joints.png)
 
-The joint torques over time, given the reference velocity (given a zero reference
-velocity: [torques](results/20261014-203410-compare_recorded001_zero_velocity/torques.png)):
+The joint torques over time, given the reference velocity and given a zero reference
+velocity:
 
 ![Log 001: joint torques, reference velocity](results/20261014-203410-compare_recorded001_reference_velocity/torques.png)
+
+![Log 001: joint torques, zero reference velocity](results/20261014-203410-compare_recorded001_zero_velocity/torques.png)
 
 **The following gain**, ESN #1 / ESN #2:
 
@@ -302,18 +314,25 @@ velocity: [torques](results/20261014-203410-compare_recorded001_zero_velocity/to
 
 ### 3.3 Log 002: three short pushes, one forward
 
-The tip's path, given the reference velocity (given a zero reference velocity:
-[paths](results/20261014-203410-compare_recorded002_zero_velocity/paths.png)):
+The tip's path, given the reference velocity and given a zero reference velocity:
 
 ![Log 002: the tip's path, reference velocity](results/20261014-203410-compare_recorded002_reference_velocity/paths.png)
 
-The joint angles and torques over time, given the reference velocity (given a zero
-reference velocity: [joint angles](results/20261014-203410-compare_recorded002_zero_velocity/joints.png),
-[torques](results/20261014-203410-compare_recorded002_zero_velocity/torques.png)):
+![Log 002: the tip's path, zero reference velocity](results/20261014-203410-compare_recorded002_zero_velocity/paths.png)
+
+The joint angles over time, given the reference velocity and given a zero reference
+velocity:
 
 ![Log 002: joint angles, reference velocity](results/20261014-203410-compare_recorded002_reference_velocity/joints.png)
 
+![Log 002: joint angles, zero reference velocity](results/20261014-203410-compare_recorded002_zero_velocity/joints.png)
+
+The joint torques over time, given the reference velocity and given a zero reference
+velocity:
+
 ![Log 002: joint torques, reference velocity](results/20261014-203410-compare_recorded002_reference_velocity/torques.png)
+
+![Log 002: joint torques, zero reference velocity](results/20261014-203410-compare_recorded002_zero_velocity/torques.png)
 
 **The following gain**, ESN #1 / ESN #2:
 
