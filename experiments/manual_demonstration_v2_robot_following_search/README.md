@@ -90,13 +90,41 @@ The rule, fixed before the runs:
    each scaled by its interquartile range over the seeds), and report 007's chosen
    ESN.
 
+By the rule, 11 of the 13 settings that pass the three scenarios also pass from the
+offset starts; the ringing guard excludes none (5.6 to 6.4 mm). Every setting at a
+leak rate of 0.04 or more fails, mostly by ending away from the target after the
+pushes, though those settings follow the most (up to 0.95).
+
+## Step 2: the shortlist, with six trackers
+
+The shortlisted ESNs, each trained by [`autonomous_esn.py`](../autonomous_esn.py)
+with its setting's typical seed and run on its own from the 49 offset starts:
+
+```bash
+uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_following_search/grid_lr0.03_sr1.2_is1.5_seed8_filtered.toml
+```
+
+| Configuration | Following | Block | Pushes at 3 / 7 / 15 s | Ringing | Return | Undisturbed path RMSE |
+| --- | ---: | ---: | --- | ---: | ---: | ---: |
+| `grid_lr0.03_sr1.2_is1.5_seed8_filtered.toml` | 0.76 | 0.88 | 0.79 / 0.56 / 0.77 | 5.68 mm | 2.92 s | 0.69 mm |
+| `grid_lr0.03_sr1.2_is1_seed2_filtered.toml` | 0.74 | 0.84 | 0.81 / 0.62 / 0.75 | 5.72 mm | 3.27 s | 0.88 mm |
+| `grid_lr0.03_sr1.35_is1.5_seed6_filtered.toml` | 0.73 | 0.85 | 0.72 / 0.55 / 0.77 | 6.14 mm | 2.84 s | 0.58 mm |
+
+The measures are each setting's medians over its seeds. With them, report 007's
+chosen ESN
+([`manual_demonstration_v2_robot_ringing/grid_lr0.02_sr1.35_is2_seed7_filtered.toml`](../manual_demonstration_v2_robot_ringing/grid_lr0.02_sr1.35_is2_seed7_filtered.toml),
+already trained), whose setting follows by 0.69 (block 0.84, pushes 0.78 / 0.41 /
+0.70), rings 5.86 mm, and returns in 2.66 s, with a path RMSE of 0.58 mm.
+
+Each of the four is then run against the replay with six trackers, joint PD at
+damping ratios 0.2, 0.4, and 0.8, given a zero reference velocity or the
+reference's, all with the torque computed every 10 ms, undisturbed, under the block
+and the pushes, and from the 49 offset starts, by configurations written once the
+three are trained, and tried in [the robot app](../../tools/README.md), where one
+is chosen.
+
 ## Then
 
-- **Step 2, the choice:** the shortlisted ESNs are trained by
-  [`autonomous_esn.py`](../autonomous_esn.py), run with six trackers, joint PD at
-  damping ratios 0.2, 0.4, and 0.8, each given a zero reference velocity or the
-  reference's, all with the torque computed every 10 ms, and tried in
-  [the robot app](../../tools/README.md), where one is chosen.
 - **Step 3, the validation:** the chosen ESN against the replay with the six
   trackers, undisturbed, under the block and the pushes, and from the 49 offset
   starts. With the torque computed every 10 ms, a damping ratio of 0.1 acts like
