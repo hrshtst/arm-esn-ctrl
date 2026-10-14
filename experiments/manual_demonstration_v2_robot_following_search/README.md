@@ -121,7 +121,20 @@ damping ratios 0.2, 0.4, and 0.8, given a zero reference velocity or the
 reference's, all with the torque computed every 10 ms, undisturbed, under the block
 and the pushes, and from the 49 offset starts, by configurations written once the
 three are trained, and tried in [the robot app](../../tools/README.md), where one
-is chosen.
+is chosen:
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_following_search/pushes_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered.toml
+uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml \
+    --law pd --omega 20 --damping 0.4 --control-period 0.01 --model <run directory>/esn.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `{nominal,block,pushes,offsets}_robot_<ESN>_{zero,reference}_velocity_filtered.toml` (32) | one ESN and the replay with joint PD at damping ratios 0.2, 0.4, and 0.8, given a zero reference velocity or the reference's; `<ESN>` is `lr0.03_sr1.2_is1.5_seed8`, `lr0.03_sr1.2_is1_seed2`, `lr0.03_sr1.35_is1.5_seed6`, or report 007's `lr0.02_sr1.35_is2_seed7` |
+
+They are report 009's validation configurations with each ESN, and the damping
+ratio 0.2 in place of 0.1.
 
 ## Then
 
