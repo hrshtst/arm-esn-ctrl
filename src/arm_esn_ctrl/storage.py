@@ -76,7 +76,7 @@ def start_run(config_path: str | Path) -> tuple[dict[str, Any], Path]:
     run_dir = _new_run_dir(started, config_path.parent.resolve().name, config_path.stem)
     (run_dir / "config.toml").write_text(text, encoding="utf-8")
 
-    commit, uncommitted_changes = _git_state()
+    commit, uncommitted_changes = git_state()
     record = {
         "config": str(_relative_to_repo(config_path)),
         "command": shlex.join(sys.argv),
@@ -137,7 +137,7 @@ def _new_run_dir(started: datetime, experiment: str, name: str) -> Path:
             return run_dir
 
 
-def _git_state() -> tuple[str, bool]:
+def git_state() -> tuple[str, bool]:
     """Return the current commit hash and whether there are uncommitted changes."""
 
     def git(*args: str) -> subprocess.CompletedProcess[str]:

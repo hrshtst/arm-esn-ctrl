@@ -43,13 +43,32 @@ External forces never act during the warm-up. The faint gray arm is the initial
 posture: the given posture, or else the start posture of the last run. When the
 arm tracks a reference, a faint colored arm shows the reference posture.
 
+**Save log** (``Ctrl+S``) saves the run so far as a log in the format of
+``experiments/robot_esn.py``'s runs: on the task clock, the warm-up at negative
+times, every simulation step's joint angles ``q`` and velocities ``dq``, the
+controller's torque ``tau``, the external tip force ``ext_force``, and, when the arm
+tracks a reference, ``q_ref`` and ``error``; then a final frame, as skelarm ends a
+run. Its metadata name the reference, the tracker, the start posture, the
+simulation step, and the commit. It is saved by default under ``data/recorded_forces/``
+in the storage root, where experiments can share it: a ``[disturbance]`` of
+``type = "recorded"`` replays its force (see :mod:`arm_esn_ctrl.disturbances`).
+
+**Replay recorded forces** (``--forces``): every run replays a saved log's external
+force by time, on the task clock, instead of the drag, from the log's start
+posture; posing and dragging are off, so that every run meets the same forces.
+The replayed force is drawn as an arrow, scaled as a drag of the set stiffness
+would draw it.
+
 Keys: ``Space`` play/pause, ``Right``/``F`` one step (10 ms) while paused, ``R`` or
-``Home`` reset, ``Q`` quit.
+``Home`` reset, ``Ctrl+S`` save the run's log, ``Q`` quit.
 
 Usage::
 
     uv run python tools/robot_app.py experiments/demonstrations/reach_tvs.toml \\
         --law computed_torque --omega 10 --model <run directory>/esn.toml
+    uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml \\
+        --law pd --omega 20 --damping 0.4 --model <run directory>/esn.toml \\
+        --forces <storage root>/data/recorded_forces/<log>.sklog.npz
 """
 
 from __future__ import annotations
@@ -58,28 +77,33 @@ import argparse
 import sys
 import tomllib
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtGui import QCloseEvent, QColor, QKeySequence, QMouseEvent, QShortcut
+from PyQt6.QtGui import QCloseEvent, QColor, QKeySequence, QMouseEvent, QPainter, QPaintEvent, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
 from skelarm import (
     Controller,
     PlaybackClock,
+    RecordedForce,
     ShortcutFriendlySpinBox,
     SkelarmCanvas,
     Skeleton,
     SpeedSpinBox,
+    StateLog,
     Task,
     TransportBar,
     bind_quit_key,
@@ -89,11 +113,12 @@ from skelarm import (
     integrate_with_limits,
     scenario_from_config,
 )
-from skelarm.canvas import TrailOverlay
+from skelarm.canvas import TrailOverlay, draw_arrow
 from skelarm.simulator import SimulatorCanvas
 
 from arm_esn_ctrl.demonstrations import SCENARIO_TABLES, load_joint_angles, resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import ReachingEsn
+from arm_esn_ctrl.storage import git_state, storage_root
 from arm_esn_ctrl.tracking import (
     LAWS,
     EsnSource,
@@ -101,6 +126,7 @@ from arm_esn_ctrl.tracking import (
     ReplaySource,
     TrackerConfig,
     error_dynamics,
+    shift_times,
     tracking_gains,
 )
 
@@ -121,26 +147,62 @@ _MODE_COLORS = {  # the reference's color in each mode, as in experiments/robot_
     "demonstrator": QColor("#52514e"),
 }
 _LAST_RUN_COLOR = QColor(82, 81, 78, 110)
+_FORCE_COLOR = QColor(220, 0, 0)  # the replayed force's arrow, red as skelarm's drag arrow
+# Where the saved logs go by default, under the storage root, for experiments to share.
+RECORDED_FORCES = Path("data") / "recorded_forces"
+# The channels of a saved log, as skelarm's simulate_controlled describes them.
+_CHANNEL_META: dict[str, dict[str, Any]] = {
+    "q": {"unit": "rad", "label": "joint angle"},
+    "dq": {"unit": "rad/s", "label": "joint velocity"},
+    "tau": {"unit": "N*m", "label": "applied joint torque"},
+    "ext_force": {"unit": "N", "label": "external tip force", "columns": ["fx", "fy"]},
+}
 
 
 class RobotCanvas(SimulatorCanvas):
-    """The arm canvas: a drag poses the arm while :attr:`posing`, and pulls its tip with a spring otherwise."""
+    """The arm canvas: a drag poses the arm while :attr:`posing`, and pulls its tip with a spring otherwise.
+
+    While :attr:`locked`, as when recorded forces are replayed, the mouse neither
+    poses the arm nor pulls it. A :attr:`shown_force` is drawn as an arrow from the
+    tip, :attr:`force_scale` meters per newton.
+    """
 
     def __init__(self, skeleton: Skeleton) -> None:
         super().__init__(skeleton)
         self.posing = True
+        self.locked = False
+        self.shown_force: NDArray[np.float64] | None = None
+        self.force_scale = 1.0 / _DEFAULT_STIFFNESS  # m/N: as a drag of the default stiffness
 
     def mousePressEvent(self, a0: QMouseEvent | None) -> None:
+        if self.locked:
+            return
         if self.posing:
             SkelarmCanvas.mousePressEvent(self, a0)
         else:
             super().mousePressEvent(a0)
 
     def mouseMoveEvent(self, a0: QMouseEvent | None) -> None:
+        if self.locked:
+            return
         if self.posing:
             SkelarmCanvas.mouseMoveEvent(self, a0)
         else:
             super().mouseMoveEvent(a0)
+
+    def paintEvent(self, a0: QPaintEvent | None) -> None:
+        """Draw the arm and the drag, then the shown force as an arrow from the tip."""
+        super().paintEvent(a0)
+        force = self.shown_force
+        if force is None or not np.any(force):
+            return
+        tip = self.skeleton.links[-1]
+        center_x, center_y = self.width() / 2, self.height() / 2
+        end = np.array([tip.xe, tip.ye]) + self.force_scale * force
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        start = self._world_to_screen(tip.xe, tip.ye, center_x, center_y)
+        draw_arrow(painter, start, self._world_to_screen(end[0], end[1], center_x, center_y), color=_FORCE_COLOR)
 
 
 @dataclass
@@ -177,6 +239,7 @@ class RobotRun:
     effort: float = 0.0  # integral of the squared joint torques (N^2 m^2 s)
     force: NDArray[np.float64] = field(default_factory=lambda: np.zeros(2))  # external tip force now (N)
     peak_force: float = 0.0
+    log: StateLog | None = None  # every simulation step, on the task clock, as experiments/robot_esn.py logs a run
 
     @property
     def time(self) -> float:
@@ -278,6 +341,12 @@ class RobotApp(QMainWindow):
         Initial playback speed (task seconds per real second).
     name : str, optional
         The model's or the take's name, shown in the side panel and the title.
+    forces : StateLog, optional
+        A saved log whose external force every run replays by time, from the log's
+        start posture, instead of the drag; posing and dragging are then off.
+    provenance : dict, optional
+        Where the reference and the forces come from (such as the model's path), saved
+        in each log's metadata.
     """
 
     def __init__(
@@ -296,6 +365,8 @@ class RobotApp(QMainWindow):
         stiffness: float = _DEFAULT_STIFFNESS,
         speed: float = 1.0,
         name: str | None = None,
+        forces: StateLog | None = None,
+        provenance: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         task = Task.from_dict(config["task"])
@@ -323,8 +394,12 @@ class RobotApp(QMainWindow):
         if take is not None and take.shape[1:] != (skeleton.num_joints,):
             msg = f"the take has joint angles of shape {take.shape[1:]}, but the robot has {skeleton.num_joints} joints"
             raise ValueError(msg)
+        if forces is not None and not same_arm(forces.build_skeleton(), skeleton):
+            msg = "the recorded forces were recorded with another arm: its links differ from this robot's"
+            raise ValueError(msg)
         self.skeleton = skeleton
         self.config = config
+        self.provenance = {} if provenance is None else dict(provenance)
         self.target = task.require_target()
         self.radius = task.tolerance
         self.tracker_config = tracker
@@ -338,6 +413,12 @@ class RobotApp(QMainWindow):
             msg = f"the control period {control_period} s must be a whole number of simulation steps of {self.dt} s"
             raise ValueError(msg)
         self.enforce_limits = bool(config["simulator"].get("enforce_limits", True))
+        # The recorded forces, replayed on the task clock: each simulation step gets the mean recorded force over it,
+        # which is the recorded sample itself when the log has this step.
+        self.forces = forces
+        self._replayed = None if forces is None else RecordedForce.from_log(forces).stepped(self.dt)
+        if forces is not None:
+            self._set_state(np.asarray(forces.channel("q")[0], dtype=np.float64))  # the log's start posture
         self._lower = np.array([link.prop.qmin for link in skeleton.links[1:]])
         self._upper = np.array([link.prop.qmax for link in skeleton.links[1:]])
         if esn is not None:
@@ -378,6 +459,7 @@ class RobotApp(QMainWindow):
         self.setWindowTitle("Robot reaching" + (f" - {name}" if name else ""))
         self.resize(1150, 800)
         self.canvas = RobotCanvas(skeleton)
+        self.canvas.locked = forces is not None
         self.canvas.overlay_targets = [(self.target, QColor(task.color), self.radius, True)]
         self.canvas.pose_changed.connect(self._on_posed)
 
@@ -410,6 +492,12 @@ class RobotApp(QMainWindow):
         self.home_shortcut = QShortcut(QKeySequence("Home"), self)
         self.home_shortcut.activated.connect(self.transport_bar.reset_button.click)
         self.quit_shortcut = bind_quit_key(self)
+        self.save_button = QPushButton("Save log")
+        self.save_button.setToolTip(f"Save the run so far as a log, by default under {RECORDED_FORCES} in the storage")
+        self.save_button.clicked.connect(self._on_save_clicked)
+        controls.addWidget(self.save_button)
+        self.save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        self.save_shortcut.activated.connect(self.save_button.click)
 
         controls.addWidget(QLabel("Playback speed"))
         self.speed_spin = SpeedSpinBox(speed=speed)
@@ -557,6 +645,7 @@ class RobotApp(QMainWindow):
             controller = tracker
         controller.reset(self.skeleton)
         warmup = warmup_steps * self.period
+        log = StateLog(self.skeleton.clone(), producer="robot_app", channel_meta=_CHANNEL_META, extra=self._log_extra())
         self.run = RobotRun(
             start_q=start_q,
             controller=controller,
@@ -566,6 +655,7 @@ class RobotApp(QMainWindow):
             target=self.target,
             radius=self.radius,
             hold=self.hold,
+            log=log,
         )
         self._simulate(self.run.warmup_steps)  # the warm-up, at once: the run is shown from time 0
         self._show_static_overlays()
@@ -578,7 +668,16 @@ class RobotApp(QMainWindow):
             t = run.sim_time
             run.controller.update(t, self.skeleton, self.dt)
             torque = run.controller.control(t, self.skeleton)
-            force = np.zeros(2) if run.warming_up else self.canvas.external_force(self.stiffness)
+            force = self._external_force(run)
+            assert run.log is not None
+            run.log.record(
+                run.time,
+                q=self.skeleton.q,
+                dq=self.skeleton.dq,
+                tau=torque,
+                ext_force=force,
+                **run.controller.log_channels(),
+            )
             tip = self.skeleton.links[-1]
             run.record(self.dt, self.skeleton.q.copy(), np.array([tip.xe, tip.ye]), torque, force)
             applied = torque + compute_jacobian(self.skeleton).T @ force
@@ -588,6 +687,90 @@ class RobotApp(QMainWindow):
                 integrate_with_limits(self.skeleton, applied, self.dt)
             run.sim_time += self.dt
             run.steps += 1
+
+    def _external_force(self, run: RobotRun) -> NDArray[np.float64]:
+        """The tip force of the step about to be taken: none in the warm-up, then the replayed one or the drag."""
+        if run.warming_up:
+            return np.zeros(2)
+        if self._replayed is not None:
+            return self._replayed(run.time, self.skeleton)
+        return self.canvas.external_force(self.stiffness)
+
+    def _log_extra(self) -> dict[str, Any]:
+        """The metadata of a run's log: the task for the player, the tracker, and where everything comes from."""
+        reference = {"esn": "esn", "demonstrator": "demonstrator"}.get(self.mode, "replay")
+        tracking: dict[str, Any] = {"reference": reference, "start": "posed in the app"}
+        if self.tracker_config is not None and self.gains is not None:
+            tracking |= {"law": self.tracker_config.law, "reference_velocity": self.tracker_config.reference_velocity}
+            if self.tracker_config.omega is not None:
+                tracking |= {"omega": self.tracker_config.omega, "damping": self.tracker_config.damping}
+            if self.tracker_config.control_period is not None:
+                tracking["control_period"] = self.tracker_config.control_period
+            tracking |= {"kp": self.gains[0].tolist(), "kd": self.gains[1].tolist()}
+        commit, uncommitted_changes = git_state()
+        app = {
+            "mode": self.mode,
+            "dt": self.dt,
+            "enforce_limits": self.enforce_limits,
+            "stiffness": self.stiffness,
+            "start_q_deg": np.degrees(self.skeleton.q).tolist(),
+            "commit": commit,
+            "uncommitted_changes": uncommitted_changes,
+        } | {key: str(value) for key, value in self.provenance.items() if value is not None}
+        return {"playback": {"task": self.config["task"]}, "tracking": tracking, "robot_app": app}
+
+    def saved_log(self) -> StateLog:
+        """The run so far as a log, ending with a final frame, as skelarm's simulate_controlled ends a run.
+
+        The final frame records the state reached, the torque last applied, and the
+        force that would act next, which no step applied.
+
+        Raises
+        ------
+        ValueError
+            If there is no run, or it has taken no step.
+        """
+        run = self.run
+        if run is None or run.log is None or len(run.log) == 0 or run.torque is None:
+            msg = "there is no run to save: press Play or Step first"
+            raise ValueError(msg)
+        log = shift_times(run.log, 0.0)  # a copy, so that the run can go on
+        log.record(
+            run.time,
+            q=self.skeleton.q,
+            dq=self.skeleton.dq,
+            tau=run.torque,
+            ext_force=self._external_force(run),
+            **run.controller.log_channels(),
+        )
+        return log
+
+    def default_log_path(self) -> Path:
+        """Where a run's log is saved by default: under :data:`RECORDED_FORCES` in the storage, named by time."""
+        name = self.provenance.get("name") or self.mode
+        if self.tracker_config is not None and self.tracker_config.omega is not None:
+            name += f"_{self.tracker_config.law}_w{self.tracker_config.omega:g}_z{self.tracker_config.damping:g}"
+        return storage_root() / RECORDED_FORCES / f"{datetime.now():%Y%m%d-%H%M%S}-{name}.sklog.npz"
+
+    def save_log(self, path: str | Path) -> Path:
+        """Save the run so far (see :meth:`saved_log`) to ``path``, creating its directory; returns the path."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.saved_log().save(path)
+        return path
+
+    def _on_save_clicked(self) -> None:
+        """Pause, ask where to save the run's log, and save it."""
+        self.pause()
+        if self.run is None:
+            self.phase_label.setText("There is no run to save yet: press Play (Space) first.")
+            return
+        default = self.default_log_path()
+        default.parent.mkdir(parents=True, exist_ok=True)
+        path, _ = QFileDialog.getSaveFileName(self, "Save the run's log", str(default), "skelarm logs (*.sklog.npz)")
+        if path:
+            saved = self.save_log(path if path.endswith(".sklog.npz") else f"{path}.sklog.npz")
+            self.phase_label.setText(f"Saved the run's log to {saved}")
 
     def _demonstrator_reach(self, start_q: NDArray[np.float64]) -> NDArray[np.float64]:
         """The demonstrator's reach from ``start_q``, sampled every reference period."""
@@ -657,7 +840,24 @@ class RobotApp(QMainWindow):
                 controller += "\nReference velocity: zero (the derivative term damps the arm's own velocity)"
             if self.tracker_config.control_period is not None:
                 controller += f"\nTorque: computed every {1000 * self.tracker_config.control_period:g} ms, held between"
-        return f"Reference: {reference}\nController: {controller}"
+        text = f"Reference: {reference}\nController: {controller}"
+        if self.forces is not None:
+            name = self.provenance.get("forces")
+            text += (
+                f"\nForces: replayed from {Path(name).name if name else 'a saved log'}, from its start posture;"
+                " posing and dragging are off"
+            )
+            recorded_step = float(np.median(np.diff(self.forces.times)))
+            if not np.isclose(recorded_step, self.dt):
+                text += f" (recorded every {1000 * recorded_step:g} ms: each step gets the mean force over it)"
+            recorded = self.forces.extra.get("tracking", {})
+            if "law" in recorded:
+                text += f"\nRecorded with: {recorded['law']}" + (
+                    f", ω = {recorded['omega']:g} rad/s, damping ratio {recorded['damping']:g}"
+                    if "omega" in recorded
+                    else ""
+                )
+        return text
 
     def _refresh(self) -> None:
         """Show the overlays and the readouts of the current state."""
@@ -676,13 +876,18 @@ class RobotApp(QMainWindow):
             f"Hand: ({hand_xy[0]:.3f}, {hand_xy[1]:.3f}) m, {1000 * distance:.1f} mm from the target",
         ]
         if run is None:
-            self.time_label.setText("Posing")
-            self.phase_label.setText("Drag the arm tip to choose a start posture, then press Play (Space).")
+            self.time_label.setText("Posing" if self.forces is None else "Ready")
+            self.phase_label.setText(
+                "Drag the arm tip to choose a start posture, then press Play (Space)."
+                if self.forces is None
+                else "The arm starts from the recorded posture: press Play (Space) to replay the recorded forces."
+            )
             self.metrics_label.setText("\n".join(lines))
             return
         self.time_label.setText(f"t = {run.time:+.2f} s")
         paused = "" if self.is_playing else " (paused)"
-        self.phase_label.setText(f"{run.phase.capitalize()}{paused}. Drag to push the arm; Reset (R) to pose it again.")
+        action = "Drag to push the arm" if self.forces is None else "The recorded forces push the arm"
+        self.phase_label.setText(f"{run.phase.capitalize()}{paused}. {action}; Reset (R) to start again.")
         lines.append(f"Hand speed: {run.hand_speed:.2f} m/s")
         lines.append("")
         arrival = "not yet" if run.arrival_time is None else f"{run.arrival_time:.2f} s"
@@ -724,6 +929,8 @@ class RobotApp(QMainWindow):
         if run is not None and len(run.hand_path) > 1 and self.trail_checkbox.isChecked():
             trails.append(TrailOverlay(np.array(run.hand_path[:: max(1, round(self.period / self.dt))]), color))
         self.canvas.trails = trails
+        self.canvas.shown_force = None if run is None or self.forces is None else run.force
+        self.canvas.force_scale = 1.0 / self.stiffness if self.stiffness > 0 else 0.0
         self.canvas.show_overlay_targets = self.target_checkbox.isChecked()
         self.canvas.show_com = self.com_checkbox.isChecked()
         self.canvas.update_skeleton()
@@ -760,6 +967,19 @@ class RobotApp(QMainWindow):
         """Stop the clock along with the window."""
         self.clock.stop()
         super().closeEvent(a0)
+
+
+def same_arm(a: Skeleton, b: Skeleton) -> bool:
+    """Whether two robots have the same links: lengths, masses, inertias, centers of mass, and joint limits."""
+    if a.num_joints != b.num_joints:
+        return False
+    return all(
+        np.allclose(
+            [p.length, p.m, p.i, p.rgx, p.rgy, p.qmin, p.qmax],
+            [q.length, q.m, q.i, q.rgx, q.rgy, q.qmin, q.qmax],
+        )
+        for p, q in ((x.prop, y.prop) for x, y in zip(a.links[1:], b.links[1:], strict=True))
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -829,6 +1049,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="drag force per meter of tip-to-cursor distance (N/m)",
     )
     parser.add_argument("--speed", type=float, default=1.0, help="initial playback speed")
+    parser.add_argument(
+        "--forces",
+        type=Path,
+        help="a saved log (.sklog.npz) whose external force every run replays by time, from its start posture,"
+        " instead of the drag",
+    )
     return parser
 
 
@@ -895,6 +1121,11 @@ def main() -> None:
     elif "demonstrations" in config:
         skeleton.q = np.radians(config["demonstrations"]["start_q"][0])  # a reachable, non-singular posture
     esn = None if args.model is None else ReachingEsn.load(args.model)
+    forces = None
+    if args.forces is not None:
+        forces = StateLog.load(args.forces)
+        if "ext_force" not in forces.channel_names:
+            parser.error(f"--forces: {args.forces} records no external force (ext_force)")
     period = _DEFAULT_PERIOD if args.period is None else args.period
     take = None if args.replay is None else load_joint_angles(args.replay, period)[1]
     tracker = None
@@ -914,6 +1145,7 @@ def main() -> None:
             joint_values(parser, "--kd", args.kd, skeleton.num_joints),
         )
 
+    name = args.model.parent.name if args.model is not None else None if args.replay is None else args.replay.name
     app = QApplication(sys.argv)
     try:
         window = RobotApp(
@@ -929,11 +1161,16 @@ def main() -> None:
             hold=args.hold,
             stiffness=args.stiffness,
             speed=args.speed,
-            name=args.model.parent.name
-            if args.model is not None
-            else None
-            if args.replay is None
-            else args.replay.name,
+            name=name,
+            forces=forces,
+            provenance={
+                "config": args.config,
+                "model": args.model,
+                "replay": args.replay,
+                "forces": args.forces,
+                "name": name,
+                "command": " ".join(sys.argv),
+            },
         )
     except ValueError as error:
         parser.error(str(error))

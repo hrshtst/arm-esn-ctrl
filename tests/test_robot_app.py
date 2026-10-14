@@ -16,13 +16,13 @@ from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
-from skelarm import Skeleton
+from skelarm import RecordedForce, Skeleton, StateLog
 
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import EsnSource, ReplaySource, TrackerConfig, track
-from tools.robot_app import RobotApp, build_parser, check_arguments, joint_values
+from tools.robot_app import RECORDED_FORCES, RobotApp, build_parser, check_arguments, joint_values, same_arm
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(
@@ -394,3 +394,129 @@ def test_the_command_line_accepts_each_mode():
         ["--law", "pd", "--omega", "20", "--damping", "0.4", "--control-period", "0.01", "--model", "esn.toml"],
     ):
         check_arguments(parser, parser.parse_args([str(CONFIG), *arguments]))
+
+
+def pushed_run(app, n=120):
+    """Run the app for ``n`` steps of 10 ms, pulling the tip around between 0.3 s and 0.8 s."""
+    app.play()
+    app.pause()
+    for k in range(n):
+        if k == 30:
+            app.canvas.drag_point = (0.5, 1.6)
+        elif k == 50:
+            app.canvas.drag_point = (0.2, 1.9)
+        elif k == 80:
+            app.canvas.drag_point = None
+        app.step()
+
+
+def test_a_saved_log_is_the_experiments_log_of_the_run(qapp, demo_config, esn, tmp_path):
+    """A saved log is on the task clock, with every step's channels, as robot_esn.py logs a run, and a final frame."""
+    app = make_app(demo_config, esn=esn, provenance={"model": "a/esn.toml", "name": "a"})
+    pushed_run(app)
+
+    log = StateLog.load(app.save_log(tmp_path / "run.sklog.npz"))
+
+    assert app.run is not None
+    warmup = ESN_CONFIG.warmup_steps * ESN_CONFIG.dt
+    assert log.times[0] == pytest.approx(-warmup)
+    assert log.times[-1] == pytest.approx(app.run.time)
+    assert np.diff(log.times) == pytest.approx(DT)
+    assert {"q", "dq", "tau", "ext_force", "q_ref", "error"} <= set(log.channel_names)
+    force = log.channel("ext_force")
+    assert not np.any(force[log.times < 0])  # no force in the warm-up
+    assert np.max(np.linalg.norm(force, axis=1)) > 1.0
+    assert log.extra["tracking"]["law"] == "computed_torque"
+    assert log.extra["tracking"]["reference"] == "esn"
+    assert log.extra["robot_app"]["model"] == "a/esn.toml"
+    assert log.extra["robot_app"]["dt"] == DT
+    assert log.channel("q")[-1] == pytest.approx(app.skeleton.q)  # the final frame: where the arm is now
+
+
+def test_logs_are_saved_by_default_where_experiments_share_them(qapp, demo_config, esn, tmp_path, monkeypatch):
+    monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
+    app = make_app(demo_config, esn=esn, provenance={"name": "esn7"})
+
+    path = app.default_log_path()
+
+    assert path.parent == tmp_path / RECORDED_FORCES
+    assert path.name.endswith("-esn7_computed_torque_w10_z1.sklog.npz")
+
+
+def test_a_run_cannot_be_saved_before_it_starts(qapp, demo_config, esn):
+    with pytest.raises(ValueError, match="no run to save"):
+        make_app(demo_config, esn=esn).saved_log()
+
+
+def test_a_headless_run_meeting_the_recorded_force_reproduces_the_app_run(qapp, demo_config, esn, tmp_path):
+    """The experiments' tracking, given the app's recorded force, retraces the run the app showed."""
+    app = make_app(demo_config, esn=esn)
+    start = app.skeleton.q.copy()
+    pushed_run(app)
+    recorded = StateLog.load(app.save_log(tmp_path / "run.sklog.npz"))
+
+    skeleton = Skeleton.from_toml(CONFIG)
+    skeleton.q = start
+    assert app.gains is not None
+    again = track(
+        skeleton,
+        EsnSource(esn),
+        COMPUTED_TORQUE,
+        app.gains,
+        period=ESN_CONFIG.dt,
+        warmup_steps=ESN_CONFIG.warmup_steps,
+        duration=1.2,
+        dt=DT,
+        external_force=RecordedForce.from_log(recorded).stepped(DT),
+    )
+
+    assert again.times == pytest.approx(recorded.times)
+    assert np.array_equal(again.channel("ext_force")[:-1], recorded.channel("ext_force")[:-1])
+    assert np.array_equal(again.channel("q"), recorded.channel("q"))
+
+
+def test_recorded_forces_are_replayed_from_the_log_start_without_posing_or_dragging(qapp, demo_config, esn, tmp_path):
+    """With a saved log's forces, a run starts where the log did and meets its forces, whatever the mouse does."""
+    recording = make_app(demo_config, esn=esn)
+    pushed_run(recording)
+    recorded = StateLog.load(recording.save_log(tmp_path / "run.sklog.npz"))
+
+    skeleton = Skeleton.from_toml(CONFIG)
+    skeleton.q = demo7_start(demo_config) + np.radians([10.0, -10.0])  # elsewhere
+    app = RobotApp(skeleton, demo_config, hold=1.0, tracker=COMPUTED_TORQUE, esn=esn, forces=recorded)
+    assert app.skeleton.q == pytest.approx(recorded.channel("q")[0])
+    before = app.skeleton.q.copy()
+    app.canvas.mousePressEvent(left_click(10.0, 10.0))
+    assert app.skeleton.q == pytest.approx(before)  # no posing
+
+    app.play()
+    app.pause()
+    for _ in range(120):
+        app.canvas.mousePressEvent(left_click(10.0, 10.0))  # no dragging either
+        app.step()
+    replayed = app.saved_log()
+
+    assert app.canvas.drag_point is None
+    assert np.array_equal(replayed.channel("ext_force")[:-1], recorded.channel("ext_force")[:-1])
+    assert np.array_equal(replayed.channel("q"), recorded.channel("q"))
+    assert "Forces: replayed" in app.mode_label.text()
+
+
+def test_forces_recorded_with_another_arm_are_refused(qapp, demo_config, esn, tmp_path):
+    recording = make_app(demo_config, esn=esn)
+    pushed_run(recording, n=40)
+    recorded = recording.saved_log()
+    other = Skeleton.from_toml(CONFIG)
+    other.links[1].prop.length *= 1.1
+    assert not same_arm(other, Skeleton.from_toml(CONFIG))
+    log = StateLog(other, producer="test", channel_meta=recorded.channel_meta)
+    for i, time in enumerate(recorded.times):
+        log.record(float(time), **{name: recorded.channel(name)[i] for name in recorded.channel_names})
+
+    with pytest.raises(ValueError, match="another arm"):
+        RobotApp(Skeleton.from_toml(CONFIG), demo_config, hold=1.0, tracker=COMPUTED_TORQUE, esn=esn, forces=log)
+
+
+def test_the_command_line_takes_recorded_forces():
+    args = build_parser().parse_args([str(CONFIG), "--law", "pd", "--omega", "20", "--forces", "pushes.sklog.npz"])
+    assert args.forces.name == "pushes.sklog.npz"
