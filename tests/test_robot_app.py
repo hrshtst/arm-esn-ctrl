@@ -19,10 +19,11 @@ from PyQt6.QtWidgets import QApplication
 from skelarm import RecordedForce, Skeleton, StateLog
 
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
+from arm_esn_ctrl.disturbances import same_arm
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import EsnSource, ReplaySource, TrackerConfig, track
-from tools.robot_app import RECORDED_FORCES, RobotApp, build_parser, check_arguments, joint_values, same_arm
+from tools.robot_app import RECORDED_FORCES, RobotApp, build_parser, check_arguments, joint_values
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(

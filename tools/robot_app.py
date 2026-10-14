@@ -117,6 +117,7 @@ from skelarm.canvas import TrailOverlay, draw_arrow
 from skelarm.simulator import SimulatorCanvas
 
 from arm_esn_ctrl.demonstrations import SCENARIO_TABLES, load_joint_angles, resample_joint_angles, simulate_reaches
+from arm_esn_ctrl.disturbances import same_arm
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.storage import git_state, storage_root
 from arm_esn_ctrl.tracking import (
@@ -967,19 +968,6 @@ class RobotApp(QMainWindow):
         """Stop the clock along with the window."""
         self.clock.stop()
         super().closeEvent(a0)
-
-
-def same_arm(a: Skeleton, b: Skeleton) -> bool:
-    """Whether two robots have the same links: lengths, masses, inertias, centers of mass, and joint limits."""
-    if a.num_joints != b.num_joints:
-        return False
-    return all(
-        np.allclose(
-            [p.length, p.m, p.i, p.rgx, p.rgy, p.qmin, p.qmax],
-            [q.length, q.m, q.i, q.rgx, q.rgy, q.qmin, q.qmax],
-        )
-        for p, q in ((x.prop, y.prop) for x, y in zip(a.links[1:], b.links[1:], strict=True))
-    )
 
 
 def build_parser() -> argparse.ArgumentParser:

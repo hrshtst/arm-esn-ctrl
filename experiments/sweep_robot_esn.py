@@ -89,7 +89,13 @@ from sweep_esn import plot_sweep
 
 from arm_esn_ctrl.autonomous import load_setup
 from arm_esn_ctrl.demonstrations import endpoint_positions
-from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
+from arm_esn_ctrl.disturbances import (
+    check_recorded_arm,
+    disturbance_spans,
+    keep_recorded_logs,
+    make_disturbance,
+    recorded_evaluation,
+)
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import resolve_run_path, start_run
@@ -149,10 +155,14 @@ def main() -> None:
     if len(sweep) not in (1, 2, 3):
         msg = f"[sweep] must list one to three hyperparameters, not {len(sweep)}"
         raise ValueError(msg)
-    evaluation = config["evaluation"]
+    disturbance = config.get("disturbance")
+    # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
+    evaluation = recorded_evaluation(config["evaluation"], disturbance)
     setup = load_setup(
         {"demonstrations": config["demonstrations"], "esn": {"dt": config["esn"]["dt"]}, "evaluation": evaluation}
     )
+    check_recorded_arm(disturbance, setup.skeleton)
+    keep_recorded_logs(disturbance, run_dir)
     with (resolve_run_path(config["demonstrations"]["run"]) / "config.toml").open("rb") as f:
         simulator = tomllib.load(f)["simulator"]
     tracker = config["tracker"]
@@ -171,7 +181,6 @@ def main() -> None:
         trackers[setting.name] = (tracker_config, tracking_gains(tracker_config, setup.skeleton, end_posture))
     duration = float(evaluation["duration"])
     window = evaluation.get("effort_window", [0.0, duration])
-    disturbance = config.get("disturbance")
     spans = disturbance_spans(disturbance)
     tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
     ringing = ringing_settings(evaluation)
@@ -202,7 +211,10 @@ def main() -> None:
                     dt=simulator["dt"],
                     enforce_limits=simulator.get("enforce_limits", True),
                     external_force=make_disturbance(
-                        disturbance, endpoint_positions(setup.skeleton, start.q[np.newaxis])[0], setup.target
+                        disturbance,
+                        endpoint_positions(setup.skeleton, start.q[np.newaxis])[0],
+                        setup.target,
+                        dt=simulator["dt"],
                     ),
                 )
                 metrics = arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)

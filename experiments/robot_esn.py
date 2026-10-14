@@ -26,8 +26,10 @@ whole number of simulation steps), their torque is computed only that often and 
 between, as by a controller slower than the simulation. Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table, or several ``[[disturbance]]`` tables,
-push or block all three arms alike (see :mod:`arm_esn_ctrl.disturbances`): from the
-same start posture, the same forces at the same times. The metrics then measure how
+push or block all three arms alike, or replay a force recorded in a log, such as
+one the robot app saved (see :mod:`arm_esn_ctrl.disturbances`): from the same start
+posture, the same forces at the same times. Under a recorded force, the runs start
+from its log's start posture, and the run directory keeps a copy of the log. The metrics then measure how
 far each disturbance sends the hand from the taught hand path, how soon the hand
 comes back within ``return_tolerance`` of it (in ``[evaluation]``; 5 mm by default),
 and how much it rings afterwards: its motion above ``ringing_cutoff_hz`` (1.5 Hz by
@@ -87,7 +89,13 @@ from skelarm import Skeleton, StateLog
 
 from arm_esn_ctrl.autonomous import Reference, Run, Setup, load_setup, rms_degrees, run_metrics
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach
-from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
+from arm_esn_ctrl.disturbances import (
+    check_recorded_arm,
+    disturbance_spans,
+    keep_recorded_logs,
+    make_disturbance,
+    recorded_evaluation,
+)
 from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import (
@@ -151,9 +159,12 @@ def main() -> None:
         demonstrations = tomllib.load(f)["demonstrations"]
     with (resolve_run_path(demonstrations["run"]) / "config.toml").open("rb") as f:
         demo_config = tomllib.load(f)
-    evaluation = config["evaluation"]
-    setup = load_setup({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
     disturbance = config.get("disturbance")
+    # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
+    evaluation = recorded_evaluation(config["evaluation"], disturbance)
+    setup = load_setup({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
+    check_recorded_arm(disturbance, setup.skeleton)
+    keep_recorded_logs(disturbance, run_dir)
     spans = disturbance_spans(disturbance)
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
     tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
@@ -169,7 +180,7 @@ def main() -> None:
     def disturbance_from(i: int) -> Any:
         """A fresh disturbance for a run from start posture ``i``."""
         start_hand = endpoint_positions(setup.skeleton, setup.starts[i].q[np.newaxis])[0]
-        return make_disturbance(disturbance, start_hand, setup.target)
+        return make_disturbance(disturbance, start_hand, setup.target, dt=demo_config["simulator"]["dt"])
 
     rows = []
     for i, start in enumerate(setup.starts):
