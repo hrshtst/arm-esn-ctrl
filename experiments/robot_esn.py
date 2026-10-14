@@ -31,7 +31,9 @@ same start posture, the same forces at the same times. The metrics then measure 
 far each disturbance sends the hand from the taught hand path, how soon the hand
 comes back within ``return_tolerance`` of it (in ``[evaluation]``; 5 mm by default),
 and how much it rings afterwards: its motion above ``ringing_cutoff_hz`` (1.5 Hz by
-default) over ``ringing_window`` seconds (2 s by default).
+default) over ``ringing_window`` seconds (2 s by default); and how much its reference
+follows the arm from the disturbance's onset to ``following_window`` seconds past its
+end (0.5 s by default).
 Start postures away from the demonstrated
 ones (``start_offsets_deg`` in ``[evaluation]``) make the initial-offset scenario.
 
@@ -90,6 +92,7 @@ from arm_esn_ctrl.drawing import draw_postures, spread_along_path
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import (
     distances_to_path,
+    disturbance_following,
     disturbance_returns,
     disturbance_ringing,
     hand_speed,
@@ -127,6 +130,9 @@ RETURN_TOLERANCE = 0.005
 # between the reach, under about 0.5 Hz, and a tracker at omega = 20 rad/s, which rings at 3.2 Hz.
 RINGING_CUTOFF_HZ = 1.5
 RINGING_WINDOW = 2.0
+# How much the reference follows the arm is measured from a disturbance's onset to this long after its
+# end, unless [evaluation] gives a following_window (s): the block's effort window, 0.5 s past its release.
+FOLLOWING_WINDOW = 0.5
 
 
 def main() -> None:
@@ -149,6 +155,7 @@ def main() -> None:
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
     tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
     ringing = ringing_settings(evaluation)
+    following = evaluation.get("following_window", FOLLOWING_WINDOW)
     print(f"ESN {config['esn']['model']}, trained on {len(setup.demos)} demonstrations")
     print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
     if not config["tracker"].get("reference_velocity", True):
@@ -172,7 +179,7 @@ def main() -> None:
         rows.append(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
-            | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing)
+            | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
         )
 
     tracker = config["tracker"]
@@ -228,7 +235,7 @@ def main() -> None:
                     {"law": law, "omega": omega, "damping": setting.damping, "arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm == "replay" else ""}
-                    | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing)
+                    | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
                 )
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
@@ -319,6 +326,7 @@ def arm_metrics(
     spans: list[tuple[float, float]],
     tolerance: float,
     ringing: tuple[float, float],
+    following: float,
 ) -> dict[str, Any]:
     """The metrics of one arm's run from start posture ``i``, compared with the demonstrator's undisturbed reach.
 
@@ -357,7 +365,13 @@ def arm_metrics(
       angles, the norm of ``q_ref - q``: the error the tracker starts from;
     - ``ringing_m``: how much the hand rings after its end, the RMS size of its
       motion above ``ringing[0]`` (Hz) over ``ringing[1]`` seconds, or until the next
-      disturbance starts (see :func:`arm_esn_ctrl.metrics.disturbance_ringing`).
+      disturbance starts (see :func:`arm_esn_ctrl.metrics.disturbance_ringing`);
+    - ``following_gain``: how much of the hand's displacement its reference's hand
+      shares, from its onset until ``following`` seconds past its end, or until the
+      next disturbance starts, both taken from where the taught motion is at the same
+      time, as the replay's reference: 0 for a reference that keeps to the taught
+      motion, as the replay's does, 1 for one that goes wherever the arm goes (see
+      :func:`arm_esn_ctrl.metrics.disturbance_following`).
 
     Without a disturbance, these are NaN. With several, ``reference_lead_1``,
     ``reference_lead_2``, ..., ``off_path_m_1``, ... measure each, in the order
@@ -397,20 +411,26 @@ def arm_metrics(
             gaps[n] = float(np.degrees(np.linalg.norm(log.channel("q_ref")[k] - log.channel("q")[k])))
     taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
     returns = disturbance_returns(setup.times, distances_to_path(hand, taught_hand), spans, tolerance) if spans else []
+    reference_hand = None
+    followed = [nan] * len(spans)
+    if tracked:
+        reference_hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1], "q_ref"))
+        if spans:
+            # Where the taught motion is at each time, as the replay's reference: its last posture once it ends.
+            taught_now = taught_hand[np.minimum(np.arange(len(setup.times)), len(taught_hand) - 1)]
+            followed = disturbance_following(setup.times, hand, reference_hand, taught_now, spans, following)
     measured = {
         "reference_lead": leads,
         "off_path_m": [farthest for farthest, _ in returns],
         "return_time_s": [back for _, back in returns],
         "end_gap_deg": gaps,
         "ringing_m": disturbance_ringing(setup.times, hand, spans, *ringing) if spans else [],
+        "following_gain": followed,
     }
     disturbance_metrics: dict[str, float] = {}
     for metric, values in measured.items():
         disturbance_metrics |= dict(zip(per_disturbance(metric, len(spans)), values or [nan], strict=True))
-    reference_path_rmse = nan
-    if tracked:
-        reference_hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1], "q_ref"))
-        reference_path_rmse = path_rmse(reference_hand, taught_hand)
+    reference_path_rmse = nan if reference_hand is None else path_rmse(reference_hand, taught_hand)
     return run_metrics(run, setup) | {
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
         "reference_path_rmse_m": reference_path_rmse,

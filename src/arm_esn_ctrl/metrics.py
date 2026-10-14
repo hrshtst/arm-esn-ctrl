@@ -276,6 +276,44 @@ def disturbance_ringing(
     return result
 
 
+def disturbance_following(
+    times: NDArray[np.float64],
+    points: NDArray[np.float64],
+    reference: NDArray[np.float64],
+    taught: NDArray[np.float64],
+    spans: list[tuple[float, float]],
+    after: float,
+) -> list[float]:
+    """Return how much of each disturbance's displacement of the ``points``, such as the hand, the ``reference`` shares.
+
+    ``points`` are where the arm is, ``reference`` where its reference would put it,
+    and ``taught`` where the taught motion is at the same ``times``, as a replay of
+    it by time would put the reference; all are shaped ``(n, d)``. For each span
+    ``(onset, end)`` of ``spans``, over the window from its onset until ``after``
+    seconds past its end, or until the next disturbance starts if that is sooner,
+    the arm's and the reference's displacements are their differences from the
+    taught points, less those at the onset, so that a lag from before cancels. The
+    result is the least-squares gain of the reference's displacement on the arm's:
+    0 for a reference that keeps to the taught motion whatever the arm does, as a
+    replay's, and 1 for one that goes wherever the arm goes. Under a block it
+    measures how far the reference waits for the held arm; under a push, how far it
+    yields to the push. NaN if the arm is not displaced or no sample is left.
+    """
+    arm, ref = points - taught, reference - taught
+    onsets = [onset for onset, _ in spans]
+    result = []
+    for onset, end in spans:
+        stop = min([end + after] + [other for other in onsets if other > onset])
+        window = np.flatnonzero((times > onset - 1e-9) & (times < stop - 1e-9))
+        if window.size == 0:
+            result.append(float("nan"))
+            continue
+        arm_moved, ref_moved = arm[window] - arm[window[0]], ref[window] - ref[window[0]]
+        size = float(np.sum(arm_moved**2))
+        result.append(float(np.sum(ref_moved * arm_moved)) / size if size > 0 else float("nan"))
+    return result
+
+
 def path_progress(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:
     """Return how far along the ``reference`` path the nearest point to each of ``points`` lies.
 

@@ -9,6 +9,7 @@ import pytest
 from arm_esn_ctrl.metrics import (
     arrival_index,
     count_speed_peaks,
+    disturbance_following,
     disturbance_returns,
     disturbance_ringing,
     hold_metrics,
@@ -302,3 +303,72 @@ def test_ringing_is_measured_until_the_next_disturbance_starts():
     # spreads the ringing's start back by a few tenths of a second, which the shortened window still catches.
     assert first < 0.3 * alone
     assert np.isnan(late)  # no sample after the disturbance ends
+
+
+def pushed(times, onset=3.0, end=3.5, size=0.1):
+    """A displacement along y that rises during a push from ``onset`` to ``end`` and decays after it."""
+    rise = np.clip((times - onset) / (end - onset), 0.0, 1.0)
+    return np.column_stack([np.zeros_like(times), size * rise * np.exp(-np.clip(times - end, 0.0, None))])
+
+
+def test_a_replayed_reference_does_not_follow_and_one_at_the_arm_follows_fully():
+    times = np.arange(0.0, 10.0, 0.01)
+    taught = np.column_stack([0.1 * times, np.zeros_like(times)])  # the taught motion moves on along x
+    arm = taught + pushed(times)
+
+    (replayed,) = disturbance_following(times, arm, taught, taught, [(3.0, 3.5)], after=0.5)
+    (at_the_arm,) = disturbance_following(times, arm, arm, taught, [(3.0, 3.5)], after=0.5)
+    (halfway,) = disturbance_following(times, arm, taught + 0.5 * pushed(times), taught, [(3.0, 3.5)], after=0.5)
+
+    assert replayed == 0.0
+    assert at_the_arm == pytest.approx(1.0)
+    assert halfway == pytest.approx(0.5)
+
+
+def test_a_reference_that_waits_for_a_held_arm_follows_it():
+    """Under a block, the arm stays put while the taught motion moves on; a reference that stays with it follows."""
+    times = np.arange(0.0, 10.0, 0.01)
+    taught = np.column_stack([0.1 * times, np.zeros_like(times)])
+    held = taught.copy()
+    held[(times >= 4.5) & (times < 5.5), 0] = 0.45  # held where it was at 4.5 s
+
+    (waiting,) = disturbance_following(times, held, held, taught, [(4.5, 5.5)], after=0.0)
+    (moving_on,) = disturbance_following(times, held, taught, taught, [(4.5, 5.5)], after=0.0)
+
+    assert waiting == pytest.approx(1.0)
+    assert moving_on == 0.0
+
+
+def test_following_ignores_a_lag_from_before_the_disturbance():
+    times = np.arange(0.0, 10.0, 0.01)
+    taught = np.column_stack([0.1 * times, np.zeros_like(times)])
+    lag = np.array([-0.02, 0.01])  # both the arm and its reference are behind and aside since an earlier push
+    arm = taught + lag + pushed(times)
+
+    (gain,) = disturbance_following(times, arm, taught + lag + 0.5 * pushed(times), taught, [(3.0, 3.5)], after=0.5)
+
+    assert gain == pytest.approx(0.5)
+
+
+def test_following_is_measured_until_the_next_disturbance_starts():
+    times = np.arange(0.0, 10.0, 0.01)
+    taught = np.zeros((len(times), 2))
+    arm = pushed(times) + pushed(times, onset=3.8, end=4.3)
+    reference = pushed(times)  # follows the first push only
+
+    first, second = disturbance_following(times, arm, reference, taught, [(3.0, 3.5), (3.8, 4.3)], after=0.5)
+    (alone,) = disturbance_following(times, arm, reference, taught, [(3.0, 3.5)], after=0.5)
+
+    assert first == pytest.approx(1.0)  # its window stops at 3.8 s, before the second push moves the arm
+    assert alone < 1.0  # alone, its window runs to 4 s, into the second push
+    assert second < 0.1
+
+
+def test_following_is_undefined_without_a_displacement_or_a_sample():
+    times = np.arange(0.0, 5.0, 0.01)
+    still = np.zeros((len(times), 2))
+
+    unmoved, late = disturbance_following(times, still, still, still, [(1.0, 1.5), (6.0, 6.5)], after=0.5)
+
+    assert np.isnan(unmoved)
+    assert np.isnan(late)
