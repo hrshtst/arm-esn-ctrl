@@ -136,9 +136,25 @@ uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml
 They are report 009's validation configurations with each ESN, and the damping
 ratio 0.2 in place of 0.1.
 
-## Then
+With the torque computed every 10 ms, a damping ratio of 0.1 acts like about 0.05,
+so 0.2 replaces report 008's 0.1.
 
-- **Step 3, the validation:** the chosen ESN against the replay with the six
-  trackers, undisturbed, under the block and the pushes, and from the 49 offset
-  starts. With the torque computed every 10 ms, a damping ratio of 0.1 acts like
-  about 0.05, so 0.2 replaces report 008's 0.1.
+**Two ESNs were chosen in the app:** the first and the second,
+`grid_lr0.03_sr1.2_is1.5_seed8_filtered.toml` and
+`grid_lr0.03_sr1.2_is1_seed2_filtered.toml`. Their runs above with the six trackers
+are the validation; both are compared with the replay.
+
+## Step 3: the reservoir states
+
+[`robot_states.py`](../robot_states.py) recomputes each chosen ESN's reservoir
+states from its runs with the search's tracker (damping ratio 0.4, given the
+reference's velocity): undisturbed, under the block and the pushes, and from two
+offset starts.
+
+```bash
+uv run python experiments/robot_states.py experiments/manual_demonstration_v2_robot_following_search/states_robot_lr0.03_sr1.2_is1.5_seed8_filtered.toml
+```
+
+| Configurations | What they draw |
+| --- | --- |
+| `states_robot_{lr0.03_sr1.2_is1.5_seed8,lr0.03_sr1.2_is1_seed2}_filtered.toml` | one chosen ESN's states: eight neurons over every run and through the warm-up, and the principal components of every run |
