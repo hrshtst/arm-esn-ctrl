@@ -107,7 +107,6 @@ from arm_esn_ctrl.tracking import (
     nearest_demonstration,
     task_joint_angles,
     track,
-    tracking_gains,
 )
 
 # The heatmaps: metric column in sweep.csv, title, factor to its display unit, and logarithmic colors.
@@ -179,7 +178,7 @@ def main() -> None:
             reference_velocity=tracker.get("reference_velocity", True),
             control_period=tracker.get("control_period"),
         )
-        trackers[setting.name] = (tracker_config, tracking_gains(tracker_config, setup.skeleton, end_posture))
+        trackers[setting.name] = (tracker_config, setting.gains(tracker_config, setup.skeleton, end_posture))
     duration = float(evaluation["duration"])
     window = evaluation.get("effort_window", [0.0, duration])
     spans = disturbance_spans(disturbance)

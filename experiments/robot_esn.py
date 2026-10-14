@@ -18,7 +18,10 @@ The ESN and the replay run with every tracking law, natural frequency of the
 tracking error, and damping ratio listed in ``[tracker]`` (``dampings`` is
 optional; its default, 1, is critically damped). ``omegas`` is a list for every
 law, or a table with a list for each law, such as
-``omegas = {computed_torque = [10.0], pd = [20.0]}``. With ``reference_velocity =
+``omegas = {computed_torque = [10.0], pd = [20.0]}``. Instead of ``omegas`` and
+``dampings``, ``kp`` and ``kd`` can give one law's gains directly, each one number
+for every joint or a list of one per joint, such as ``kp = 80.0`` and
+``kd = 3.0``. With ``reference_velocity =
 false`` (optional; the default is true), the tracking laws are given a zero
 reference velocity, so that their derivative term damps the arm's own velocity
 rather than the velocity error. With ``control_period`` (optional, in seconds; a
@@ -43,13 +46,14 @@ Every run is compared with the demonstrator's undisturbed reach from the same
 start posture, and the run directory receives:
 
 - ``<law>_w<omega>/esn_00.sklog.npz``, ``replay_00.sklog.npz``, ...: the arm's runs
-  (``<law>_w<omega>_z<damping>`` below critical damping),
+  (``<law>_w<omega>_z<damping>`` below critical damping, ``<law>_kp<kp>_kd<kd>`` with
+  given gains),
   with the reference (``q_ref``), the tracking error (``error``), and the
   disturbance (``ext_force``);
 - ``demonstrator_00.sklog.npz``, ...: the demonstrator's reaches, under the same disturbance;
 - ``metrics.csv``: the metrics of every run (see :func:`arm_metrics`);
 - ``metrics.png``: those metrics against the natural frequency (or the damping
-  ratio, if that is what varies), for each law;
+  ratio, if that is what varies), for each law; not with given gains;
 - ``paths.png``: the hand paths of every run, with faint postures of the arm driven
   by the ESN from the first start posture (the first, the last, and three between);
 - ``timeline.png``: the hand's distance to the target, the progress along the
@@ -201,16 +205,22 @@ def main() -> None:
     settings = tracker_settings(tracker)
     end_posture = gain_posture(setup.demos.values())  # where the reaches end, for joint PD's gains
     for setting in settings:
-        law, omega = setting.law, setting.omega
+        law = setting.law
         tracker_config = TrackerConfig(
             law,
-            omega,
+            setting.omega,
             tracker["acceleration_filter"],
             damping=setting.damping,
             reference_velocity=tracker.get("reference_velocity", True),
             control_period=tracker.get("control_period"),
         )
-        gains = tracking_gains(tracker_config, setup.skeleton, end_posture)
+        gains = setting.gains(tracker_config, setup.skeleton, end_posture)
+        # The log keeps the natural frequency and damping ratio, or the given gains.
+        given = (
+            {"kp": gains[0].tolist(), "kd": gains[1].tolist()}
+            if setting.omega is None
+            else {"omega": setting.omega, "damping": setting.damping}
+        )
         held = {} if tracker_config.control_period is None else {"control_period": tracker_config.control_period}
         setting_dir = run_dir / setting.name
         setting_dir.mkdir()
@@ -236,8 +246,7 @@ def main() -> None:
                         "tracking": {
                             "reference": arm,
                             "law": law,
-                            "omega": omega,
-                            "damping": setting.damping,
+                            **given,
                             "reference_velocity": tracker_config.reference_velocity,
                             "start": start.origin,
                         }
@@ -247,7 +256,8 @@ def main() -> None:
                 )
                 log.save(setting_dir / f"{arm}_{i:02d}.sklog.npz")
                 rows.append(
-                    {"law": law, "omega": omega, "damping": setting.damping, "arm": arm, "start": i}
+                    setting.columns
+                    | {"arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm == "replay" else ""}
                     | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
@@ -261,10 +271,11 @@ def main() -> None:
     print_summary(rows, len(setup.starts), window, setup.reference)
 
     title = f"ESN on the robot: {args.config.stem}"
-    swept = "damping" if len(tracker.get("dampings", [1.0])) > 1 else "omega"
-    plot_metrics(rows, tracker["laws"], len(setup.starts), window, swept, setup.reference, title).savefig(
-        run_dir / "metrics.png", dpi=150
-    )
+    if settings[0].omega is not None:  # given gains have no natural frequency or damping ratio to plot against
+        swept = "damping" if len(tracker.get("dampings", [1.0])) > 1 else "omega"
+        plot_metrics(rows, tracker["laws"], len(setup.starts), window, swept, setup.reference, title).savefig(
+            run_dir / "metrics.png", dpi=150
+        )
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
     plot_timeline(run_dir, setup, settings, spans, title).savefig(run_dir / "timeline.png", dpi=150)
     plot_joints(run_dir, setup, settings, spans, title).savefig(run_dir / "joints.png", dpi=150)
@@ -283,22 +294,51 @@ def main() -> None:
 
 @dataclass(frozen=True)
 class Setting:
-    """One tracker setting: a tracking law, and the natural frequency and damping ratio of its error."""
+    """One tracker setting: a tracking law, and the natural frequency and damping ratio of its error, or its gains.
+
+    Given gains (``kp`` and ``kd``, one value for every joint or one per joint), the
+    natural frequency is None and the damping ratio unused.
+    """
 
     law: str
-    omega: float  # rad/s
-    damping: float  # 1 is critically damped
+    omega: float | None  # rad/s; None with given gains
+    damping: float = 1.0  # 1 is critically damped
+    kp: tuple[float, ...] = ()  # given proportional gains (N m/rad)
+    kd: tuple[float, ...] = ()  # given derivative gains (N m s/rad)
 
     @property
     def name(self) -> str:
-        """Its directory in the run: ``pd_w10``, or ``pd_w10_z0.3`` below critical damping."""
+        """Its directory in the run: ``pd_w10``, ``pd_w10_z0.3`` below critical damping, or ``pd_kp80_kd3``."""
+        if self.omega is None:
+            return f"{self.law}_kp{'-'.join(f'{v:g}' for v in self.kp)}_kd{'-'.join(f'{v:g}' for v in self.kd)}"
         return f"{self.law}_w{self.omega:g}" + ("" if self.damping == 1.0 else f"_z{self.damping:g}")
 
     @property
     def label(self) -> str:
         """Its name in titles and messages."""
-        label = f"{self.law.replace('_', ' ')}, ω = {self.omega:g} rad/s"
-        return label + ("" if self.damping == 1.0 else f", ζ = {self.damping:g}")
+        law = self.law.replace("_", " ")
+        if self.omega is None:
+            return f"{law}, kp = {', '.join(f'{v:g}' for v in self.kp)}, kd = {', '.join(f'{v:g}' for v in self.kd)}"
+        return f"{law}, ω = {self.omega:g} rad/s" + ("" if self.damping == 1.0 else f", ζ = {self.damping:g}")
+
+    @property
+    def columns(self) -> dict[str, Any]:
+        """Its columns in the metrics: the law, the natural frequency, and the damping ratio, empty with given gains."""
+        if self.omega is None:
+            return {"law": self.law, "omega": "", "damping": ""}
+        return {"law": self.law, "omega": self.omega, "damping": self.damping}
+
+    def gains(
+        self, config: TrackerConfig, skeleton: Skeleton, posture: NDArray[np.float64]
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """The per-joint gains ``(kp, kd)``: the given ones, or those of ω and ζ at ``posture`` (tracking_gains)."""
+        if self.omega is not None:
+            return tracking_gains(config, skeleton, posture)
+        n = skeleton.num_joints
+        if len(self.kp) not in (1, n) or len(self.kd) not in (1, n):
+            msg = f"[tracker] kp and kd must each give one value for every joint or one per joint ({n})"
+            raise ValueError(msg)
+        return np.broadcast_to(self.kp, n).astype(np.float64), np.broadcast_to(self.kd, n).astype(np.float64)
 
 
 def tracker_settings(tracker: dict[str, Any]) -> list[Setting]:
@@ -306,8 +346,25 @@ def tracker_settings(tracker: dict[str, Any]) -> list[Setting]:
 
     ``omegas`` lists the natural frequencies of every law, or maps each law to its
     own list. Only one of the natural frequency and the damping ratio may take
-    several values, so that the metrics plot against it.
+    several values, so that the metrics plot against it. Instead of ``omegas`` and
+    ``dampings``, ``kp`` and ``kd`` give one law's gains directly: each one number for
+    every joint, or a list of one per joint.
     """
+    if "kp" in tracker or "kd" in tracker:
+        if "kp" not in tracker or "kd" not in tracker:
+            msg = "[tracker] kp and kd go together"
+            raise ValueError(msg)
+        if "omegas" in tracker or "dampings" in tracker:
+            msg = "[tracker] gives either omegas (and dampings) or kp and kd, not both"
+            raise ValueError(msg)
+        if len(tracker["laws"]) != 1:
+            msg = "[tracker] kp and kd are the gains of one law"
+            raise ValueError(msg)
+        kp, kd = (tuple(float(v) for v in np.atleast_1d(tracker[key])) for key in ("kp", "kd"))
+        if any(v <= 0.0 for v in kp) or any(v < 0.0 for v in kd):
+            msg = "[tracker] kp must be positive and kd not negative"
+            raise ValueError(msg)
+        return [Setting(tracker["laws"][0], None, kp=kp, kd=kd)]
     laws, omegas, dampings = tracker["laws"], tracker["omegas"], tracker.get("dampings", [1.0])
     by_law: dict[str, list[float]] = omegas if isinstance(omegas, dict) else {law: omegas for law in laws}
     if set(by_law) != set(laws):
@@ -501,7 +558,12 @@ def print_summary(rows: list[dict[str, Any]], n_starts: int, window: list[float]
         group = [r for r in rows if tuple(r[name] for name in keys) == key]
         law, omega, damping, arm = key
         m = {name: mean_of(group, name) for name in group[0] if isinstance(group[0][name], float)}
-        setting = "-" if law == "" else f"{law.replace('_', ' '):<15} {omega:<5g} {damping:<4g}"
+        if law == "":
+            setting = "-"
+        elif omega == "":  # given gains
+            setting = f"{law.replace('_', ' '):<15} {'kp, kd':<10}"
+        else:
+            setting = f"{law.replace('_', ' '):<15} {omega:<5g} {damping:<4g}"
         print(
             f"{setting:<26} {arm:<12}"
             f" {m[reference.joint_error]:5.2f} {1000 * m[reference.path_distance]:5.1f}"
@@ -926,8 +988,7 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting],
         return np.array([[cell.get((x, y), np.nan) for x in xs] for y in ys])
 
     groups = [
-        [r for r in rows if (r["law"], r["omega"], r["damping"], r["arm"]) == (s.law, s.omega, s.damping, arm)]
-        for s, arm in panels
+        [r for r in rows if {key: r[key] for key in s.columns} == s.columns and r["arm"] == arm] for s, arm in panels
     ]
     for ax_row, (setting, arm), group in zip(axes, panels, groups, strict=True):
         outcome = [{**r, "outcome": 0 if r["success"] else 1 if r["arrived"] else 2} for r in group]
