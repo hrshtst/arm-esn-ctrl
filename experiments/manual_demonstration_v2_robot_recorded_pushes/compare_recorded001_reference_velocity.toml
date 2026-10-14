@@ -1,0 +1,26 @@
+# The recorded pushes' comparison: ESN #1, ESN #2, and the replay of the take under the
+# pushes given by hand in recorded_forces_001.sklog.npz, with joint PD at damping ratios
+# 0.2, 0.4, and 0.8, given the reference's velocity, the torque computed every 10 ms: step 1's runs.
+#
+#   uv run python experiments/compare_arms.py experiments/manual_demonstration_v2_robot_recorded_pushes/compare_recorded001_reference_velocity.toml
+
+[[arm]]
+label = "ESN #1"
+run = "results/manual_demonstration_v2_robot_recorded_pushes/20261014-203209-recorded001_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered"
+arm = "esn"
+color = "#2a78d6"
+
+[[arm]]
+label = "ESN #2"
+run = "results/manual_demonstration_v2_robot_recorded_pushes/20261014-203209-recorded001_robot_lr0.03_sr1.2_is1_seed2_reference_velocity_filtered"
+arm = "esn"
+color = "#5b2a86"
+
+[[arm]]
+label = "replay"
+run = "results/manual_demonstration_v2_robot_recorded_pushes/20261014-203209-recorded001_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered"  # the same in either ESN's runs
+arm = "replay"
+color = "#eb6834"
+
+[plot]
+span = [0.0, 20.0]     # task time shown (s): the last push ends by 15 s

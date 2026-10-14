@@ -51,4 +51,12 @@ farthest from the path) take the pushes above.
 [`compare_arms.py`](../compare_arms.py) overlays ESN #1, ESN #2, and the replay of
 each log and reference velocity: the tip force, the joint angles and torques over
 time, and the tip's path in the plane with an arrow at the start of each push. Its
-configurations name step 1's runs, so they are written once those are run.
+configurations name step 1's runs, so they are written once those are run:
+
+```bash
+uv run python experiments/compare_arms.py experiments/manual_demonstration_v2_robot_recorded_pushes/compare_recorded001_reference_velocity.toml
+```
+
+| Configurations | What they compare |
+| --- | --- |
+| `compare_recorded{000,001,002}_{zero,reference}_velocity.toml` (6) | ESN #1, ESN #2, and the replay of one log, with one reference velocity |
