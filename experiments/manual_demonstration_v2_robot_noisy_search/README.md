@@ -115,6 +115,32 @@ The rule, fixed before the runs:
 3. The search stops here: if the top setting is again at the extension's edge, the
    report says so, and the grid is not extended further.
 
+## The shortlist, chosen in the app
+
+The shortlisted ESNs, each trained by [`autonomous_esn.py`](../autonomous_esn.py)
+with its setting's typical seed and run on its own from the 49 offset starts, so
+that they can be tried in [the robot app](../../tools/README.md) with the search's
+tracker:
+
+```bash
+uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_noisy_search/grid_lr0.1_sr0.8_is2.5_seed9_filtered.toml
+uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml \
+    --law pd --omega 20 --damping 0.4 --control-period 0.01 --model <run directory>/esn.toml
+```
+
+| Configuration | Score | Ringing | Return | Undisturbed path RMSE |
+| --- | --- | --- | --- | --- |
+| `grid_lr0.1_sr0.8_is2.5_seed9_filtered.toml` | 0.618 | 6.48 mm | 0.34 s | 0.57 mm |
+| `grid_lr0.15_sr0.9_is2_seed4_filtered.toml` | 0.625 | 6.50 mm | 0.37 s | 0.63 mm |
+| `grid_lr0.15_sr0.8_is2_seed7_filtered.toml` | 0.631 | 6.63 mm | 0.35 s | 0.69 mm |
+
+The score and the medians are those of each ESN's setting over its seeds, all three
+from the edge check; the top one is at the extension's edge, its smallest spectral
+radius. With them, report 009's chosen ESN
+([`manual_demonstration_v2_robot_damped_search/noise_white1deg_ridge4e-2_seed3_filtered.toml`](../manual_demonstration_v2_robot_damped_search/noise_white1deg_ridge4e-2_seed3_filtered.toml),
+already trained), whose setting scores 0.821: ringing 7.87 mm, return 0.80 s, path
+RMSE 0.60 mm.
+
 ## Then
 
 - **The validation:** the chosen ESN against the replay, as in report 009, and under
