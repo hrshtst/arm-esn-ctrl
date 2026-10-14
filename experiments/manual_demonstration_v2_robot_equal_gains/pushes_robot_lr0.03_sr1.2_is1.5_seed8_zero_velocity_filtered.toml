@@ -1,0 +1,65 @@
+# The equal gains: report 011's ESN #1 (leak rate 0.03, spectral radius 1.2, input
+# scaling 1.5, seed 8), against the replay of the take, with joint PD at kp = 80 N
+# m/rad and kd = 3 N m s/rad for both joints, given a zero reference velocity, its
+# torque computed every 10 ms and held between, while the arm is still simulated every
+# 2 ms: report 007's three pushes of 0.5 s at the tip, forward at 3 s, across at 7 s,
+# and across again at 15 s, after the hold, from the demonstrated start. As
+# manual_demonstration_v2_robot_following_search/pushes_robot_lr0.03_sr1.2_is1.5_seed8_zero_velocity_filtered.toml
+# otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_equal_gains/pushes_robot_lr0.03_sr1.2_is1.5_seed8_zero_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1.5_seed8_filtered/esn.toml"
+
+[tracker]
+# Joint PD with the same gains for both joints, given directly rather than by a natural
+# frequency and damping ratio scaled by each joint's inertia; given a zero reference velocity.
+laws = ["pd"]
+kp = 80.0  # N m/rad, both joints
+kd = 3.0   # N m s/rad, both joints
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz), as in reports 011 and 012
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)
+# Without an effort_window, the torque, effort, and force are measured over the whole run.
+
+# Each push: a force of `force` N for `duration` s from `onset` (task time, s), at
+# `angle_deg` counterclockwise from the direction toward the target (0 forward, 90
+# across, 180 backward), fixed for the run by the start posture. The pushes across
+# keep report 006's forces: a push carries the replay farthest at its first
+# overshoot, about 0.16 s in, so the replay is carried as far as by report 006's
+# 0.2 s pushes. The push forward is gentler, 3 N rather than 4 N: it sends the ESN
+# ahead on a route of its own, from which it must settle before the push at 7 s.
+
+[[disturbance]]  # nearly forward: 10 deg off it, toward counterclockwise across (report 006's backward push, reversed)
+type = "push"
+force = 3.0            # N
+onset = 3.0            # task time (s): the take's hand is 18% of the way
+duration = 0.5         # s
+angle_deg = 10.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, counterclockwise: 10 deg off it, toward the target
+type = "push"
+force = 5.0            # N
+onset = 7.0            # task time (s): 62% of the way, and done 2.1 s before the take arrives
+duration = 0.5         # s
+angle_deg = 80.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, clockwise, after the hold: 10 deg off it, toward the target
+type = "push"
+force = 4.0            # N
+onset = 15.0           # task time (s)
+duration = 0.5         # s
+angle_deg = -80.0      # deg from the direction toward the target
