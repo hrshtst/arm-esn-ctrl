@@ -13,7 +13,7 @@ from arm_esn_ctrl.storage import REPO_ROOT
 
 # The runners import each other as modules of their own directory, as they run.
 sys.path.insert(0, str(REPO_ROOT / "experiments"))
-from compare_arms import Arm, check_same_forces, shared_settings
+from compare_arms import Arm, check_same_forces, push_arrows, shared_settings
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 
@@ -52,3 +52,16 @@ def test_only_the_tracker_settings_every_run_has_are_compared(tmp_path):
     assert shared_settings(arms) == ["pd_w20_z0.4"]
     with pytest.raises(ValueError, match="share no tracker setting"):
         shared_settings([arms[0], Arm("other", tmp_path, "esn", "#000000")])
+
+
+def test_each_push_is_drawn_from_where_the_tip_is_at_its_start_along_its_mean_force():
+    forces = [[0.0, 0.0], [1.0, 0.0], [3.0, 2.0], [0.0, 0.0], [0.0, 4.0], [0.0, 0.0]]
+    hand = np.column_stack([np.arange(6.0), np.zeros(6)])  # where the tip is at each frame
+
+    arrows = push_arrows(run_log(forces), hand, [(0.002, 0.006), (0.008, 0.010)])
+
+    assert len(arrows) == 2
+    assert arrows[0][0] == pytest.approx([1.0, 0.0])
+    assert arrows[0][1] == pytest.approx([2.0, 1.0])  # the mean of 1 N and (3, 2) N
+    assert arrows[1][0] == pytest.approx([4.0, 0.0])
+    assert arrows[1][1] == pytest.approx([0.0, 4.0])

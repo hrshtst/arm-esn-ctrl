@@ -17,7 +17,12 @@ receives:
 
 - ``joints.png``: the tip force's magnitude, then each joint's angle over time: the
   taught motion (thick gray), each arm, and each ESN's reference (dashed);
-- ``torques.png``: the tip force's magnitude, then each joint's torque over time.
+- ``torques.png``: the tip force's magnitude, then each joint's torque over time;
+- ``paths.png``: each arm's tip path in the plane, one panel per arm (rows) and
+  tracker setting (columns), over the taught path (thick gray), the goal, and the
+  arm at its initial posture (faint gray); at the start of each disturbance, an
+  arrow from the tip shows the mean force over the disturbance, ``FORCE_SCALE``
+  meters per newton.
 
 Over time, the ESNs' lines are drawn over the replay's, and the spans of the
 disturbances are shaded.
@@ -34,10 +39,11 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.patches import Circle, FancyArrow
 from numpy.typing import NDArray
-from skelarm import StateLog
+from skelarm import Skeleton, StateLog, Task, compute_forward_kinematics
 
-from arm_esn_ctrl.demonstrations import load_joint_angles
+from arm_esn_ctrl.demonstrations import endpoint_positions, load_joint_angles
 from arm_esn_ctrl.disturbances import disturbance_spans
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 
@@ -47,6 +53,9 @@ SURFACE_COLOR = "#fcfcfb"
 DISTURBANCE_COLOR = "#f0efec"
 TAUGHT_COLOR = "#b9b7b0"
 FORCE_COLOR = "#52514e"
+PUSH_COLOR = "#dc0000"  # the force arrows in the plane, red as the robot app's drag arrow
+INITIAL_COLOR = "#a3a29d"
+FORCE_SCALE = 0.025  # m/N: the length of a force arrow in the plane, 25 mm per newton
 # The layers of the lines over time: the ESNs' arms on top, their references (dashed) under them, the replay below.
 ARM_ZORDERS = {"esn": 3.0, "replay": 2.0}
 REFERENCE_ZORDER = 2.5
@@ -81,9 +90,16 @@ def main() -> None:
     spans = disturbance_spans(run_config.get("disturbance"))
     taught = taught_motion(arms[0].run)
     span = options.get("span")
+    title = f"{args.config.stem}: from start {start}"
     for channel in ("joints", "torques"):
-        figure = plot_arms(logs, arms, channel, taught, spans, span, f"{args.config.stem}: from start {start}")
+        figure = plot_arms(logs, arms, channel, taught, spans, span, title)
         figure.savefig(run_dir / f"{channel}.png", dpi=150)
+    first = logs[settings[0]][arms[0].label]
+    task = Task.from_dict(first.extra["playback"]["task"])
+    skeleton = first.build_skeleton()
+    taught_hand = endpoint_positions(skeleton, taught[1])
+    figure = plot_paths(logs, arms, spans, skeleton, taught_hand, task.require_target(), task.tolerance or 0.0, title)
+    figure.savefig(run_dir / "paths.png", dpi=150)
     print(f"{len(arms)} arms, tracker settings {', '.join(settings)}; wrote the results to {run_dir}")
 
 
@@ -190,6 +206,97 @@ def plot_arms(
         ]
     fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), frameon=False, labelcolor=TEXT_COLOR)
     return fig
+
+
+def plot_paths(
+    logs: dict[str, dict[str, StateLog]],
+    arms: list[Arm],
+    spans: list[tuple[float, float]],
+    skeleton: Skeleton,
+    taught_hand: NDArray[np.float64],
+    target: NDArray[np.float64],
+    radius: float,
+    title: str,
+) -> Figure:
+    """Each arm's tip path in the plane, one panel per arm and tracker setting, with the forces of ``spans``.
+
+    Each panel draws the arm at its initial posture, the taught path, the goal, the
+    tip's path, and, for each disturbance, an arrow from where the tip is at its
+    onset along the mean force over it.
+    """
+    settings = list(logs)
+    # The plane is about twice as wide as it is tall, as the reach goes across it.
+    size = (4.6 * len(settings) + 0.6, 2.7 * len(arms) + 1.2)
+    fig = Figure(figsize=size, facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(f"{title}: the tip's path, and the force at the start of each push", color="#0b0b0b")
+    axes = np.asarray(fig.subplots(len(arms), len(settings), sharex=True, sharey=True)).reshape(
+        len(arms), len(settings)
+    )
+    for row, arm in enumerate(arms):
+        for col, setting in enumerate(settings):
+            ax = axes[row, col]
+            _style(ax)
+            log = logs[setting][arm.label]
+            q = log.channel("q").reshape(len(log.times), -1)
+            joints = _arm_points(skeleton, q[0])
+            ax.plot(joints[:, 0], joints[:, 1], color=INITIAL_COLOR, linewidth=5.0, alpha=0.6, solid_capstyle="round")
+            ax.plot(joints[:, 0], joints[:, 1], "o", color=INITIAL_COLOR, markersize=4)
+            ax.plot(taught_hand[:, 0], taught_hand[:, 1], color=TAUGHT_COLOR, linewidth=4.0, zorder=1)
+            ax.add_patch(Circle(tuple(target), radius, fill=False, color=TEXT_COLOR, linewidth=1.0, zorder=2))
+            hand = endpoint_positions(skeleton, q)
+            ax.plot(hand[:, 0], hand[:, 1], color=arm.color, linewidth=1.2, zorder=3)
+            for tip, force in push_arrows(log, hand, spans):
+                ax.add_patch(
+                    FancyArrow(
+                        *tip,
+                        *(FORCE_SCALE * force),
+                        width=0.006,
+                        length_includes_head=True,
+                        head_width=0.03,
+                        head_length=0.03,
+                        color=PUSH_COLOR,
+                        zorder=4,
+                    )
+                )
+            ax.set_aspect("equal")
+            if row == 0:
+                ax.set_title(setting, color="#0b0b0b", fontsize=10)
+            if row == len(arms) - 1:
+                ax.set_xlabel("x (m)", color=TEXT_COLOR)
+            if col == 0:
+                ax.set_ylabel(f"{arm.label}\ny (m)", color=TEXT_COLOR)
+    handles = [Line2D([], [], color=arm.color, linewidth=1.4, label=arm.label) for arm in arms]
+    handles += [
+        Line2D([], [], color=TAUGHT_COLOR, linewidth=4.0, label="the taught path"),
+        Line2D([], [], color=INITIAL_COLOR, linewidth=5.0, alpha=0.6, label="the initial posture"),
+        Line2D([], [], color=PUSH_COLOR, linewidth=2.0, label=f"mean force of a push, {1000 * FORCE_SCALE:g} mm per N"),
+    ]
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), frameon=False, labelcolor=TEXT_COLOR)
+    return fig
+
+
+def push_arrows(
+    log: StateLog, hand: NDArray[np.float64], spans: list[tuple[float, float]]
+) -> list[tuple[NDArray[np.float64], NDArray[np.float64]]]:
+    """For each span of ``spans``: where the tip is at its onset, and the mean tip force over it."""
+    times = np.asarray(log.times)
+    force = _force(log)
+    arrows = []
+    for onset, end in spans:
+        acting = (times > onset - 1e-9) & (times < end - 1e-9)
+        if acting.any():
+            first = int(np.flatnonzero(acting)[0])
+            arrows.append((hand[first], force[acting].mean(axis=0)))
+    return arrows
+
+
+def _arm_points(skeleton: Skeleton, q: NDArray[np.float64]) -> NDArray[np.float64]:
+    """The base, every joint, and the tip of the arm at ``q``."""
+    arm = skeleton.clone()
+    for link, angle in zip(arm.links[1:], q, strict=True):
+        link.q = float(angle)
+    compute_forward_kinematics(arm)
+    return np.array([[0.0, 0.0]] + [[link.xe, link.ye] for link in arm.links[1:]])
 
 
 def _draw_arm(ax: Axes, log: StateLog, arm: Arm, channel: str, joint: int) -> None:
