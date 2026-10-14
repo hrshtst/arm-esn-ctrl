@@ -36,6 +36,7 @@ from skelarm import (
 )
 
 from arm_esn_ctrl.metrics import hold_metrics
+from arm_esn_ctrl.storage import resolve_run_path
 
 # The configuration tables that make up a skelarm scenario (see skelarm's
 # "Run Controlled Scenarios" guide). [initial] is set per start posture.
@@ -85,6 +86,20 @@ def simulate_disturbed_reach(
 def load_joint_angles(path: str | Path, dt: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Load the joint angles of a demonstration file, resampled at a fixed period ``dt``."""
     return resample_joint_angles(StateLog.load(path), dt)
+
+
+def training_demonstrations(demonstrations: dict[str, Any], dt: float) -> dict[str, NDArray[np.float64]]:
+    """The joint angles, every ``dt``, of the demonstrations a ``[demonstrations]`` table names.
+
+    The table names a ``run`` of ``experiments/import_demonstrations.py`` or of the
+    scripted demonstrations, under the storage root, and the files of its ``train``
+    list, as an ESN's run configuration does; each is resampled as
+    :func:`resample_joint_angles` does.
+    """
+    run = resolve_run_path(demonstrations["run"])
+    return {
+        name.split(".")[0]: resample_joint_angles(StateLog.load(run / name), dt)[1] for name in demonstrations["train"]
+    }
 
 
 def resample_joint_angles(log: StateLog, dt: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:

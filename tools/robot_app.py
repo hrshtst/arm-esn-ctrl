@@ -33,7 +33,9 @@ The mode is fixed at launch:
   the arm, without a reference.
 
 With ``--omega``, ``--damping`` sets the damping ratio of the tracking error (1,
-critically damped, by default). ``--zero-reference-velocity`` gives the tracking law
+critically damped, by default). Joint PD's gains are set at the posture where the
+reference's demonstrations end, as the experiments set them: the takes the ESN was
+trained on, the replayed take, or the demonstrator's reaches. ``--zero-reference-velocity`` gives the tracking law
 a zero reference velocity, so that its derivative term damps the arm's own velocity
 rather than the velocity error. ``--control-period`` computes the tracker's torque
 only that often and holds it between, as ``control_period`` in
@@ -116,7 +118,13 @@ from skelarm import (
 from skelarm.canvas import TrailOverlay, draw_arrow
 from skelarm.simulator import SimulatorCanvas
 
-from arm_esn_ctrl.demonstrations import SCENARIO_TABLES, load_joint_angles, resample_joint_angles, simulate_reaches
+from arm_esn_ctrl.demonstrations import (
+    SCENARIO_TABLES,
+    load_joint_angles,
+    resample_joint_angles,
+    simulate_reaches,
+    training_demonstrations,
+)
 from arm_esn_ctrl.disturbances import same_arm
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.storage import git_state, storage_root
@@ -127,6 +135,7 @@ from arm_esn_ctrl.tracking import (
     ReplaySource,
     TrackerConfig,
     error_dynamics,
+    gain_posture,
     shift_times,
     tracking_gains,
 )
@@ -345,6 +354,10 @@ class RobotApp(QMainWindow):
     forces : StateLog, optional
         A saved log whose external force every run replays by time, from the log's
         start posture, instead of the drag; posing and dragging are then off.
+    gains_at : NDArray[np.float64], optional
+        The posture where joint PD's gains are set (rad), as the experiments set them
+        where the demonstrations end (see :func:`arm_esn_ctrl.tracking.gain_posture`);
+        by default, the posture with the hand at the target.
     provenance : dict, optional
         Where the reference and the forces come from (such as the model's path), saved
         in each log's metadata.
@@ -368,6 +381,7 @@ class RobotApp(QMainWindow):
         name: str | None = None,
         forces: StateLog | None = None,
         provenance: dict[str, Any] | None = None,
+        gains_at: NDArray[np.float64] | None = None,
     ) -> None:
         super().__init__()
         task = Task.from_dict(config["task"])
@@ -401,6 +415,8 @@ class RobotApp(QMainWindow):
         self.skeleton = skeleton
         self.config = config
         self.provenance = {} if provenance is None else dict(provenance)
+        # The code that runs is the code at launch: its commit, and whether the repository had uncommitted changes.
+        self._repository = git_state()
         self.target = task.require_target()
         self.radius = task.tolerance
         self.tracker_config = tracker
@@ -432,9 +448,10 @@ class RobotApp(QMainWindow):
             self.mode = "replay_from_given"
         else:
             self.mode = "replay_from_start"
+        self.gains_at = self._target_posture() if gains_at is None else np.asarray(gains_at, dtype=np.float64)
         self.gains = None
         if tracker is not None:
-            self.gains = tracking_gains(tracker, skeleton, self._end_posture()) if gains is None else gains
+            self.gains = tracking_gains(tracker, skeleton, self.gains_at) if gains is None else gains
             kp, kd = self.gains
             if kp.shape != (skeleton.num_joints,) or kd.shape != (skeleton.num_joints,):
                 msg = f"the tracker needs one kp and one kd per joint ({skeleton.num_joints})"
@@ -708,7 +725,7 @@ class RobotApp(QMainWindow):
             if self.tracker_config.control_period is not None:
                 tracking["control_period"] = self.tracker_config.control_period
             tracking |= {"kp": self.gains[0].tolist(), "kd": self.gains[1].tolist()}
-        commit, uncommitted_changes = git_state()
+        commit, uncommitted_changes = self._repository
         app = {
             "mode": self.mode,
             "dt": self.dt,
@@ -779,8 +796,8 @@ class RobotApp(QMainWindow):
         config["demonstrations"] = {"start_q": [np.degrees(start_q).tolist()]}
         return resample_joint_angles(simulate_reaches(config)[0], self.period)[1]
 
-    def _end_posture(self) -> NDArray[np.float64]:
-        """The posture with the hand at the target, near the first start posture, for joint PD's gains."""
+    def _target_posture(self) -> NDArray[np.float64]:
+        """The posture with the hand at the target, near the first start posture, for gains without demonstrations."""
         model = self.skeleton.clone()
         return compute_inverse_kinematics(model, tuple(self.target)).q
 
@@ -831,11 +848,11 @@ class RobotApp(QMainWindow):
             kd = ", ".join(f"{value:.4g}" for value in self.gains[1])
             omega = self.tracker_config.omega
             controller = f"{law}, " + ("" if omega is None else f"ω = {omega:g} rad/s, ") + f"kp = {kp}; kd = {kd}"
-            natural, damping = error_dynamics(self.tracker_config.law, self.gains, self.skeleton, self._end_posture())
+            natural, damping = error_dynamics(self.tracker_config.law, self.gains, self.skeleton, self.gains_at)
             controller += (
                 f"\nTracking error: natural frequency {', '.join(f'{value:.3g}' for value in natural)} rad/s,"
                 f" damping ratio {', '.join(f'{value:.2f}' for value in damping)}"
-                + (" (at the target posture)" if self.tracker_config.law == "pd" else "")
+                + (" (where the reaches end)" if self.tracker_config.law == "pd" else "")
             )
             if not self.tracker_config.reference_velocity:
                 controller += "\nReference velocity: zero (the derivative term damps the arm's own velocity)"
@@ -1079,6 +1096,26 @@ def check_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -
         )
 
 
+def reference_demonstrations(
+    config: dict[str, Any], model: Path | None, esn: ReachingEsn | None, take: NDArray[np.float64] | None, period: float
+) -> list[NDArray[np.float64]]:
+    """The demonstrations of the reference, whose final postures set joint PD's gains, as in the experiments.
+
+    The takes the ESN was trained on, named in its run's configuration; else the
+    replayed take; else the demonstrator's reaches of the configuration's
+    ``[demonstrations]``; else none.
+    """
+    if model is not None and esn is not None:
+        with (model.parent / "config.toml").open("rb") as f:
+            demonstrations = tomllib.load(f)["demonstrations"]
+        return list(training_demonstrations(demonstrations, esn.config.dt).values())
+    if take is not None:
+        return [take]
+    if "demonstrations" in config and all(name in config for name in SCENARIO_TABLES):
+        return [resample_joint_angles(log, period)[1] for log in simulate_reaches(config)]
+    return []
+
+
 def joint_values(parser: argparse.ArgumentParser, name: str, text: str, n_joints: int) -> NDArray[np.float64]:
     """One value per joint from ``text``: a single value for every joint, or one per joint, comma-separated."""
     try:
@@ -1134,6 +1171,7 @@ def main() -> None:
         )
 
     name = args.model.parent.name if args.model is not None else None if args.replay is None else args.replay.name
+    demonstrations = [] if args.demonstrator else reference_demonstrations(config, args.model, esn, take, period)
     app = QApplication(sys.argv)
     try:
         window = RobotApp(
@@ -1159,6 +1197,7 @@ def main() -> None:
                 "name": name,
                 "command": " ".join(sys.argv),
             },
+            gains_at=gain_posture(demonstrations) if demonstrations else None,
         )
     except ValueError as error:
         parser.error(str(error))

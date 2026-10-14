@@ -113,6 +113,7 @@ from arm_esn_ctrl.tracking import (
     ReferenceSource,
     ReplaySource,
     TrackerConfig,
+    gain_posture,
     nearest_demonstration,
     task_joint_angles,
     track,
@@ -198,7 +199,7 @@ def main() -> None:
 
     tracker = config["tracker"]
     settings = tracker_settings(tracker)
-    end_posture = np.mean([q[-1] for q in setup.demos.values()], axis=0)  # where the reaches end
+    end_posture = gain_posture(setup.demos.values())  # where the reaches end, for joint PD's gains
     for setting in settings:
         law, omega = setting.law, setting.omega
         tracker_config = TrackerConfig(

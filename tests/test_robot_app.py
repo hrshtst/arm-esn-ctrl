@@ -22,8 +22,15 @@ from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.disturbances import same_arm
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
-from arm_esn_ctrl.tracking import EsnSource, ReplaySource, TrackerConfig, track
-from tools.robot_app import RECORDED_FORCES, RobotApp, build_parser, check_arguments, joint_values
+from arm_esn_ctrl.tracking import EsnSource, ReplaySource, TrackerConfig, gain_posture, track, tracking_gains
+from tools.robot_app import (
+    RECORDED_FORCES,
+    RobotApp,
+    build_parser,
+    check_arguments,
+    joint_values,
+    reference_demonstrations,
+)
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(
@@ -521,3 +528,84 @@ def test_forces_recorded_with_another_arm_are_refused(qapp, demo_config, esn, tm
 def test_the_command_line_takes_recorded_forces():
     args = build_parser().parse_args([str(CONFIG), "--law", "pd", "--omega", "20", "--forces", "pushes.sklog.npz"])
     assert args.forces.name == "pushes.sklog.npz"
+
+
+JOINT_PD = TrackerConfig("pd", 20.0, 0.02, damping=0.4, control_period=0.01)
+
+
+def training_takes(demo_config):
+    """The joint angles the test ESN was trained on, every ESN period."""
+    return [resample_joint_angles(log, ESN_CONFIG.dt)[1] for log in simulate_reaches(demo_config)]
+
+
+def test_joint_pd_with_the_experiments_gains_retraces_the_app_run(qapp, demo_config, esn, tmp_path):
+    """With joint PD's gains set where the training takes end, the experiments' tracking retraces an app run."""
+    posture = gain_posture(training_takes(demo_config))
+    app = make_app(demo_config, esn=esn, tracker=JOINT_PD, gains_at=posture)
+    start = app.skeleton.q.copy()
+    pushed_run(app)
+    recorded = StateLog.load(app.save_log(tmp_path / "run.sklog.npz"))
+
+    skeleton = Skeleton.from_toml(CONFIG)
+    skeleton.q = start
+    gains = tracking_gains(JOINT_PD, skeleton, posture)
+    again = track(
+        skeleton,
+        EsnSource(esn),
+        JOINT_PD,
+        gains,
+        period=ESN_CONFIG.dt,
+        warmup_steps=ESN_CONFIG.warmup_steps,
+        duration=1.2,
+        dt=DT,
+        external_force=RecordedForce.from_log(recorded).stepped(DT),
+    )
+
+    assert app.gains is not None
+    assert np.array_equal(app.gains[0], gains[0]) and np.array_equal(app.gains[1], gains[1])
+    assert np.array_equal(again.channel("q"), recorded.channel("q"))
+    assert recorded.extra["tracking"]["kp"] == pytest.approx(gains[0].tolist())
+
+
+def test_the_reference_demonstrations_are_the_esns_training_takes(demo_config, esn, tmp_path, monkeypatch):
+    """With a model, the takes its run was trained on, as named in its run's configuration and read from the storage."""
+    monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
+    run = tmp_path / "results" / "demonstrations" / "20261001-000000-demo"
+    run.mkdir(parents=True)
+    names = []
+    for i, log in enumerate(simulate_reaches(demo_config)):
+        log.save(run / f"demo_{i:02d}.sklog.npz")
+        names.append(f"demo_{i:02d}.sklog.npz")
+    model = tmp_path / "results" / "experiment" / "20261001-000001-esn" / "esn.toml"
+    model.parent.mkdir(parents=True)
+    train = ", ".join(f'"{name}"' for name in names)
+    (model.parent / "config.toml").write_text(
+        f'[demonstrations]\nrun = "results/demonstrations/20261001-000000-demo"\ntrain = [{train}]\n'
+    )
+
+    takes = reference_demonstrations(demo_config, model, esn, None, ESN_CONFIG.dt)
+
+    assert len(takes) == len(names)
+    for take, expected in zip(takes, training_takes(demo_config), strict=True):
+        assert take == pytest.approx(expected, abs=1e-12)
+
+
+def test_the_reference_demonstrations_of_the_other_modes(demo_config, take):
+    """A replayed take is its own demonstration; the demonstrator's reaches are those of the configuration."""
+    assert reference_demonstrations(demo_config, None, None, take, ESN_CONFIG.dt)[0] is take
+    reaches = reference_demonstrations(demo_config, None, None, None, ESN_CONFIG.dt)
+    assert gain_posture(reaches) == pytest.approx(gain_posture(training_takes(demo_config)))
+    assert reference_demonstrations({"task": demo_config["task"]}, None, None, None, ESN_CONFIG.dt) == []
+
+
+def test_a_log_names_the_commit_of_the_code_launched(qapp, demo_config, esn, monkeypatch):
+    """The repository's state is taken at launch, the code that runs, not when a run starts."""
+    monkeypatch.setattr("tools.robot_app.git_state", lambda: ("launched", False))
+    app = make_app(demo_config, esn=esn)
+    monkeypatch.setattr("tools.robot_app.git_state", lambda: ("edited since", True))
+    app.play()
+    app.pause()
+    app.step()
+
+    extra = app.saved_log().extra["robot_app"]
+    assert (extra["commit"], extra["uncommitted_changes"]) == ("launched", False)

@@ -32,7 +32,7 @@ the warm-up is at negative times.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -67,6 +67,15 @@ class TrackerConfig:
     # How often the tracking law's torque is computed, then held (s): a whole number of simulation steps. None
     # computes it at every simulation step.
     control_period: float | None = None
+
+
+def gain_posture(demonstrations: Iterable[NDArray[np.float64]]) -> NDArray[np.float64]:
+    """Where joint PD's gains are set (see :func:`tracking_gains`): the mean of the demonstrations' final postures.
+
+    ``demonstrations`` are joint angle sequences, such as the takes an ESN was trained
+    on: their reaches end near the target, where the gains are set.
+    """
+    return np.mean([np.asarray(q, dtype=np.float64)[-1] for q in demonstrations], axis=0)
 
 
 def tracking_gains(
