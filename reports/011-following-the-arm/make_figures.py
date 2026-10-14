@@ -21,10 +21,11 @@ and prints the tables of the report. With ``--logs``, it reads the runs' logs, w
 are not kept in Git, from the runs under the storage root, and also draws each arm's
 distance from the taught path under the block and the pushes, one panel per tracker
 (``block_distances.png``, ``pushes_distances.png``), and the joint angles and the
-joint torques over time under the block and the pushes, and from the start offset by
-+15 deg in both joints, one panel per joint and damping ratio, for each reference
-velocity (``<scenario>_joints_<velocity>.png``, ``<scenario>_torques_<velocity>.png``,
-Sections 3.5 and 3.6). With ``--animations``, it animates the block and the pushes
+joint torques over time undisturbed, under the block and the pushes, and from the
+start offset by +15 deg in both joints, one panel per joint and damping ratio, for
+each reference velocity (``<scenario>_joints_<velocity>.png``,
+``<scenario>_torques_<velocity>.png``, Sections 3.4 to 3.6). Over time, the ESNs'
+lines are drawn over the replay's. With ``--animations``, it animates the block and the pushes
 with the arms of PANELS side by side, each rendered by skelarm's player
 (``block.gif``, ``pushes.gif``).
 """
@@ -102,6 +103,7 @@ DISTURBANCES = [
 BACK_WITHIN = 5.0  # mm: an arm is back on the taught path once it stays within this of it
 # The time series: the scenario, the start (its index among the run's starts), and the time shown (s).
 SERIES = {
+    "nominal": ("nominal", 0, (0.0, 20.0)),
     "block": ("block", 0, (0.0, 20.0)),
     "pushes": ("pushes", 0, (0.0, 20.0)),
     "offset": ("offsets", 48, (0.0, 4.0)),
@@ -113,6 +115,9 @@ SURFACE_COLOR = "#fcfcfb"
 DISTURBANCE_COLOR = "#f0efec"
 TAUGHT_COLOR = "#b9b7b0"
 LINESTYLES = {"zero": "-", "reference": "--"}
+# The layers of the lines over time: the ESNs' arms on top, their references (dashed) under them, the replay below.
+ARM_ZORDERS = {"esn": 3.0, "replay": 2.0}
+REFERENCE_ZORDER = 2.5
 
 # The animations, with the search's tracker: per panel, the label (the arm's reference, then its tracker), the arm's
 # runs' tag, the arm, and the label's color.
@@ -552,7 +557,7 @@ def plot_distances(scenario: str) -> Figure:
                 ax.axvspan(onset, end, color=DISTURBANCE_COLOR, zorder=0)
             for name, tag, arm, color, _ in ARMS:
                 times, distance = path_distances(scenario, tag, arm, velocity, damping)
-                ax.plot(times, distance, color=color, linewidth=1.2, label=name)
+                ax.plot(times, distance, color=color, linewidth=1.2, label=name, zorder=ARM_ZORDERS[arm])
             ax.axhline(BACK_WITHIN, color=TEXT_COLOR, linewidth=0.8, linestyle=":")
             ax.set_title(f"damping ratio {damping:g}, {velocity_name}", color="#0b0b0b", fontsize=10)
             ax.set_xlim(0, 20)
@@ -574,6 +579,7 @@ def plot_series(name: str, velocity: str, channel: str) -> Figure:
     """
     scenario, start, span = SERIES[name]
     where = {
+        "nominal": "undisturbed",
         "block": "under the block",
         "pushes": "under the pushes",
         "offset": "from the start offset by +15° in both joints",
@@ -608,7 +614,7 @@ def plot_series(name: str, velocity: str, channel: str) -> Figure:
                         np.degrees(log.channel("q").reshape(n, -1)[:, joint]),
                         color=color,
                         linewidth=1.2,
-                        zorder=3,
+                        zorder=ARM_ZORDERS[arm],
                     )
                     if arm == "esn":
                         ax.plot(
@@ -617,11 +623,15 @@ def plot_series(name: str, velocity: str, channel: str) -> Figure:
                             color=color,
                             linewidth=1.0,
                             linestyle="--",
-                            zorder=2,
+                            zorder=REFERENCE_ZORDER,
                         )
                 else:
                     ax.plot(
-                        log.times, log.channel("tau").reshape(n, -1)[:, joint], color=color, linewidth=1.0, zorder=3
+                        log.times,
+                        log.channel("tau").reshape(n, -1)[:, joint],
+                        color=color,
+                        linewidth=1.0,
+                        zorder=ARM_ZORDERS[arm],
                     )
             ax.set_xlim(*span)
             if joint == 0:

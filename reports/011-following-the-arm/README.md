@@ -266,6 +266,30 @@ filtered take with a 1 s warm-up, seeds 8 and 2.
   for it when it lags. Report 007's ESN trailed more, by 6.3 mm at 0.8 (report 008),
   and report 009's noisy ESN less, by 2.1 mm.
 
+The joint angles over time, given the reference velocity and given a zero reference
+velocity, with each ESN's reference dashed:
+
+![Joint angles undisturbed, reference velocity](results/summary/nominal_joints_reference.png)
+
+![Joint angles undisturbed, zero reference velocity](results/summary/nominal_joints_zero.png)
+
+The joint torques over time, given the reference velocity (given a zero reference
+velocity: [torques](results/summary/nominal_torques_zero.png)):
+
+![Joint torques undisturbed, reference velocity](results/summary/nominal_torques_reference.png)
+
+- **Given a zero reference velocity, the ESNs' references fall behind the take with
+  their arms,** the more the higher the damping: at ζ = 0.8, the reach's second half
+  runs 0.7 to 1.2 s late, and the arms arrive 0.8 s (#2) and 1.2 s (#1) after the
+  replay's. Each reference stays just ahead of its arm, as a reference that follows
+  does.
+- **The ESNs' torque is smooth; the replay's is jagged through the reach** with every
+  tracker. Given the reference velocity, the jaggedness grows with the damping, to
+  about ±1 N m in joint 1 at ζ = 0.8 against the ESNs' ±0.1 N m; given a zero
+  reference velocity, it stays at a few tenths of a N m. The cause was not looked
+  into; one possibility is the take's own small step-to-step changes, which the replay
+  replays and the ESNs do not reproduce.
+
 ### 3.5 Under the block and the pushes
 
 Each cell gives ESN #1, ESN #2, and the replay, but for the following gain, whose
@@ -376,9 +400,8 @@ velocity: [the block](results/summary/block_torques_zero.png),
   the end. Under the push at 15 s, after the hold, both references go with the arm
   and bring it back over 1 to 2 s, where the replay's arm snaps back within 0.5 s.
 - **The torques are alike during a push,** set mostly by the push itself, but after
-  it the replay's rings at ζ = 0.2. At ζ = 0.8, given the reference velocity, the
-  replay's joint 1 torque chatters between the pushes, and a little at 0.4, where the
-  ESNs' does not; the cause was not looked into.
+  it the replay's rings at ζ = 0.2. Between the pushes, the replay's torque is as
+  jagged as undisturbed (Section 3.4), and the ESNs' as smooth.
 
 The animations show ESN #1, ESN #2, and the replay with the search's tracker (ζ = 0.4,
 given the reference velocity, the torque every 10 ms):
@@ -525,6 +548,8 @@ within the first seconds.
   trails, and a reference that follows waits for it: the lag grows with the damping.
   Given the reference velocity, the path stays within 0.9 mm at every damping, at the
   cost of torque at an offset start, half the replay's.
+- **The ESNs' torque is smooth where the replay's is jagged,** through the reach with
+  every tracker, most with the reference velocity and heavy damping.
 - **ESN #1 and ESN #2 differ in where they follow.** ESN #1 follows more under the
   block and after the push at 15 s, swinging farther and longer after it; ESN #2
   follows as much at the push at 7 s and presses less under the block (0.8 to 1.1
