@@ -255,7 +255,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_noisy_search](experiments/manual_demonstration_v2_robot_noisy_search/README.md) | blue and violet teacher noise against white, then the search trained with the best noise (Stage 2) | [010](reports/010-noisy-search-a-negative-result/README.md) |
 | [manual_demonstration_v2_robot_following_search](experiments/manual_demonstration_v2_robot_following_search/README.md) | an ESN search scored by how much its reference follows the arm, waiting under the block and yielding to a push, then compared with the replay across joint PD trackers (Stage 2) | [011](reports/011-following-the-arm/README.md) |
 | [manual_demonstration_v2_robot_recorded_pushes](experiments/manual_demonstration_v2_robot_recorded_pushes/README.md) | the two ESNs of the following search and the replay under pushes given by hand, recorded once and replayed by time across joint PD trackers (Stage 2) | [012](reports/012-pushes-by-hand/README.md) |
-| [manual_demonstration_v2_robot_equal_gains](experiments/manual_demonstration_v2_robot_equal_gains/README.md) | every scenario of the following search and the recorded pushes with joint PD at the same gains for both joints (Stage 2) | |
+| [manual_demonstration_v2_robot_equal_gains](experiments/manual_demonstration_v2_robot_equal_gains/README.md) | every scenario of the following search and the recorded pushes with joint PD at the same gains for both joints (Stage 2) | [013](reports/013-equal-gains/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -403,6 +403,15 @@ The reports so far:
   target, the ESNs ring less than the replay when lightly damped, but over all ten
   pushes their edge is smaller than under the scripted pushes, and they come back to
   the taught path in seconds where the replay's arm does within 1.2 s.
+- [013 Equal gains for both joints](reports/013-equal-gains/README.md) (Stage 2):
+  joint PD at kp = 80 N m/rad and kd = 3 N m s/rad for both joints, in every scenario
+  of reports 011 and 012. Alone, joint 1 tracks with ω = 20.7 rad/s and ζ = 0.39, as
+  before, and joint 2 with ω = 59.8 rad/s and ζ = 1.12; but with the torque held for
+  10 ms, the two together have a mode that flips sign every period and grows wherever
+  joint 2 is under 69.5°. Every run starts with a chatter of joint 2, up to 3,800 N m,
+  until the reach takes joint 2 past it, by 2 s for the ESNs and 3 s for the replay.
+  After it, the pushes move the arm a quarter to a third as far, and the ESNs come
+  back to the taught path in about a second instead of three, following as much.
 
 Each report has five parts:
 

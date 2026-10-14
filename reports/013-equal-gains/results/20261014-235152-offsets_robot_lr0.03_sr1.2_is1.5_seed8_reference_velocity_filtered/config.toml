@@ -1,0 +1,39 @@
+# The equal gains: report 011's ESN #1 (leak rate 0.03, spectral radius 1.2, input
+# scaling 1.5, seed 8), against the replay of the take, with joint PD at kp = 80 N
+# m/rad and kd = 3 N m s/rad for both joints, given the reference's velocity, its
+# torque computed every 10 ms and held between, while the arm is still simulated every
+# 2 ms: undisturbed, from the demonstrated start and the 48 offsets around it, -15 to
+# 15 deg in each joint, every 5 deg (49 start postures). As
+# manual_demonstration_v2_robot_following_search/offsets_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered.toml
+# otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_equal_gains/offsets_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1.5_seed8_filtered/esn.toml"
+
+[tracker]
+# Joint PD with the same gains for both joints, given directly rather than by a natural
+# frequency and damping ratio scaled by each joint's inertia; given the reference's velocity.
+laws = ["pd"]
+kp = 80.0  # N m/rad, both joints
+kd = 3.0   # N m s/rad, both joints
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start first; then the grid below
+[evaluation.start_grid]
+span_deg = 15.0        # offsets from -15 to 15 deg, in every combination
+step_deg = 5.0         # (49 start postures)
+
+[plots]
+# The joint angles and torques from these offset starts too, as reports 005 and 006
+# showed: the largest offset, and the one from which report 005's ESN failed (deg).
+offsets_deg = [[15.0, 15.0], [0.0, -10.0]]

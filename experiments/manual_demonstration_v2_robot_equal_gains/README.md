@@ -7,7 +7,9 @@ and 0.18 to 0.72 N m s/rad over the damping ratios 0.2 to 0.8. Here both joints 
 the same gains instead, kp = 80 N m/rad and kd = 3 N m s/rad, given directly in
 `[tracker]`: about the same for joint 1, and about nine times stiffer for joint 2,
 whose inertia is about an eighth of joint 1's. Every scenario of reports 011 and 012 is
-run again with this tracker. There is no search and no rule: every arm is shown.
+run again with this tracker. There is no search and no rule: every arm is shown. The
+results, with the natural frequency and damping ratio these gains give, are in
+[report 013](../../reports/013-equal-gains/README.md).
 
 - **The arms:** report 011's ESN #1 (leak rate 0.03, spectral radius 1.2, input
   scaling 1.5, seed 8) and ESN #2 (input scaling 1, seed 2), and the replay of the take.
