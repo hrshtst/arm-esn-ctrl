@@ -1,0 +1,40 @@
+# The recorded pushes: report 011's ESN #1 (leak rate 0.03, spectral radius 1.2,
+# input scaling 1.5, seed 8), against the replay of the take, with joint PD at
+# damping ratios 0.2, 0.4, and 0.8, given a zero reference velocity, its torque
+# computed every 10 ms and held between, while the arm is still simulated every 2
+# ms: the pushes given by hand in recorded_forces_001.sklog.npz, replayed by time,
+# from the log's start posture, the demonstrated start. As report 011's
+# pushes_robot_lr0.03_sr1.2_is1.5_seed8_zero_velocity_filtered.toml otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_recorded_pushes/recorded001_robot_lr0.03_sr1.2_is1.5_seed8_zero_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1.5_seed8_filtered/esn.toml"
+
+[tracker]
+# Joint PD at omega = 20 rad/s, at three damping ratios, given a zero reference velocity.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.2, 0.4, 0.8]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+# No start postures: the runs start from the recorded log's, the demonstrated start.
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 3.2, 2.9, and 1.9 Hz at the three damping ratios
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)
+# Without an effort_window, the torque, effort, and force are measured over the whole run.
+
+# The force recorded in the robot app while the arm was pushed by hand, replayed by time on the
+# task clock: every arm meets the same force at the same times.
+[disturbance]
+type = "recorded"
+log = "data/recorded_forces/recorded_forces_001.sklog.npz"
