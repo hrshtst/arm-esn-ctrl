@@ -118,6 +118,9 @@ ARM_LABELS = {
     "replay": "demonstration replayed by time",
     "demonstrator": "demonstrator",
 }
+# The layers of the arms' lines over time: the ESN's on top, its reference (dashed) under it, the others below.
+ARM_ZORDERS = {"esn": 3.0, "replay": 2.0, "demonstrator": 2.0}
+REFERENCE_ZORDER = 2.5
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
@@ -683,18 +686,25 @@ def plot_timeline(
             for arm in [arm for arm in ARMS if arm in runs]:
                 times, hand, log = runs[arm]
                 color = ARM_COLORS[arm]
+                zorder = ARM_ZORDERS[arm]
                 ax_distance.plot(
                     times,
                     1000 * np.linalg.norm(hand - setup.target, axis=1),
                     color=color,
                     linewidth=1.3,
                     label=ARM_LABELS[arm],
+                    zorder=zorder,
                 )
-                ax_progress.plot(times, progress(log.channel("q"), start_q, setup), color=color, linewidth=1.3)
+                q_progress = progress(log.channel("q"), start_q, setup)
+                ax_progress.plot(times, q_progress, color=color, linewidth=1.3, zorder=zorder)
                 if "q_ref" in log.channel_names:
                     reference_progress = progress(log.channel("q_ref"), start_q, setup)
-                    ax_progress.plot(times, reference_progress, color=color, linewidth=1.3, linestyle="--")
-                ax_torque.plot(times, np.linalg.norm(log.channel("tau"), axis=1), color=color, linewidth=1.3)
+                    reference_zorder = REFERENCE_ZORDER if arm == "esn" else zorder
+                    ax_progress.plot(
+                        times, reference_progress, color=color, linewidth=1.3, linestyle="--", zorder=reference_zorder
+                    )
+                tau = np.linalg.norm(log.channel("tau"), axis=1)
+                ax_torque.plot(times, tau, color=color, linewidth=1.3, zorder=zorder)
             ax_distance.axhline(1000 * setup.radius, color="#0b0b0b", linewidth=0.8, linestyle=":")
             ax_distance.set(xlim=(-0.3, float(setup.times[-1])), ylim=(0, None))
             ax_distance.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
@@ -770,11 +780,12 @@ def plot_joints(
             linewidth=1.3,
             linestyle="--",
             label="ESN output (its reference)",
+            zorder=REFERENCE_ZORDER,
         )
         for arm in [arm for arm in ARMS if arm in logs]:
             log = logs[arm]
             q = np.degrees(log.channel("q").reshape(len(log.times), -1)[:, joint])
-            ax.plot(log.times, q, color=ARM_COLORS[arm], linewidth=1.3, label=ARM_LABELS[arm])
+            ax.plot(log.times, q, color=ARM_COLORS[arm], linewidth=1.3, label=ARM_LABELS[arm], zorder=ARM_ZORDERS[arm])
 
     angles = f"{title}: joint angles"
     return per_joint_figure(run_dir, setup, settings, spans, angles, draw, "joint {joint} (deg)", start)
@@ -800,7 +811,9 @@ def plot_torques(
         for arm in [arm for arm in ARMS if arm in logs]:
             log = logs[arm]
             tau = log.channel("tau").reshape(len(log.times), -1)[:, joint]
-            ax.plot(log.times, tau, color=ARM_COLORS[arm], linewidth=1.0, label=ARM_LABELS[arm])
+            ax.plot(
+                log.times, tau, color=ARM_COLORS[arm], linewidth=1.0, label=ARM_LABELS[arm], zorder=ARM_ZORDERS[arm]
+            )
 
     torques = f"{title}: joint torques"
     return per_joint_figure(run_dir, setup, settings, spans, torques, draw, "joint {joint} (N m)", start)
