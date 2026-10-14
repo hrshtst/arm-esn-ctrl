@@ -1,0 +1,32 @@
+# A shortlisted ESN of the following search, ranked third of the eleven settings
+# that qualify by its rule (median following 0.73, median ringing 6.14 mm): leak
+# rate 0.03, spectral radius 1.35, input scaling 1.5, and seed 6, its setting's
+# typical seed. Trained and run on its own here from a grid of start postures, so
+# that its ESN is saved for the robot app and robot_esn.py.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_robot_following_search/grid_lr0.03_sr1.35_is1.5_seed6_filtered.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.35
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.03
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 6
+
+[evaluation]
+duration = 20.0        # autonomous run (s); the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the demonstrated start offset by -15 to 15 deg in each joint, every 5 deg (49 start postures)
+step_deg = 5.0

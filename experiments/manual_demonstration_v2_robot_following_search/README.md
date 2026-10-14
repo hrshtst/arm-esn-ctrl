@@ -1,5 +1,7 @@
 # Manual-demonstration robot following search, v2 (Stage 2)
 
+Results: [report 011](../../reports/011-following-the-arm/README.md).
+
 The study after [the noisy search](../manual_demonstration_v2_robot_noisy_search/README.md)
 (report 010). There, the search was scored by the ringing and the return onto the
 taught path after a disturbance, and the ESNs it found returned about as fast as the

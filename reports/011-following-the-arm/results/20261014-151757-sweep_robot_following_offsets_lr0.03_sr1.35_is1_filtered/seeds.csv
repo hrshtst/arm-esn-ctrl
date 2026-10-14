@@ -1,0 +1,2 @@
+seeds,failing_seeds,median_worst_path_rmse_m,mean_worst_path_rmse_m,sd_worst_path_rmse_m,min_worst_path_rmse_m,max_worst_path_rmse_m,median_latest_arrival_s,worst_final_distance_m
+10,0,0.06725212545919042,0.06707306547477306,0.0006294701054095484,0.0661543527189789,0.06797740348342023,10.245000000000001,0.003208277784157443

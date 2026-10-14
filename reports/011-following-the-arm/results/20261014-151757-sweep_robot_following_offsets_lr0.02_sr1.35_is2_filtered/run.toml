@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_following_search/sweep_robot_following_offsets_lr0.02_sr1.35_is2_filtered.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_following_search/sweep_robot_following_offsets_lr0.02_sr1.35_is2_filtered.toml"
+started = 2026-10-14 15:17:57+09:00
+host = "delbosque"
+commit = "91341381a86a985258c61ac941a58eec7e1f4b31"
+uncommitted_changes = false

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_following_search/states_robot_lr0.03_sr1.2_is1.5_seed8_filtered.toml"
+command = "experiments/robot_states.py experiments/manual_demonstration_v2_robot_following_search/states_robot_lr0.03_sr1.2_is1.5_seed8_filtered.toml"
+started = 2026-10-14 16:37:05+09:00
+host = "delbosque"
+commit = "7c80475230d7478a8fe8ef2f96a8ce4893d69d97"
+uncommitted_changes = false

@@ -253,7 +253,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_damping](experiments/manual_demonstration_v2_robot_damping/README.md) | that ESN with joint PD better damped, and given the reference velocity (Stage 2) | [008](reports/008-damping-and-reference-velocity/README.md) |
 | [manual_demonstration_v2_robot_damped_search](experiments/manual_demonstration_v2_robot_damped_search/README.md) | an ESN search with that better-damped tracker, its torque computed every 10 ms, then with white, pink, and brown teacher noise, scored by the ringing and the return (Stage 2) | [009](reports/009-noisy-training-for-a-faster-return/README.md) |
 | [manual_demonstration_v2_robot_noisy_search](experiments/manual_demonstration_v2_robot_noisy_search/README.md) | blue and violet teacher noise against white, then the search trained with the best noise (Stage 2) | [010](reports/010-noisy-search-a-negative-result/README.md) |
-| [manual_demonstration_v2_robot_following_search](experiments/manual_demonstration_v2_robot_following_search/README.md) | an ESN search scored by how much its reference follows the arm, waiting under the block and yielding to a push, then compared with the replay across joint PD trackers (Stage 2) | |
+| [manual_demonstration_v2_robot_following_search](experiments/manual_demonstration_v2_robot_following_search/README.md) | an ESN search scored by how much its reference follows the arm, waiting under the block and yielding to a push, then compared with the replay across joint PD trackers (Stage 2) | [011](reports/011-following-the-arm/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -384,6 +384,14 @@ The reports so far:
   is snapped back, as with the replay, where a reference that adapts to the arm's
   actual state is wanted. The fastest reservoirs also settle on a resting posture
   off the taught motion from many offset starts.
+- [011 Following the arm](reports/011-following-the-arm/README.md) (Stage 2): a
+  following gain, how much of a disturbed arm's displacement the reference shares,
+  scores a new search: faster leak rates follow more but lose the reach, and the two
+  ESNs chosen, at leak rate 0.03, follow by 0.73 and 0.79 against report 007's ESN's
+  0.69. Across joint PD at damping ratios 0.2 to 0.8, with or without the reference
+  velocity, both complete every run and follow alike; they ring half as much as the
+  replay after a push when lightly damped and about as much at 0.8, wait under the
+  block with a sixth of its torque, and return to the taught path more slowly.
 
 Each report has five parts:
 
