@@ -11,9 +11,10 @@ a third arm, the baseline the ESNs' waiting and following should be measured aga
   sample nearest the measured joint angles, searched within 1 s of the last one
   found. The replayed sample advances by one each period, as the replay's does, but
   never to where the path is more than 2.5° past the arm's progress: it waits for a
-  held arm, and falls back with an arm pushed back along the path. Where the take
-  rests, its path does not lengthen, so the replayed sample passes through the rest.
-  Pushed across the path or forward along it, the arm is pulled back as by the replay.
+  held arm, and falls back with an arm pushed back along the path, by at most one
+  sample a period, the take's pace in reverse. Where the take rests, its path does not
+  lengthen, so the replayed sample passes through the rest. Pushed across the path or
+  forward along it, the arm is pulled back as by the replay.
 - **The lead:** undisturbed, the replay's arm lags its reference by at most about
   2.2° along the path (at the reach's fastest, 50°/s), with either tracker and either
   reference velocity, so that with 2.5° the progress replay is the replay: in a check
@@ -31,6 +32,12 @@ a third arm, the baseline the ESNs' waiting and following should be measured aga
   and report 012's three logs of pushes given by hand, replayed by time.
 
 ## Step 1: the runs
+
+The first runs, at `a0ff165`, let the reference fall back at once to 2.5° past the arm's
+progress. Under the strongest pushes by hand, the arm's nearest sample jumped back along
+the path, and so did the reference, at up to 1,556°/s, throwing the arm. From `98c1a25`,
+it falls back by at most one sample a period, and the same configurations are run
+again.
 
 [`robot_esn.py`](../robot_esn.py) runs each ESN, the replay, and the progress replay
 (its `[progress]` table) with the tracker:
