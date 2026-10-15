@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_esn_dynamics/push_pulses.toml"
+command = "experiments/push_pulses.py --workers 14 experiments/manual_demonstration_v2_esn_dynamics/push_pulses.toml"
+started = 2026-10-15 22:36:08+09:00
+host = "delbosque"
+commit = "e2e5d770d6d141b73fbfe90e838d7061d8bb146d"
+uncommitted_changes = false

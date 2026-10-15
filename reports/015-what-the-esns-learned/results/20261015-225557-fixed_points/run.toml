@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_esn_dynamics/fixed_points.toml"
+command = "experiments/fixed_points.py experiments/manual_demonstration_v2_esn_dynamics/fixed_points.toml"
+started = 2026-10-15 22:55:57+09:00
+host = "delbosque"
+commit = "b0b42ecba38adbefa856d0b2fb99711ea6d01040"
+uncommitted_changes = false

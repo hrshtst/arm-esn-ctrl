@@ -4,7 +4,7 @@ Reports 011 to 014 measured how report 011's two ESNs drive the robot. This stud
 asks what they learned, as dynamical systems: is the take's target an equilibrium
 that attracts the ESN from anywhere, is the take's path an attractor that the ESN
 returns to when pushed off it, or does the ESN time its reach from the reset, like a
-clock?
+clock? The results are in [report 015](../../reports/015-what-the-esns-learned/README.md).
 
 - **The ESNs:** report 011's ESN #1 (leak rate 0.03, spectral radius 1.2, input
   scaling 1.5, seed 8) and ESN #2 (input scaling 1, seed 2), trained on the take.

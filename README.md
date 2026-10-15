@@ -258,6 +258,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_equal_gains](experiments/manual_demonstration_v2_robot_equal_gains/README.md) | every scenario of the following search and the recorded pushes with joint PD at the same gains for both joints (Stage 2) | [013](reports/013-equal-gains/README.md) |
 | [manual_demonstration_v2_robot_stable_equal_gains](experiments/manual_demonstration_v2_robot_stable_equal_gains/README.md) | every scenario of the following search and the recorded pushes with the same gains for both joints, estimated to keep the torque held for 10 ms stable (Stage 2) | [013](reports/013-equal-gains/README.md) |
 | [manual_demonstration_v2_robot_progress_replay](experiments/manual_demonstration_v2_robot_progress_replay/README.md) | every scenario of the following search and the recorded pushes with a third arm, the take replayed by the arm's progress along the taught path (Stage 2) | [014](reports/014-progress-replay/README.md) |
+| [manual_demonstration_v2_esn_dynamics](experiments/manual_demonstration_v2_esn_dynamics/README.md) | what the following search's two ESNs learned as dynamical systems: run on their own from rest anywhere in the joint space, with other warm-ups, pushed by short pulses along the reach on the robot, and read as the map of their reservoir state for its fixed points (Stages 1 and 2) | [015](reports/015-what-the-esns-learned/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -423,6 +424,17 @@ The reports so far:
   is what any progress-based reference gives. What the ESNs keep is half the replays'
   torque from an offset start, and giving way across the path, which costs them a
   slower return.
+- [015 What the ESNs learned: a path into the target, joined from anywhere](reports/015-what-the-esns-learned/README.md)
+  (Stages 1 and 2): report 011's two ESNs as dynamical systems. Run on their own from
+  rest at 1,296 postures over both joints' whole range, every run ends at the target,
+  their one attracting fixed point; the first output jumps toward the take's region,
+  and the run joins the take's path within a second or two and follows it, in posture
+  and in reservoir state, at a phase of its own. Pushed along the reach on the robot,
+  they arrive later or sooner by the time the push cost or gave them, where the replay
+  keeps its time; only when to set off still depends on the warm-up, which leaves the
+  reservoir drifting. The path attracts slowly, after a transient: changes across it
+  decay only over windows of 4 s, and the ESNs' hands come back in 2 to 3 s. ESN #2
+  has two unstable fixed points near the path, where it lingers.
 
 Each report has five parts:
 

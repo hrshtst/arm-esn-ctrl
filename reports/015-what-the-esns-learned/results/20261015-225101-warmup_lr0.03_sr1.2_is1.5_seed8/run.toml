@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_esn_dynamics/warmup_lr0.03_sr1.2_is1.5_seed8.toml"
+command = "experiments/warmup_esn.py experiments/manual_demonstration_v2_esn_dynamics/warmup_lr0.03_sr1.2_is1.5_seed8.toml"
+started = 2026-10-15 22:51:01+09:00
+host = "delbosque"
+commit = "9bb8790545071c78b6925dbdc3c9e2e920a9b422"
+uncommitted_changes = false

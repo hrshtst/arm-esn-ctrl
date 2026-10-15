@@ -1,0 +1,28 @@
+# What the ESNs learned, step 3: report 011's ESN #1 (leak rate 0.03, spectral radius
+# 1.2, input scaling 1.5, seed 8) and ESN #2 (input scaling 1, seed 2) as maps of their
+# reservoir state: where they can rest, and how fast those points and the take's path
+# attract, from the states of step 1's runs.
+#
+#   uv run python experiments/fixed_points.py experiments/manual_demonstration_v2_esn_dynamics/fixed_points.toml
+
+[[esn]]
+key = "esn1"
+label = "ESN #1"
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1.5_seed8_filtered/esn.toml"
+
+[[esn]]
+key = "esn2"
+label = "ESN #2"
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1_seed2_filtered/esn.toml"
+
+[global_starts]
+# Step 1's run: the states at the start of the task and at the end of each run seed Newton's method.
+run = "results/manual_demonstration_v2_esn_dynamics/20261015-223608-global_starts"
+
+[analysis]
+distinct = 1e-6      # fixed points closer than this, relative to the spread of the take's states, are one
+n_modes = 6          # how the output posture moves is kept for this many of the slowest modes at each fixed point
+held_duration = 10.0 # s: each start posture is held this long from the state after the warm-up before Newton's method
+windows = [0.5, 1.0, 2.0, 4.0]  # s: the rates along the ESN's run from the take's start, over windows this long
+stride = 25          # steps between the windows' starts (250 ms); each window is a whole number of them
+n_rates = 5          # this many of the largest rates are kept

@@ -1,0 +1,24 @@
+# What the ESNs learned, step 1b: report 011's ESN #2 (input scaling 1, seed 2), run on its
+# own with other warm-ups than the 1 s it was trained with, the trained model unchanged.
+# Step 1 found the state still moving at the end of the 1 s warm-up as fast as the
+# take's states move during the reach. A warm-up longer by some time makes an ESN that
+# times its reach from the reset arrive earlier by that time; one that times it from
+# the end of the warm-up arrives as before.
+#
+#   uv run python experiments/warmup_esn.py experiments/manual_demonstration_v2_esn_dynamics/warmup_lr0.03_sr1.2_is1_seed2.toml
+
+[esn]
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1_seed2_filtered/esn.toml"
+
+[warmup]
+durations = [0.25, 0.5, 1.0, 2.0, 4.0]  # s; the trained 1 s among them
+
+[evaluation]
+duration = 20.0  # autonomous run (s); the take lasts 18.5 s and arrives at 9.6 s
+hold = 2.0       # hold window after arrival (s): the hand must stay within the goal radius
+# Three starts on the take's path, at rest: where the take is a quarter, half, and three
+# quarters of the way along its joint path, at 2.8 s, 5.9 s, and 8.1 s.
+extra_starts = { path = [[21.3, 74.2], [41.0, 111.1], [83.7, 103.8]] }
+[evaluation.start_grid]
+span_deg = 15.0  # report 011's 49 offset starts: -15 to 15 deg in each joint
+step_deg = 5.0
