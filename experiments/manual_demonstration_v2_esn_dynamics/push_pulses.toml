@@ -1,0 +1,51 @@
+# What the ESNs learned, step 2: report 011's ESN #1 (leak rate 0.03, spectral radius
+# 1.2, input scaling 1.5, seed 8) and ESN #2 (input scaling 1, seed 2) on the robot,
+# against the replay of the take by time and by the arm's progress (a lead of 2.5 deg
+# along the taught joint path, as in report 014), each pushed at its tip by one short
+# pulse a run: 3 N or 6 N for 0.2 s, every second along the reach from 1 s to 9 s, and
+# at 12 s, at the target, in 8 directions. Joint PD at omega = 20 rad/s and the
+# damping ratio 0.4, each joint's gains scaled by its inertia, given the reference's
+# velocity, its torque computed every 10 ms, as in reports 011, 012, and 014.
+#
+#   uv run python experiments/push_pulses.py experiments/manual_demonstration_v2_esn_dynamics/push_pulses.toml
+
+[[esn]]
+key = "esn1"
+label = "ESN #1"
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1.5_seed8_filtered/esn.toml"
+
+[[esn]]
+key = "esn2"
+label = "ESN #2"
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1_seed2_filtered/esn.toml"
+
+[tracker]
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[progress]
+lead_deg = 2.5
+window = 1.0  # s
+
+[evaluation]
+duration = 20.0        # task (s), after the warm-up; the take lasts 18.5 s and arrives at 9.6 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the take's start
+return_tolerance = 0.005  # after a pulse, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a pulse, the hand's motion above this is its ringing (Hz)
+ringing_window = 2.0      # the ringing is measured over this long after the pulse's end (s)
+following_window = 0.5    # the following gain: from a pulse's onset to this long after its end (s)
+
+[pulses]
+# Undisturbed, the take's hand starts to move at 0.6 s and arrives at 9.6 s. A pulse of
+# 3 N across, at 5 s, carries the replay's hand 29 mm off the taught path and ESN #1's
+# 37 mm; one of 6 N, 67 and 91 mm.
+forces = [3.0, 6.0]                                    # N
+onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 12.0]  # task time (s)
+angles_deg = [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]  # from the direction toward the target, counterclockwise
+duration = 0.2          # s
+response_window = 2.0   # the peak torque is compared over this long from the onset (s)
