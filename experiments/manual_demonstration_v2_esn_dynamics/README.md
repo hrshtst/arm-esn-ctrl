@@ -37,6 +37,24 @@ uv run python experiments/global_starts.py experiments/manual_demonstration_v2_e
 | --- | --- |
 | `global_starts.toml` | ESN #1 and ESN #2, each from 1,296 start postures every 10°, 20 s |
 
+## Step 1b: the warm-up
+
+Step 1 found that when the 1 s warm-up ends, the state is still moving as fast as the
+take's states move during the reach, and it takes another second or two to settle.
+[`warmup_esn.py`](../warmup_esn.py) runs each ESN with other warm-ups than the 1 s
+it was trained with, from report 011's 49 offset starts and from three starts on the
+take's path, at rest: a warm-up longer by some time makes an ESN that times its reach
+from the reset arrive earlier by that time; one that times it from the end of the
+warm-up arrives as before.
+
+```bash
+uv run python experiments/warmup_esn.py experiments/manual_demonstration_v2_esn_dynamics/warmup_lr0.03_sr1.2_is1.5_seed8.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `warmup_{lr0.03_sr1.2_is1.5_seed8,lr0.03_sr1.2_is1_seed2}.toml` | one ESN with warm-ups of 0.25, 0.5, 1, 2, and 4 s, from 52 starts, 20 s |
+
 ## Step 2: pushed along the reach
 
 ```bash
