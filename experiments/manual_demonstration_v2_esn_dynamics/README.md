@@ -13,6 +13,13 @@ clock?
   range, every 10° (1,296), each held for the ESN's 1 s warm-up first, as in
   training, for 20 s. Each start posture is also held for 4 s, to see whether the
   state the ESN starts from depends on the start posture alone.
+- **Step 3, where they can rest, and how fast they are drawn there**
+  ([`fixed_points.py`](../fixed_points.py)): each ESN read as the map of its
+  reservoir state that its runs follow ([`dynamics.py`](../../src/arm_esn_ctrl/dynamics.py),
+  with rclib's weight getters): its fixed points, sought by Newton's method from
+  the states of step 1's runs, their eigenvalues, the held reservoir's fixed point
+  at each start posture, and how fast changes of the state across the ESN's run
+  from the take's start decay.
 - **Step 2, pushed along the reach** ([`push_pulses.py`](../push_pulses.py)): on the
   robot, each ESN, the replay of the take by time, and its replay by the arm's
   progress (report 014's), pushed at the tip by one short pulse a run: 3 N or 6 N
@@ -64,3 +71,16 @@ uv run python experiments/push_pulses.py experiments/manual_demonstration_v2_esn
 | Configuration | What it runs |
 | --- | --- |
 | `push_pulses.toml` | ESN #1, ESN #2, the replay, and the progress replay, each undisturbed and under 160 pulses: 644 runs |
+
+## Step 3: where they can rest
+
+```bash
+uv run python experiments/fixed_points.py experiments/manual_demonstration_v2_esn_dynamics/fixed_points.toml
+```
+
+| Configuration | What it runs |
+| --- | --- |
+| `fixed_points.toml` | ESN #1 and ESN #2: Newton's method from the 2 x 1,296 states of step 1's runs, the held reservoir at the 1,296 start postures, and the rates along the run from the take's start over windows of 0.5, 1, 2, and 4 s |
+
+It needs rclib's read-only weight getters (rclib's `feat/reservoir-weights`), to
+which this branch advances the pin.
