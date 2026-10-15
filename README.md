@@ -256,6 +256,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_following_search](experiments/manual_demonstration_v2_robot_following_search/README.md) | an ESN search scored by how much its reference follows the arm, waiting under the block and yielding to a push, then compared with the replay across joint PD trackers (Stage 2) | [011](reports/011-following-the-arm/README.md) |
 | [manual_demonstration_v2_robot_recorded_pushes](experiments/manual_demonstration_v2_robot_recorded_pushes/README.md) | the two ESNs of the following search and the replay under pushes given by hand, recorded once and replayed by time across joint PD trackers (Stage 2) | [012](reports/012-pushes-by-hand/README.md) |
 | [manual_demonstration_v2_robot_equal_gains](experiments/manual_demonstration_v2_robot_equal_gains/README.md) | every scenario of the following search and the recorded pushes with joint PD at the same gains for both joints (Stage 2) | [013](reports/013-equal-gains/README.md) |
+| [manual_demonstration_v2_robot_stable_equal_gains](experiments/manual_demonstration_v2_robot_stable_equal_gains/README.md) | the same gains for both joints, estimated to keep the torque held for 10 ms stable, undisturbed (Stage 2) | |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so

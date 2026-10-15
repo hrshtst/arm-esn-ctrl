@@ -1,0 +1,32 @@
+# Stable equal gains: report 011's ESN #1 (leak rate 0.03, spectral radius 1.2, input
+# scaling 1.5, seed 8), against the replay of the take, with joint PD at kp = 80 N
+# m/rad and kd = 1.2 N m s/rad for both joints, inside the bound, kd < 1.62 N m s/rad
+# at the start: joint 2's mode is deadbeat there; given the reference's velocity, its
+# torque computed every 10 ms and held between, while the arm is still simulated every
+# 2 ms: undisturbed, from the demonstrated start. As
+# manual_demonstration_v2_robot_equal_gains/nominal_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered.toml
+# otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_stable_equal_gains/nominal_kp80_kd1.2_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1.5_seed8_filtered/esn.toml"
+
+[tracker]
+# Joint PD with the same gains for both joints, given directly rather than by a natural
+# frequency and damping ratio scaled by each joint's inertia; given the reference's velocity.
+laws = ["pd"]
+# inside the bound kd < 2 mu / T = 1.62 at the start, where joint 2's mode is deadbeat
+kp = 80.0  # N m/rad, both joints
+kd = 1.2   # N m s/rad, both joints
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
