@@ -1,0 +1,49 @@
+# The progress replay: report 011's ESN #2 (leak rate 0.03, spectral radius 1.2, input
+# scaling 1, seed 2), against the replay of the take by time and by the arm's progress
+# (a lead of 2.5 deg along the taught joint path), with joint PD at kp = 80 N m/rad
+# and kd = 1.2 N m s/rad for both joints, as in report 013, given the reference's
+# velocity, its torque computed every 10 ms and held between, while the arm is still
+# simulated every 2 ms: undisturbed, from the demonstrated start and the 48 offsets
+# around it, -15 to 15 deg in each joint, every 5 deg (49 start postures). As
+# manual_demonstration_v2_robot_stable_equal_gains/offsets_kp80_kd1.2_robot_lr0.03_sr1.2_is1_seed2_reference_velocity_filtered.toml
+# otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_progress_replay/offsets_kp80_kd1.2_robot_lr0.03_sr1.2_is1_seed2_reference_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1_seed2_filtered/esn.toml"
+
+[tracker]
+# Joint PD with the same gains for both joints, given directly rather than by a natural
+# frequency and damping ratio scaled by each joint's inertia; given the reference's velocity.
+laws = ["pd"]
+# inside the bound kd < 2 mu / T - kp T / 10 = 1.54 at the start, and down to joint 2 at 10.2 deg
+kp = 80.0  # N m/rad, both joints
+kd = 1.2   # N m s/rad, both joints
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[progress]
+# A third arm: the take replayed by time, but never more than lead_deg along its joint path
+# past the arm's progress, the arm's nearest sample searched within window of the last one
+# found. Undisturbed, the replay's arm lags its reference by at most about 2.2 deg along the
+# path with either tracker, so that with 2.5 deg the progress replay is the replay.
+lead_deg = 2.5
+window = 1.0  # s
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start first; then the grid below
+[evaluation.start_grid]
+span_deg = 15.0        # offsets from -15 to 15 deg, in every combination
+step_deg = 5.0         # (49 start postures)
+
+[plots]
+# The joint angles and torques from these offset starts too, as reports 005 and 006
+# showed: the largest offset, and the one from which report 005's ESN failed (deg).
+offsets_deg = [[15.0, 15.0], [0.0, -10.0]]
