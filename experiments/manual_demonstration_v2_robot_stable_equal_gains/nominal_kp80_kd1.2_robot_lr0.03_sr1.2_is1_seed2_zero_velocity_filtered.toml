@@ -1,9 +1,9 @@
 # Stable equal gains: report 011's ESN #2 (leak rate 0.03, spectral radius 1.2, input
 # scaling 1, seed 2), against the replay of the take, with joint PD at kp = 80 N m/rad
-# and kd = 1.2 N m s/rad for both joints, inside the bound, kd < 1.62 N m s/rad at the
-# start: joint 2's mode is deadbeat there; given a zero reference velocity, its torque
-# computed every 10 ms and held between, while the arm is still simulated every 2 ms:
-# undisturbed, from the demonstrated start. As
+# and kd = 1.2 N m s/rad for both joints, inside the bound, kd < 1.54 N m s/rad at the
+# start; given a zero reference velocity, its torque computed every 10 ms and held
+# between, while the arm is still simulated every 2 ms: undisturbed, from the
+# demonstrated start. As
 # manual_demonstration_v2_robot_equal_gains/nominal_robot_lr0.03_sr1.2_is1_seed2_zero_velocity_filtered.toml
 # otherwise.
 #
@@ -19,7 +19,7 @@ model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-
 # Joint PD with the same gains for both joints, given directly rather than by a natural
 # frequency and damping ratio scaled by each joint's inertia; given a zero reference velocity.
 laws = ["pd"]
-# inside the bound kd < 2 mu / T = 1.62 at the start, where joint 2's mode is deadbeat
+# inside the bound kd < 2 mu / T - kp T / 10 = 1.54 at the start, and down to joint 2 at 10.2 deg
 kp = 80.0  # N m/rad, both joints
 kd = 1.2   # N m s/rad, both joints
 acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
