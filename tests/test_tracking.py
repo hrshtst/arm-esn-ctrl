@@ -329,9 +329,10 @@ def test_the_progress_replay_falls_back_with_an_arm_pushed_back():
     for k in range(30):
         source.next_posture(k, RESTING_LINE[k])
 
-    given = source.next_posture(30, RESTING_LINE[25])
+    given = np.vstack([source.next_posture(k, RESTING_LINE[25]) for k in range(30, 35)])
 
-    assert given == pytest.approx(RESTING_LINE[27])
+    # Back to 0.025 rad past the arm (sample 27), one sample a period from sample 30.
+    assert given == pytest.approx(RESTING_LINE[[29, 28, 27, 27, 27]])
 
 
 def test_the_progress_replay_searches_the_arm_only_within_its_window():

@@ -15,7 +15,8 @@ reach from each start posture:
 - ``progress``, with a ``[progress]`` table: the same demonstration replayed by
   time, but never more than ``lead_deg`` along its joint path past the arm's
   progress (the progress-based baseline), the arm's nearest sample searched within
-  ``window`` seconds of the last one found;
+  ``window`` seconds of the last one found, and falling back by at most a sample a
+  period;
 - ``demonstrator``: the controller that made the demonstrations, on its own.
 
 The ESN and the replays run with every tracking law, natural frequency of the

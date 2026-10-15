@@ -25,7 +25,8 @@ There are three sources:
   baseline), which ignores the measured state.
 - :class:`ProgressReplaySource`: a demonstration replayed by time, but never far
   ahead of the arm's progress along it (the progress-based baseline): it waits for
-  a held arm, and falls back with an arm pushed back along the path.
+  a held arm, and falls back, at the demonstration's pace, with an arm pushed back
+  along the path.
 
 All start alike. The arm holds its start posture for the ESN's warm-up, during
 which the ESN is driven by the measured (held) posture, and the task starts at
@@ -184,10 +185,12 @@ class ProgressReplaySource:
     within ``window`` samples of the last one found. The replayed sample advances by
     one each period, as :class:`ReplaySource`'s does, but never to where the path is
     more than ``lead`` (rad) past the arm's progress: it waits for an arm that is
-    held, and falls back with an arm pushed back along the path. Where the
-    demonstration rests, its path does not lengthen, so the replayed sample passes
-    through the rest as the replay's does. After its last sample, the
-    demonstration's final posture is held.
+    held, and falls back with an arm pushed back along the path, by at most one
+    sample each period, the demonstration's own pace in reverse, so that the
+    reference does not jump when the nearest sample does. Where the demonstration
+    rests, its path does not lengthen, so the replayed sample passes through the
+    rest as the replay's does. After its last sample, the demonstration's final
+    posture is held.
     """
 
     def __init__(self, q_demo: NDArray[np.float64], lead: float, window: int) -> None:
@@ -212,9 +215,9 @@ class ProgressReplaySource:
         low = max(self._nearest - self.window, 0)
         high = min(self._nearest + self.window + 1, len(self.q_demo))
         self._nearest = low + int(np.argmin(np.linalg.norm(self.q_demo[low:high] - q, axis=1)))
-        # The last sample at most `lead` along the path past the arm's progress.
+        # The last sample at most `lead` along the path past the arm's progress, reached by one sample a period.
         allowed = int(np.searchsorted(self.length, self.length[self._nearest] + self.lead, side="right")) - 1
-        self._index = min(self._index + 1, allowed, len(self.q_demo) - 1)
+        self._index = max(min(self._index + 1, allowed, len(self.q_demo) - 1), self._index - 1)
         return self.q_demo[self._index]
 
 
