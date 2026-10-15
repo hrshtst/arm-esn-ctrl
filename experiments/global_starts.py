@@ -257,8 +257,8 @@ def run_esn(
         phase_runs.append((phase * dt).astype(np.float32))
         matched_runs.append((np.linalg.norm(sampled - matched, axis=1) / spread).astype(np.float32))
         projections.append(components.project(sampled, n_components).astype(np.float32))
-        starts.append(states[0])
-        finals.append(states[-1])
+        starts.append(states[0].copy())  # a copy, not a view that keeps every state of the run
+        finals.append(states[-1].copy())
         if (i + 1) % 216 == 0:
             print(f"  {i + 1} of {len(setup.starts)} runs")
     arrays = {
