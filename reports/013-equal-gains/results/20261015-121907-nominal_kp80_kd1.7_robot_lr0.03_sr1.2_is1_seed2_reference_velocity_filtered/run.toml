@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_stable_equal_gains/nominal_kp80_kd1.7_robot_lr0.03_sr1.2_is1_seed2_reference_velocity_filtered.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_stable_equal_gains/nominal_kp80_kd1.7_robot_lr0.03_sr1.2_is1_seed2_reference_velocity_filtered.toml"
+started = 2026-10-15 12:19:07+09:00
+host = "delbosque"
+commit = "c4214888143437a7aca9e66f6ba11a2d192bb8e5"
+uncommitted_changes = false

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_stable_equal_gains/offsets_kp16_kd1.4_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_stable_equal_gains/offsets_kp16_kd1.4_robot_lr0.03_sr1.2_is1.5_seed8_reference_velocity_filtered.toml"
+started = 2026-10-15 12:42:37+09:00
+host = "delbosque"
+commit = "dcfddb36e4b7edb92a6771606a76881447d52a61"
+uncommitted_changes = false

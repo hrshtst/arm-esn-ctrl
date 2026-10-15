@@ -1,6 +1,0 @@
-config = "experiments/manual_demonstration_v2_robot_equal_gains/block_robot_lr0.03_sr1.2_is1_seed2_zero_velocity_filtered.toml"
-command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_equal_gains/block_robot_lr0.03_sr1.2_is1_seed2_zero_velocity_filtered.toml"
-started = 2026-10-14 23:51:52+09:00
-host = "delbosque"
-commit = "a2c9e8ce10ff5d30c3287114a0555907d47e98fe"
-uncommitted_changes = false

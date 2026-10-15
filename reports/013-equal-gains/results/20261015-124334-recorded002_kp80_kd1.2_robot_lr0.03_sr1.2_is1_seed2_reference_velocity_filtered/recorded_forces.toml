@@ -1,0 +1,4 @@
+[[log]]
+log = "data/recorded_forces/recorded_forces_002.sklog.npz"
+copy = "recorded_forces_002.sklog.npz"
+sha256 = "c093a98f6b60160c1bf99252522982bb4d10a3a52ce545201095d8246ce860eb"
