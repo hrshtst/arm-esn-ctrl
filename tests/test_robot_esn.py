@@ -14,7 +14,7 @@ from arm_esn_ctrl.tracking import TrackerConfig, tracking_gains
 
 # The runners import each other as modules of their own directory, as they run.
 sys.path.insert(0, str(REPO_ROOT / "experiments"))
-from robot_esn import tracker_settings
+from robot_esn import progress_source, tracker_settings
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 
@@ -71,3 +71,14 @@ def test_given_gains_need_one_value_or_one_per_joint():
 
     with pytest.raises(ValueError, match="one per joint"):
         setting.gains(TrackerConfig("pd", None, 0.02), Skeleton.from_toml(CONFIG), np.array([1.0, 1.2]))
+
+
+def test_the_progress_table_gives_the_lead_in_degrees_and_the_window_in_seconds():
+    q_demo = np.zeros((100, 2))
+
+    source = progress_source({"lead_deg": 2.0, "window": 1.0}, q_demo, 0.01)
+
+    assert source.lead == pytest.approx(np.radians(2.0))
+    assert source.window == 100
+    with pytest.raises(ValueError, match="not lag"):
+        progress_source({"lead_deg": 2.0, "window": 1.0, "lag": 1.0}, q_demo, 0.01)

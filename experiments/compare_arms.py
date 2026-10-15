@@ -6,7 +6,7 @@
     uv run python experiments/compare_arms.py experiments/<experiment>/compare_<name>.toml
 
 Each ``[[arm]]`` table names an arm of a run of ``experiments/robot_esn.py``: its
-``run`` (a path under the storage root), the ``arm`` in it (``esn`` or ``replay``),
+``run`` (a path under the storage root), the ``arm`` in it (``esn``, ``replay``, or ``progress``),
 a ``label``, and a ``color``. The arms are drawn from the start posture ``start``
 of ``[plot]`` (0 by default) over its ``span`` (s, the whole run by default), with
 each tracker setting that every run has, one column each. The runs should share
@@ -57,7 +57,7 @@ PUSH_COLOR = "#dc0000"  # the force arrows in the plane, red as the robot app's 
 INITIAL_COLOR = "#a3a29d"
 FORCE_SCALE = 0.025  # m/N: the length of a force arrow in the plane, 25 mm per newton
 # The layers of the lines over time: the ESNs' arms on top, their references (dashed) under them, the replay below.
-ARM_ZORDERS = {"esn": 3.0, "replay": 2.0}
+ARM_ZORDERS = {"esn": 3.0, "replay": 2.0, "progress": 2.0}
 REFERENCE_ZORDER = 2.5
 
 
@@ -67,7 +67,7 @@ class Arm:
 
     label: str
     run: Path  # the run directory
-    arm: str  # "esn" or "replay"
+    arm: str  # "esn", "replay", or "progress"
     color: str
 
 

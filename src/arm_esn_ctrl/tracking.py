@@ -16,15 +16,18 @@ velocity error. With a control period (``control_period``), the tracking law's
 torque is computed only at its instants and held between them, as by a controller
 slower than the simulation; the reference is still logged at every step.
 
-There are two sources:
+There are three sources:
 
 - :class:`EsnSource`: the ESN, driven by the measured joint angles. If the arm
   tracked its reference perfectly, the ESN would generate its autonomous run of
   Stage 1; otherwise it generates from wherever the arm actually is.
 - :class:`ReplaySource`: a demonstration replayed by time (the time-indexed
   baseline), which ignores the measured state.
+- :class:`ProgressReplaySource`: a demonstration replayed by time, but never far
+  ahead of the arm's progress along it (the progress-based baseline): it waits for
+  a held arm, and falls back with an arm pushed back along the path.
 
-Both start alike. The arm holds its start posture for the ESN's warm-up, during
+All start alike. The arm holds its start posture for the ESN's warm-up, during
 which the ESN is driven by the measured (held) posture, and the task starts at
 t = 0, when the warm-up ends. :func:`track` returns logs on this task clock, so
 the warm-up is at negative times.
@@ -171,6 +174,48 @@ class ReplaySource:
 
     def next_posture(self, k: int, q: NDArray[np.float64]) -> NDArray[np.float64]:
         return self.q_demo[min(max(k + 1, 0), len(self.q_demo) - 1)]
+
+
+class ProgressReplaySource:
+    """A demonstration ``q_demo``, sampled every reference period, replayed by time but never far ahead of the arm.
+
+    Every reference period, the arm's progress is the length of the demonstration's
+    joint path (rad) up to its sample nearest the measured joint angles, searched
+    within ``window`` samples of the last one found. The replayed sample advances by
+    one each period, as :class:`ReplaySource`'s does, but never to where the path is
+    more than ``lead`` (rad) past the arm's progress: it waits for an arm that is
+    held, and falls back with an arm pushed back along the path. Where the
+    demonstration rests, its path does not lengthen, so the replayed sample passes
+    through the rest as the replay's does. After its last sample, the
+    demonstration's final posture is held.
+    """
+
+    def __init__(self, q_demo: NDArray[np.float64], lead: float, window: int) -> None:
+        if lead <= 0.0 or window < 1:
+            msg = f"the lead ({lead} rad) and the window ({window} samples) must be positive"
+            raise ValueError(msg)
+        self.q_demo = q_demo
+        self.lead = lead
+        self.window = window
+        # The length of the joint path up to each sample.
+        self.length = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(q_demo, axis=0), axis=1))])
+        self._nearest = 0
+        self._index = 0
+
+    def reset(self, start_q: NDArray[np.float64]) -> None:
+        self._nearest = 0
+        self._index = 0
+
+    def next_posture(self, k: int, q: NDArray[np.float64]) -> NDArray[np.float64]:
+        if k < 0:
+            return self.q_demo[0]
+        low = max(self._nearest - self.window, 0)
+        high = min(self._nearest + self.window + 1, len(self.q_demo))
+        self._nearest = low + int(np.argmin(np.linalg.norm(self.q_demo[low:high] - q, axis=1)))
+        # The last sample at most `lead` along the path past the arm's progress.
+        allowed = int(np.searchsorted(self.length, self.length[self._nearest] + self.lead, side="right")) - 1
+        self._index = min(self._index + 1, allowed, len(self.q_demo) - 1)
+        return self.q_demo[self._index]
 
 
 class _CurrentReference:

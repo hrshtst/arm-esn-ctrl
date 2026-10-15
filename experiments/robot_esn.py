@@ -6,15 +6,19 @@
     uv run python experiments/robot_esn.py experiments/multi_demonstration_robot_tracking/nominal.toml
 
 The arm tracks a reference generated every reference period (the ESN's 10 ms)
-from its measured joint angles (see :mod:`arm_esn_ctrl.tracking`). Three arms
+from its measured joint angles (see :mod:`arm_esn_ctrl.tracking`). These arms
 reach from each start posture:
 
 - ``esn``: the ESN, driven by the arm's measured joint angles;
 - ``replay``: the demonstration that starts nearest, replayed by time (the
   time-indexed baseline);
+- ``progress``, with a ``[progress]`` table: the same demonstration replayed by
+  time, but never more than ``lead_deg`` along its joint path past the arm's
+  progress (the progress-based baseline), the arm's nearest sample searched within
+  ``window`` seconds of the last one found;
 - ``demonstrator``: the controller that made the demonstrations, on its own.
 
-The ESN and the replay run with every tracking law, natural frequency of the
+The ESN and the replays run with every tracking law, natural frequency of the
 tracking error, and damping ratio listed in ``[tracker]`` (``dampings`` is
 optional; its default, 1, is critically damped). ``omegas`` is a list for every
 law, or a table with a list for each law, such as
@@ -29,7 +33,7 @@ whole number of simulation steps), their torque is computed only that often and 
 between, as by a controller slower than the simulation. Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), and the task starts at
 t = 0. An optional ``[disturbance]`` table, or several ``[[disturbance]]`` tables,
-push or block all three arms alike, or replay a force recorded in a log, such as
+push or block all the arms alike, or replay a force recorded in a log, such as
 one the robot app saved (see :mod:`arm_esn_ctrl.disturbances`): from the same start
 posture, the same forces at the same times. Under a recorded force, the runs start
 from its log's start posture, and the run directory keeps a copy of the log. The metrics then measure how
@@ -45,7 +49,7 @@ ones (``start_offsets_deg`` in ``[evaluation]``) make the initial-offset scenari
 Every run is compared with the demonstrator's undisturbed reach from the same
 start posture, and the run directory receives:
 
-- ``<law>_w<omega>/esn_00.sklog.npz``, ``replay_00.sklog.npz``, ...: the arm's runs
+- ``<law>_w<omega>/esn_00.sklog.npz``, ``replay_00.sklog.npz``, ``progress_00.sklog.npz``, ...: the arm's runs
   (``<law>_w<omega>_z<damping>`` below critical damping, ``<law>_kp<kp>_kd<kd>`` with
   given gains),
   with the reference (``q_ref``), the tracking error (``error``), and the
@@ -114,6 +118,7 @@ from arm_esn_ctrl.metrics import (
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import (
     EsnSource,
+    ProgressReplaySource,
     ReferenceSource,
     ReplaySource,
     TrackerConfig,
@@ -124,15 +129,17 @@ from arm_esn_ctrl.tracking import (
     tracking_gains,
 )
 
-ARMS = ("esn", "replay", "demonstrator")
-ARM_COLORS = {"esn": "#2a78d6", "replay": "#eb6834", "demonstrator": "#52514e"}
+TRACKED = ("esn", "replay", "progress")  # the arms that track a reference, those a run has
+ARMS = (*TRACKED, "demonstrator")
+ARM_COLORS = {"esn": "#2a78d6", "replay": "#eb6834", "progress": "#2e8b57", "demonstrator": "#52514e"}
 ARM_LABELS = {
     "esn": "ESN on the measured posture",
     "replay": "demonstration replayed by time",
+    "progress": "demonstration replayed by the arm's progress",
     "demonstrator": "demonstrator",
 }
 # The layers of the arms' lines over time: the ESN's on top, its reference (dashed) under it, the others below.
-ARM_ZORDERS = {"esn": 3.0, "replay": 2.0, "demonstrator": 2.0}
+ARM_ZORDERS = {"esn": 3.0, "replay": 2.0, "progress": 2.0, "demonstrator": 2.0}
 REFERENCE_ZORDER = 2.5
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
@@ -201,6 +208,7 @@ def main() -> None:
             | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
         )
 
+    progress = config.get("progress")
     tracker = config["tracker"]
     settings = tracker_settings(tracker)
     end_posture = gain_posture(setup.demos.values())  # where the reaches end, for joint PD's gains
@@ -230,6 +238,8 @@ def main() -> None:
                 "esn": EsnSource(esn),
                 "replay": ReplaySource(setup.demos[replayed]),
             }
+            if progress is not None:
+                sources["progress"] = progress_source(progress, setup.demos[replayed], esn.config.dt)
             for arm, source in sources.items():
                 log = track(
                     posed(setup.skeleton, start.q),
@@ -250,7 +260,8 @@ def main() -> None:
                             "reference_velocity": tracker_config.reference_velocity,
                             "start": start.origin,
                         }
-                        | held,
+                        | held
+                        | ({"progress": progress} if arm == "progress" else {}),
                     },
                     external_force=disturbance_from(i),
                 )
@@ -259,7 +270,7 @@ def main() -> None:
                     setting.columns
                     | {"arm": arm, "start": i}
                     | {"origin": start.origin}
-                    | {"replayed": replayed if arm == "replay" else ""}
+                    | {"replayed": replayed if arm in ("replay", "progress") else ""}
                     | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
                 )
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
@@ -290,6 +301,15 @@ def main() -> None:
     print(f"\nWrote the results to {run_dir}")
     first = run_dir / settings[0].name / "esn_00.sklog.npz"
     print(f"Replay with:\n  uv run python third_party/skelarm/tools/player.py {first}")
+
+
+def progress_source(table: dict[str, Any], q_demo: NDArray[np.float64], period: float) -> ProgressReplaySource:
+    """The progress-based replay of ``q_demo`` that a ``[progress]`` table configures: ``lead_deg``, ``window`` (s)."""
+    unknown = set(table) - {"lead_deg", "window"}
+    if unknown:
+        msg = f"[progress] takes lead_deg and window, not {', '.join(sorted(unknown))}"
+        raise ValueError(msg)
+    return ProgressReplaySource(q_demo, np.radians(table["lead_deg"]), round(table["window"] / period))
 
 
 @dataclass(frozen=True)
@@ -624,7 +644,7 @@ def plot_metrics(
     for law, law_axes in zip(laws, axes, strict=True):
         for (key, label), ax in zip(metrics, law_axes, strict=True):
             style(ax)
-            for arm in ("esn", "replay"):
+            for arm in [arm for arm in TRACKED if any(r["arm"] == arm for r in rows)]:
                 group = [r for r in rows if r["law"] == law and r["arm"] == arm]
                 xs = sorted({r[swept] for r in group})
                 values = [[float(r[key]) for r in group if r[swept] == x] for x in xs]
@@ -703,7 +723,7 @@ def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str)
                     label=label,
                     solid_capstyle="round",
                 )
-            for arm in ("replay", "esn"):
+            for arm in [arm for arm in TRACKED[::-1] if (run_dir / setting.name / f"{arm}_00.sklog.npz").exists()]:
                 for i in range(n_starts):
                     _, hand, _ = load_hand(run_dir / setting.name / f"{arm}_{i:02d}.sklog.npz", setup)
                     ax.plot(*hand.T, color=ARM_COLORS[arm], linewidth=1.2, label=ARM_LABELS[arm] if i == 0 else None)
@@ -740,7 +760,11 @@ def plot_timeline(
     for row, law_settings in enumerate(rows):
         for col, setting in enumerate(law_settings):
             ax_distance, ax_progress, ax_torque = axes[3 * row : 3 * row + 3, col]
-            runs = {arm: load_hand(run_dir / setting.name / f"{arm}_00.sklog.npz", setup) for arm in ("esn", "replay")}
+            runs = {
+                arm: load_hand(run_dir / setting.name / f"{arm}_00.sklog.npz", setup)
+                for arm in TRACKED
+                if (run_dir / setting.name / f"{arm}_00.sklog.npz").exists()
+            }
             if demonstrator.exists():
                 runs["demonstrator"] = load_hand(demonstrator, setup)
             for ax in (ax_distance, ax_progress, ax_torque):
@@ -906,7 +930,7 @@ def per_joint_figure(
     """A figure of one panel per tracker setting (columns, one row of panels per law) and joint, from start ``start``.
 
     ``draw(ax, logs, joint)`` draws a panel from the logs of the arms (``esn``,
-    ``replay``, and ``demonstrator`` when there is one); ``ylabel`` names the joint's
+    ``replay``, and ``progress`` and ``demonstrator`` when there are); ``ylabel`` names the joint's
     axis, with ``{joint}`` its number. The shaded bands are when the disturbances act.
     """
     rows = by_law(settings)
@@ -920,7 +944,9 @@ def per_joint_figure(
     for row, law_settings in enumerate(rows):
         for col, setting in enumerate(law_settings):
             logs = {
-                arm: StateLog.load(run_dir / setting.name / f"{arm}_{start:02d}.sklog.npz") for arm in ("esn", "replay")
+                arm: StateLog.load(run_dir / setting.name / f"{arm}_{start:02d}.sklog.npz")
+                for arm in TRACKED
+                if (run_dir / setting.name / f"{arm}_{start:02d}.sklog.npz").exists()
             }
             if demonstrator.exists():
                 logs["demonstrator"] = StateLog.load(demonstrator)
@@ -966,7 +992,7 @@ def grid_maps(reference: Reference) -> list[tuple[str, str, float, float | None]
 def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting], title: str) -> Figure:
     """Map the outcome and the main metrics over the start offsets: one row per tracker setting and arm.
 
-    Each metric's colors are shared by its column, so the ESN and the replay compare.
+    Each metric's colors are shared by its column, so the ESN and the replays compare.
     """
     offsets = {}
     for i, start in enumerate(setup.starts):
@@ -976,7 +1002,7 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting],
     ys = np.unique([offset[1] for offset in offsets.values()])
     step_x, step_y = xs[1] - xs[0], ys[1] - ys[0]
     extent = (xs[0] - step_x / 2, xs[-1] + step_x / 2, ys[0] - step_y / 2, ys[-1] + step_y / 2)
-    panels = [(setting, arm) for setting in settings for arm in ("esn", "replay")]
+    panels = [(setting, arm) for setting in settings for arm in TRACKED if any(r["arm"] == arm for r in rows)]
     maps = grid_maps(setup.reference)
     columns = 1 + len(maps)
     fig = Figure(figsize=(3.3 * columns, 3.0 * len(panels) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")

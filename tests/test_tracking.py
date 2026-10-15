@@ -15,6 +15,7 @@ from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import (
     EsnSource,
+    ProgressReplaySource,
     ReplaySource,
     TrackerConfig,
     error_dynamics,
@@ -292,3 +293,61 @@ def test_a_control_period_must_be_a_whole_number_of_simulation_steps(demos):
 
     with pytest.raises(ValueError, match="control period"):
         run(ReplaySource(demos[1]), demos[1][0], config, duration=0.1)
+
+
+# A demonstration for the progress-based replay: at rest for 5 samples, then along joint 1 by 0.01 rad a sample.
+RESTING_LINE = np.vstack([np.zeros((5, 2)), np.column_stack([0.01 * np.arange(1, 51), np.zeros(50)])]).astype(
+    np.float64
+)
+
+
+def test_the_progress_replay_is_the_replay_for_an_arm_that_keeps_up():
+    progress = ProgressReplaySource(RESTING_LINE, lead=0.02, window=10)
+    replay = ReplaySource(RESTING_LINE)
+    progress.reset(RESTING_LINE[0])
+
+    for k in range(-3, len(RESTING_LINE) + 5):
+        q = RESTING_LINE[min(max(k, 0), len(RESTING_LINE) - 1)]
+        assert progress.next_posture(k, q) == pytest.approx(replay.next_posture(k, q))
+
+
+def test_the_progress_replay_waits_for_a_held_arm_at_its_lead():
+    source = ProgressReplaySource(RESTING_LINE, lead=0.025, window=10)
+    source.reset(RESTING_LINE[0])
+    held = RESTING_LINE[20]  # 0.16 rad along the path
+
+    given = [source.next_posture(k, held) for k in range(40)]
+
+    # The last sample at most 0.025 rad past the arm: 0.18 rad along the path, sample 22.
+    assert given[-1] == pytest.approx(RESTING_LINE[22])
+    assert given[-1][0] - held[0] <= 0.025 + 1e-12
+
+
+def test_the_progress_replay_falls_back_with_an_arm_pushed_back():
+    source = ProgressReplaySource(RESTING_LINE, lead=0.025, window=10)
+    source.reset(RESTING_LINE[0])
+    for k in range(30):
+        source.next_posture(k, RESTING_LINE[k])
+
+    given = source.next_posture(30, RESTING_LINE[25])
+
+    assert given == pytest.approx(RESTING_LINE[27])
+
+
+def test_the_progress_replay_searches_the_arm_only_within_its_window():
+    there_and_back = np.vstack([RESTING_LINE, RESTING_LINE[::-1]]).astype(np.float64)  # every posture twice
+    source = ProgressReplaySource(there_and_back, lead=0.02, window=5)
+    source.reset(there_and_back[0])
+
+    for k in range(9):
+        source.next_posture(k, there_and_back[k])
+    given = source.next_posture(9, there_and_back[9])
+
+    # The arm at sample 9 is also sample 100 on the way back, out of the window.
+    assert given == pytest.approx(there_and_back[10])
+
+
+@pytest.mark.parametrize(("lead", "window"), [(0.0, 10), (0.02, 0)])
+def test_the_progress_replay_needs_a_positive_lead_and_window(lead, window):
+    with pytest.raises(ValueError, match="must be positive"):
+        ProgressReplaySource(RESTING_LINE, lead=lead, window=window)
