@@ -1,0 +1,40 @@
+# The progress replay: report 011's ESN #2 (leak rate 0.03, spectral radius 1.2, input
+# scaling 1, seed 2), against the replay of the take by time and by the arm's progress
+# (a lead of 2.5 deg along the taught joint path), with joint PD at omega = 20 rad/s
+# and the damping ratio 0.4, each joint's gains scaled by its inertia, as in reports
+# 011 and 012, given a zero reference velocity, its torque computed every 10 ms and
+# held between, while the arm is still simulated every 2 ms: undisturbed, from the
+# demonstrated start. As
+# manual_demonstration_v2_robot_stable_equal_gains/nominal_kp80_kd1.2_robot_lr0.03_sr1.2_is1_seed2_zero_velocity_filtered.toml
+# otherwise.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_robot_progress_replay/nominal_w20_z0.4_robot_lr0.03_sr1.2_is1_seed2_zero_velocity_filtered.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py,
+# relative to the storage root. The demonstration it was trained on (that run's
+# [demonstrations]) is the one the time-indexed baseline replays.
+model = "results/manual_demonstration_v2_robot_following_search/20261014-155052-grid_lr0.03_sr1.2_is1_seed2_filtered/esn.toml"
+
+[tracker]
+# Joint PD at omega = 20 rad/s and the damping ratio 0.4, each joint's gains scaled by its
+# inertia; given a zero reference velocity.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = false
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[progress]
+# A third arm: the take replayed by time, but never more than lead_deg along its joint path
+# past the arm's progress, the arm's nearest sample searched within window of the last one
+# found. Undisturbed, the replay's arm lags its reference by at most about 2.2 deg along the
+# path with either tracker, so that with 2.5 deg the progress replay is the replay.
+lead_deg = 2.5
+window = 1.0  # s
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as in the study's sweeps; the take lasts 18.5 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start

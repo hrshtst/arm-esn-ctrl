@@ -5,6 +5,7 @@ ignores the arm: held, the arm falls behind a reference that runs on, and the tr
 presses harder and harder against what holds it. A replay that follows the arm's
 progress along the taught path also waits for a held arm, without an ESN. Here it is
 a third arm, the baseline the ESNs' waiting and following should be measured against.
+The results are in [report 014](../../reports/014-progress-replay/README.md).
 
 - **The progress replay** ([`ProgressReplaySource`](../../src/arm_esn_ctrl/tracking.py)):
   every 10 ms, the arm's progress is the length of the taught joint path up to the

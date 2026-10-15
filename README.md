@@ -257,7 +257,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_recorded_pushes](experiments/manual_demonstration_v2_robot_recorded_pushes/README.md) | the two ESNs of the following search and the replay under pushes given by hand, recorded once and replayed by time across joint PD trackers (Stage 2) | [012](reports/012-pushes-by-hand/README.md) |
 | [manual_demonstration_v2_robot_equal_gains](experiments/manual_demonstration_v2_robot_equal_gains/README.md) | every scenario of the following search and the recorded pushes with joint PD at the same gains for both joints (Stage 2) | [013](reports/013-equal-gains/README.md) |
 | [manual_demonstration_v2_robot_stable_equal_gains](experiments/manual_demonstration_v2_robot_stable_equal_gains/README.md) | every scenario of the following search and the recorded pushes with the same gains for both joints, estimated to keep the torque held for 10 ms stable (Stage 2) | [013](reports/013-equal-gains/README.md) |
-| [manual_demonstration_v2_robot_progress_replay](experiments/manual_demonstration_v2_robot_progress_replay/README.md) | every scenario of the following search and the recorded pushes with a third arm, the take replayed by the arm's progress along the taught path (Stage 2) | |
+| [manual_demonstration_v2_robot_progress_replay](experiments/manual_demonstration_v2_robot_progress_replay/README.md) | every scenario of the following search and the recorded pushes with a third arm, the take replayed by the arm's progress along the taught path (Stage 2) | [014](reports/014-progress-replay/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -415,6 +415,14 @@ The reports so far:
   as far from the taught path, the ESNs back in about a second instead of three; but
   joint 1 is lightly damped, and five runs under the logs fail to hold. kp = 16 and
   kd = 1.4 give way as report 011's gains do.
+- [014 A replay that waits: the progress-based baseline](reports/014-progress-replay/README.md)
+  (Stage 2): a third arm, the take replayed by time but never more than 2.5° along its
+  joint path past the arm's progress, falling back by at most a sample a period, in
+  every scenario of reports 011 and 012. Under the block it waits as the ESNs do, with
+  less torque, and comes back to the path at once after the release: the ESNs' waiting
+  is what any progress-based reference gives. What the ESNs keep is half the replays'
+  torque from an offset start, and giving way across the path, which costs them a
+  slower return.
 
 Each report has five parts:
 

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_robot_progress_replay/recorded000_kp80_kd1.2_robot_lr0.03_sr1.2_is1.5_seed8_zero_velocity_filtered.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_robot_progress_replay/recorded000_kp80_kd1.2_robot_lr0.03_sr1.2_is1.5_seed8_zero_velocity_filtered.toml"
+started = 2026-10-15 15:08:37+09:00
+host = "delbosque"
+commit = "53288faa30158f51e421aa473b274428413aed73"
+uncommitted_changes = false
