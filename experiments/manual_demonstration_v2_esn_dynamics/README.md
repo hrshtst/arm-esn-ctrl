@@ -82,5 +82,4 @@ uv run python experiments/fixed_points.py experiments/manual_demonstration_v2_es
 | --- | --- |
 | `fixed_points.toml` | ESN #1 and ESN #2: Newton's method from the 2 x 1,296 states of step 1's runs, the held reservoir at the 1,296 start postures, and the rates along the run from the take's start over windows of 0.5, 1, 2, and 4 s |
 
-It needs rclib's read-only weight getters (rclib's `feat/reservoir-weights`), to
-which this branch advances the pin.
+It needs rclib's read-only weight getters, which rclib has from `791af14` on.

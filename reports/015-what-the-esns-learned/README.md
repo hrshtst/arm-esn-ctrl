@@ -147,8 +147,9 @@ The runs read the take as in report 011 and the ESNs by their run names (copied 
 | [`summary`](results/summary) | `uv run python reports/015-what-the-esns-learned/make_figures.py` | |
 
 Every run record (`run.toml`) shows no uncommitted changes. Step 3 needs rclib's
-read-only weight getters, on rclib's branch `feat/reservoir-weights`, to which commit
-`1b44ee9` advances the pin. Each run's directory here holds its configuration, its run
+read-only weight getters (rclib's `791af14`), to which commit `1b44ee9` advances the
+pin; commit `73badd3` advances it to rclib's main, which runs both ESNs bit for bit as
+before. Each run's directory here holds its configuration, its run
 record, and its CSV files. [`make_figures.py`](make_figures.py) copies them from the
 runs under the storage root, prints the tables of this report, and draws the figures.
 The arrays they read (`runs_<ESN>.npz`, `runs.npz`, `spectra_<ESN>.npz`,
