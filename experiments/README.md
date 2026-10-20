@@ -22,6 +22,7 @@ experiments/
 ├── fixed_points.py
 ├── screen_esns.py
 ├── screen_against_robot.py
+├── release_robot.py
 ├── demonstrations/                            # one directory per experiment: README.md and configurations
 ├── single_demonstration_autonomous_reaching/
 ├── single_demonstration_robot_tracking/

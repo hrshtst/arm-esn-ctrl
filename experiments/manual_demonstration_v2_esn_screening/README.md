@@ -157,3 +157,80 @@ over the grid and within each leak rate. Beyond the rules, and apart from them: 
 for attracting fixed points more than 10 cm off the target only, and whether the
 unstable fixed points' growth rates or distances from the path tell the outcomes
 apart.
+
+### Step 2's results
+
+```bash
+uv run python experiments/screen_against_robot.py experiments/manual_demonstration_v2_esn_screening/against_robot.toml
+```
+
+The screen, its runs from rest 60 s long, at commit `8711521`:
+`20261020-165217-screen` (64 min on 30 processes); set against the robot at commit
+`df5ec60`: `20261020-181402-against_robot`. On the robot, 620 ESNs pass and 430 fail,
+and 13 settings pass with all ten seeds, as report 011 counted. The share failing
+rises with the leak rate, from 0.17 to 0.22 at 0.015 to 0.03 to 0.76 at 0.1: the
+leak rate alone has an area under the ROC curve of 0.749 for failing, and a rank
+correlation of 0.75 with the following.
+
+| Rule | Flagged | Its outcome caught | Failing caught (of 430) | Passing rejected (of 620) | Qualifying rejected (of 110) | Of ESN #1, #2, #3, and report 007's |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| (a) | 458 | ending away, 288 of 410 | 300 | 158 | 3 | none |
+| (b) | 415 | ending away, 272 of 410 | 280 | 135 | 0 | none |
+| (c) | 827 | never arriving, 49 of 49 | 389 | 438 | 72 | #2, #3, report 007's |
+
+The share failing among the flagged ESNs and among the unflagged, within each leak
+rate:
+
+| Rule | 0.015 | 0.02 | 0.03 | 0.04 | 0.05 | 0.07 | 0.1 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| (a) | 0.68 / 0.11 | 0.89 / 0.07 | 0.45 / 0.18 | 0.26 / 0.33 | 0.53 / 0.42 | 0.75 / 0.51 | 0.84 / 0.47 |
+| (b) | none flagged / 0.22 | 0.00 / 0.18 | 0.29 / 0.20 | 0.47 / 0.25 | 0.65 / 0.38 | 0.72 / 0.43 | 0.76 / none unflagged |
+| (c) | 0.20 / 0.24 | 0.21 / 0.09 | 0.27 / 0.09 | 0.33 / 0.20 | 0.52 / 0.33 | 0.74 / 0.29 | 0.77 / 0.40 |
+
+- (a) tells the slow leak rates' failures apart, and not those at 0.04 or 0.05. The
+  three qualifying ESNs it rejects have their attracting fixed point more than 1 m
+  from the target and pass; 122 ESNs end away without one. Only those more than
+  10 cm off: 423 flagged, 262 of the 410 ending away caught, 150 passing rejected.
+- (b)'s area under the ROC curve is 0.748 over the grid, the leak rate's; within each
+  leak rate, 0.24, 0.32, 0.43, 0.65, 0.68, 0.75, and 0.74 from 0.015 to 0.1: a
+  small lead tells failing apart at the fast leak rates, and at the slow ones those
+  ending away lead more.
+- (c)'s release arrival has a rank correlation with the robot's arrival under the
+  block of +0.44 over the grid, and +0.23, +0.31, +0.26, +0.28, +0.16, +0.16, and
+  −0.01 within each leak rate; with the undisturbed arrival, +0.03 (−0.11 to +0.18).
+- (d): the largest scaling of a posture's deviation has a rank correlation with the
+  following of +0.72 over the grid, and +0.67, +0.57, +0.66, +0.74, +0.74, +0.53,
+  and +0.30 within each leak rate (pooled, +0.60); its median's, +0.61 to +0.74 up
+  to 0.05. The median rate across the run's is −0.67 over the grid, −0.10 to −0.42
+  within. The return time, of the 324 ESNs whose arm returns after each push (276 of
+  the 620 passing), correlates at most +0.24 over the grid (the largest rate across
+  the run; −0.11 to +0.44 within).
+- Apart from the rules, an unstable fixed point nearer the path tells failing apart
+  with an area under the ROC curve of 0.76 over the grid and 0.58 to 0.78 within
+  each leak rate; its growth rate does not, with no sign kept across the leak rates.
+  Of the 49 ESNs that never arrive, 43 are at 0.07 and 0.1, where the nearness tells
+  them apart little (0.59 and 0.52).
+
+## Step 3: the passing ESNs held still on the robot
+
+Fixed before the runs. All 620 passing ESNs, trained as the screen trains them, on
+the robot with report 011's tracker (joint PD at 20 rad/s and a damping ratio of 0.4,
+given the reference's velocity, its torque computed every 10 ms):
+
+- **Released at an unstable fixed point:** for each of the 810 unstable fixed points
+  within 30° of the take's joint path (of 420 ESNs), the arm at rest at its posture,
+  the ESN held there 4 s, then let go for 60 s: when the hand arrives, how long the
+  arm stays within 1° of the posture, and whether it ends within the goal; against
+  the ESN's own release arrival from the same hold. Whether the robot's arrival is
+  the ESN's own, and how many stall.
+- **Blocks along the reach:** from the take's start, the tip held for 1 s or for 3 s
+  from each of 2, 3, 4, 5, 6, 7, and 8 s, one block a run, for 30 s: whether the
+  arm arrives, holds, and ends within the goal (report 011's rule under the block);
+  how much later it arrives than the take would from where it was held (the arrival
+  after the release less the take's time from the progress at the middle of the
+  block to its arrival at 9.58 s); and, at the held posture, the lead R and the
+  distance to the nearest unstable fixed point. Whether the ESNs with an unstable
+  fixed point near the path (420) fail or arrive late more often than those without
+  (200), and whether the delay grows as the held posture nears an unstable fixed
+  point or its lead shrinks, by rank correlation, over the ESNs and within each leak
+  rate.
