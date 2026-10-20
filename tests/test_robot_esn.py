@@ -9,12 +9,13 @@ import numpy as np
 import pytest
 from skelarm import Skeleton
 
+from arm_esn_ctrl.esn import EsnConfig
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import TrackerConfig, tracking_gains
 
 # The runners import each other as modules of their own directory, as they run.
 sys.path.insert(0, str(REPO_ROOT / "experiments"))
-from robot_esn import progress_source, tracker_settings
+from robot_esn import progress_source, tracker_settings, warmup_steps
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 
@@ -82,3 +83,21 @@ def test_the_progress_table_gives_the_lead_in_degrees_and_the_window_in_seconds(
     assert source.window == 100
     with pytest.raises(ValueError, match="not lag"):
         progress_source({"lead_deg": 2.0, "window": 1.0, "lag": 1.0}, q_demo, 0.01)
+
+
+def test_the_warmup_is_the_esns_unless_the_evaluation_gives_one():
+    config = EsnConfig(
+        dt=0.01,
+        warmup=1.0,
+        n_neurons=10,
+        spectral_radius=0.9,
+        sparsity=0.1,
+        leak_rate=0.1,
+        input_scaling=1.0,
+        bias=True,
+        ridge=1e-6,
+        seed=0,
+    )
+
+    assert warmup_steps({}, config) == config.warmup_steps == 100
+    assert warmup_steps({"warmup": 4.0}, config) == 400

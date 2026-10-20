@@ -32,12 +32,13 @@ reference velocity, so that their derivative term damps the arm's own velocity
 rather than the velocity error. With ``control_period`` (optional, in seconds; a
 whole number of simulation steps), their torque is computed only that often and held
 between, as by a controller slower than the simulation. Their runs start with the arm holding its
-start posture for the ESN's warm-up (at negative times), and the task starts at
-t = 0. An optional ``[disturbance]`` table, or several ``[[disturbance]]`` tables,
-push or block all the arms alike, or replay a force recorded in a log, such as
-one the robot app saved (see :mod:`arm_esn_ctrl.disturbances`): from the same start
-posture, the same forces at the same times. Under a recorded force, the runs start
-from its log's start posture, and the run directory keeps a copy of the log. The metrics then measure how
+start posture for the ESN's warm-up (at negative times), or for ``warmup`` seconds if
+``[evaluation]`` gives one, and the task starts at t = 0. An optional
+``[disturbance]`` table, or several ``[[disturbance]]`` tables, push or block all
+the arms alike, or replay a force recorded in a log, such as one the robot app saved
+(see :mod:`arm_esn_ctrl.disturbances`): from the same start posture, the same forces
+at the same times. Under a recorded force, the runs start from its log's start
+posture, and the run directory keeps a copy of the log. The metrics then measure how
 far each disturbance sends the hand from the taught hand path, how soon the hand
 comes back within ``return_tolerance`` of it (in ``[evaluation]``; 5 mm by default),
 and how much it rings afterwards: its motion above ``ringing_cutoff_hz`` (1.5 Hz by
@@ -106,7 +107,7 @@ from arm_esn_ctrl.disturbances import (
     recorded_evaluation,
 )
 from arm_esn_ctrl.drawing import draw_postures, spread_along_path
-from arm_esn_ctrl.esn import ReachingEsn
+from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import (
     distances_to_path,
     disturbance_following,
@@ -248,7 +249,7 @@ def main() -> None:
                     tracker_config,
                     gains,
                     period=esn.config.dt,
-                    warmup_steps=esn.config.warmup_steps,
+                    warmup_steps=warmup_steps(evaluation, esn.config),
                     duration=evaluation["duration"],
                     dt=demo_config["simulator"]["dt"],
                     enforce_limits=demo_config["simulator"].get("enforce_limits", True),
@@ -360,6 +361,13 @@ class Setting:
             msg = f"[tracker] kp and kd must each give one value for every joint or one per joint ({n})"
             raise ValueError(msg)
         return np.broadcast_to(self.kp, n).astype(np.float64), np.broadcast_to(self.kd, n).astype(np.float64)
+
+
+def warmup_steps(evaluation: dict[str, Any], config: EsnConfig) -> int:
+    """How many periods the start posture is held before the task: ``[evaluation]``'s ``warmup`` (s), or the ESN's."""
+    if "warmup" not in evaluation:
+        return config.warmup_steps
+    return round(float(evaluation["warmup"]) / config.dt)
 
 
 def tracker_settings(tracker: dict[str, Any]) -> list[Setting]:
