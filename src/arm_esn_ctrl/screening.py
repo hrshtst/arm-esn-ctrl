@@ -19,6 +19,8 @@ settled there: on the robot, how far its reference leads an arm held still at q.
 - :func:`held_fixed_points`: x_h at many postures at once;
 - :func:`posture_map`: x_h and R over a grid of postures;
 - :func:`find_fixed_points`: the zeros of R, each refined by Newton's method on G;
+- :func:`fixed_points_at_rest`: the fixed points where runs come to rest, which
+  the grid misses where R is nearly flat;
 - :func:`autonomous_runs`: the ESN's runs on its own from many start postures at
   once, as :meth:`arm_esn_ctrl.esn.ReachingEsn.generate` runs each.
 """
@@ -182,15 +184,48 @@ def spectrum(loop: ClosedLoop, x: NDArray[np.float64]) -> NDArray[np.complex128]
     return np.asarray(eigenvalues[np.argsort(-np.abs(eigenvalues))], dtype=np.complex128)
 
 
+def fixed_points_at_rest(
+    loop: ClosedLoop,
+    q: NDArray[np.float64],
+    x: NDArray[np.float64],
+    known: list[NDArray[np.float64]],
+    still: float = np.radians(0.5),
+    window: int = 100,
+    distinct: float = 1e-8,
+) -> list[NDArray[np.float64]]:
+    """The fixed points of G where runs come to rest, other than those in ``known``.
+
+    ``q`` and ``x`` are runs' joint angles and their states at the end, as
+    :func:`autonomous_runs` returns them. A run comes to rest if no joint moves by
+    more than ``still`` (rad) over its last ``window`` steps; Newton's method on G
+    starts from its state at the end, unless its end posture lies within ``still``
+    of a fixed point's already found. Near an attracting fixed point where R is
+    nearly flat, as where the ESN learned to hold still, Newton's method on R can
+    step far from the zero, and these find it.
+    """
+    found: list[NDArray[np.float64]] = []
+    postures = [loop.posture(f) for f in known]
+    at_rest = np.ptp(q[:, -window:], axis=1).max(axis=1) <= still
+    for state, end in zip(x[at_rest], q[at_rest, -1], strict=True):
+        if any(np.abs(end - p).max() <= still for p in postures):
+            continue
+        fixed, converged = loop.fixed_point(state)
+        if converged and all(np.abs(fixed - f).max() > distinct for f in known + found):
+            found.append(fixed)
+            postures.append(loop.posture(fixed))
+    return found
+
+
 def autonomous_runs(
     loop: ClosedLoop, start_q: NDArray[np.float64], warmup_steps: int, n_steps: int
-) -> NDArray[np.float64]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """The joint angles of the ESN's runs on its own from each start posture of ``start_q`` (rows, rad).
 
     As :meth:`arm_esn_ctrl.esn.ReachingEsn.generate` runs each: from the reset state,
     the start posture held for ``warmup_steps`` steps and one more, then the ESN fed
-    its own output. Returns ``(len(start_q), n_steps + 1, n_joints)``, the start
-    posture at time 0.
+    its own output. Returns the joint angles, ``(len(start_q), n_steps + 1,
+    n_joints)``, the start posture at time 0, and the states at the end, from which
+    the next output would come.
     """
     u = loop.normalize(start_q)
     x = np.zeros((len(start_q), loop.n_neurons))
@@ -201,7 +236,7 @@ def autonomous_runs(
     for k in range(1, n_steps + 1):
         q[:, k] = loop.posture(x)
         x = loop.advance(x)
-    return q
+    return q, x
 
 
 def _held_newton(

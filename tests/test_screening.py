@@ -11,7 +11,14 @@ import pytest
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.dynamics import ClosedLoop
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
-from arm_esn_ctrl.screening import autonomous_runs, find_fixed_points, held_fixed_points, posture_map, spectrum
+from arm_esn_ctrl.screening import (
+    autonomous_runs,
+    find_fixed_points,
+    fixed_points_at_rest,
+    held_fixed_points,
+    posture_map,
+    spectrum,
+)
 from arm_esn_ctrl.storage import REPO_ROOT
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
@@ -70,11 +77,13 @@ def test_the_held_fixed_points_are_where_the_held_reservoir_rests(loop, demo):
 
 def test_the_runs_on_its_own_are_the_esns(loop, esn, demo):
     starts = np.array([demo[0], demo[-1], demo[0] + 0.3])
-    q = autonomous_runs(loop, starts, ESN_CONFIG.warmup_steps, 120)
+    q, x = autonomous_runs(loop, starts, ESN_CONFIG.warmup_steps, 120)
 
     assert q.shape == (3, 121, 2)
-    for start, run in zip(starts, q, strict=True):
+    assert x.shape == (3, ESN_CONFIG.n_neurons)
+    for start, run, end in zip(starts, q, x, strict=True):
         np.testing.assert_allclose(run, esn.generate(start, 120), atol=1e-12)
+        np.testing.assert_allclose(end, esn.state(), atol=1e-12)
 
 
 def test_the_fixed_points_are_the_zeros_of_the_posture_map(loop, esn, demo):
@@ -88,6 +97,19 @@ def test_the_fixed_points_are_the_zeros_of_the_posture_map(loop, esn, demo):
     rest, converged = loop.fixed_point(esn_rest_state(esn, demo[0]))
     assert converged
     assert min(np.abs(x - rest).max() for x in found.states) < 1e-8
+
+
+def test_the_fixed_points_at_rest_are_where_runs_end(loop, esn, demo):
+    rest, _ = loop.fixed_point(esn_rest_state(esn, demo[0]))
+    q, x = autonomous_runs(loop, np.array([demo[0], demo[0]]), ESN_CONFIG.warmup_steps, 3000)
+
+    found = fixed_points_at_rest(loop, q, x, [])
+    assert len(found) == 1
+    np.testing.assert_allclose(found[0], rest, atol=1e-10)
+    # Once from both runs; not again once known; not from a run still moving.
+    assert fixed_points_at_rest(loop, q, x, found) == []
+    q, x = autonomous_runs(loop, demo[:1], ESN_CONFIG.warmup_steps, 30)
+    assert fixed_points_at_rest(loop, q, x, []) == []
 
 
 def test_a_fixed_point_is_the_held_reservoirs_at_its_own_posture(loop, esn, demo):

@@ -13,7 +13,8 @@ own output (see :mod:`arm_esn_ctrl.screening` and :mod:`arm_esn_ctrl.dynamics`),
 the ``[screen]`` table sets:
 
 - **The fixed points:** the zeros of R(q) over a grid of both joints' whole range,
-  every ``grid_step_deg``, each refined by Newton's method on the ESN's update. For
+  every ``grid_step_deg``, each refined by Newton's method on the ESN's update, and
+  those that the runs from rest below come to rest at and the grid misses. For
   each: its posture, the hand's distance from the target, its distance from the
   take's joint path and how far along the path it lies, and its eigenvalues: the
   unstable modes, and the slowest mode's modulus, growth rate, time constant (if it
@@ -41,7 +42,8 @@ The ESNs are spread over ``--workers`` processes, each computing with one thread
 The run directory receives:
 
 - ``screen.csv``: one row per ESN: its swept hyperparameters and its measures;
-- ``fixed_points.csv``: one row per fixed point of each ESN;
+- ``fixed_points.csv``: one row per fixed point of each ESN, and whether the grid
+  found it;
 - ``maps.npz``: the swept values of each ESN, the grid, and each ESN's R over it
   and where the held reservoir's Newton's method converged.
 """
@@ -67,7 +69,14 @@ from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.dynamics import ClosedLoop, local_rates
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import arrival_index, distances_to_path, path_progress, resample_by_length
-from arm_esn_ctrl.screening import autonomous_runs, find_fixed_points, held_fixed_points, posture_map, spectrum
+from arm_esn_ctrl.screening import (
+    autonomous_runs,
+    find_fixed_points,
+    fixed_points_at_rest,
+    held_fixed_points,
+    posture_map,
+    spectrum,
+)
 from arm_esn_ctrl.storage import start_run
 
 JOINT_RANGE_DEG = 180.0  # the arm's joints turn from -180 to 180 deg
@@ -167,10 +176,26 @@ def screen(
     dt = esn.config.dt
     end_q = context.take[-1]
 
-    # The fixed points, from the zeros of R.
+    # From rest anywhere, and around the take's end posture.
+    coarse = np.radians(np.arange(-JOINT_RANGE_DEG, JOINT_RANGE_DEG, table["start_step_deg"]))
+    starts = np.array(list(itertools.product(coarse, coarse)))
+    angles = 2 * np.pi * np.arange(RING_DIRECTIONS) / RING_DIRECTIONS
+    ring = np.array(
+        [end_q + np.radians(r) * np.array([np.cos(a), np.sin(a)]) for r in table["ring_deg"] for a in angles]
+    )
+    n_steps = round(table["duration"] / dt)
+    grid_q, grid_x = autonomous_runs(loop, starts, esn.config.warmup_steps, n_steps)
+    ring_q, ring_x = autonomous_runs(loop, ring, esn.config.warmup_steps, n_steps)
+    own_q, own_x = autonomous_runs(loop, context.take[:1], esn.config.warmup_steps, n_steps)
+
+    # The fixed points, from the zeros of R, and where those runs come to rest.
     pmap = posture_map(loop, grid(table["grid_step_deg"]))
     found = find_fixed_points(loop, pmap)
-    fixed = [describe(context, loop, x) for x in found.states]
+    at_rest = fixed_points_at_rest(
+        loop, np.concatenate([grid_q, ring_q, own_q]), np.concatenate([grid_x, ring_x, own_x]), found.states
+    )
+    fixed = [describe(context, loop, x) | {"from_grid": True} for x in found.states]
+    fixed += [describe(context, loop, x) | {"from_grid": False} for x in at_rest]
     attracting = [f for f in fixed if f["n_unstable"] == 0]
     unstable = [f for f in fixed if f["n_unstable"] > 0]
     at_target = [f for f in attracting if f["target_distance_m"] <= setup.radius]
@@ -191,23 +216,13 @@ def screen(
         path_progress(q_grid, context.path) <= table["max_progress"]
     )
     least = int(np.flatnonzero(near)[np.argmin(lead[near])])
-
-    # From rest anywhere, and around the take's end posture.
-    coarse = np.radians(np.arange(-JOINT_RANGE_DEG, JOINT_RANGE_DEG, table["start_step_deg"]))
-    starts = np.array(list(itertools.product(coarse, coarse)))
-    angles = 2 * np.pi * np.arange(RING_DIRECTIONS) / RING_DIRECTIONS
-    ring = np.array(
-        [end_q + np.radians(r) * np.array([np.cos(a), np.sin(a)]) for r in table["ring_deg"] for a in angles]
-    )
-    n_steps = round(table["duration"] / dt)
-    grid_runs = run_outcomes(setup, autonomous_runs(loop, starts, esn.config.warmup_steps, n_steps), dt)
-    ring_runs = run_outcomes(setup, autonomous_runs(loop, ring, esn.config.warmup_steps, n_steps), dt)
+    grid_runs, ring_runs, own = (run_outcomes(setup, q, dt) for q in (grid_q, ring_q, own_q))
 
     # Held at each unstable fixed point, then released.
     release = np.nan
     if unstable:
         q_unstable = np.radians([[f["q1_deg"], f["q2_deg"]] for f in unstable])
-        runs = autonomous_runs(
+        runs, _ = autonomous_runs(
             loop, q_unstable, round(table["release_hold"] / dt), round(table["release_duration"] / dt)
         )
         release = float(np.max(run_outcomes(setup, runs, dt)["arrival"]))
@@ -216,7 +231,6 @@ def screen(
     _, states = closed_loop_run(esn, context.take[0], round(table["rate_duration"] / dt))
     rates = local_rates(loop, states, round(table["rate_window"] / dt), round(table["rate_stride"] / dt), 1)
     across, posture = rates.across[:, 0], rates.posture.max(axis=1)
-    own = run_outcomes(setup, autonomous_runs(loop, context.take[:1], esn.config.warmup_steps, n_steps), dt)
 
     nearest_unstable = min(unstable, key=lambda f: f["path_distance_deg"], default=None)
     row = combination | {
@@ -226,6 +240,7 @@ def screen(
         "candidates": found.candidates,
         "candidates_empty": found.empty,
         "fixed_points": len(fixed),
+        "fixed_points_at_rest": len(at_rest),
         "attracting": len(attracting),
         "unstable": len(unstable),
         "target_found": target is not None,

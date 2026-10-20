@@ -47,6 +47,13 @@ range, every cell over whose corners both components of R change sign is searche
 Newton's method on R. Every 10° on report 015's two ESNs, this finds exactly the fixed
 points that report 015 found by Newton's method from 2,592 states of their runs.
 
+Near the take's end posture, though, where the ESN learned to hold still, R can be
+nearly flat: less than 3° over a 10° cell. There Newton's method on R steps far from
+the zero, and the first screen (`20261020-134112-screen`) missed the target's own
+fixed point in some ESNs. So Newton's method on
+the ESN's update also starts from where each run from rest comes to rest (below),
+which finds the attracting fixed points the grid misses.
+
 ## Step 0: the grid's ESNs are report 011's
 
 Report 011's sweeps at leak rate 0.03, rerun unchanged at commit `a7d159f`, give the
@@ -67,7 +74,7 @@ uv run python experiments/screen_esns.py experiments/manual_demonstration_v2_esn
 
 | Configuration | What it runs |
 | --- | --- |
-| `screen.toml` | the 1,050 ESNs: the fixed points from R every 10°, the lead |R| near the path, runs from rest every 30° and around the take's end posture, runs held 4 s at each unstable fixed point, and the rates along the run from the take's start over 4 s windows |
+| `screen.toml` | the 1,050 ESNs: the fixed points from R every 10° and where the runs from rest come to rest, the lead |R| near the path, runs from rest every 30° and around the take's end posture, runs held 4 s at each unstable fixed point, and the rates along the run from the take's start over 4 s windows |
 | `screen_5deg_seed0.toml` | the first seed of each of the 105 settings, with R every 5°, to check that 10° misses no fixed point |
 
 ## Step 2: what the screen predicts
