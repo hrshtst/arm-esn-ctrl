@@ -272,3 +272,32 @@ At commit `2deb92c`: `20261020-182057-release_robot` (77 min on 30 processes).
   distance to the nearest unstable fixed point is −0.19 (−0.07 to −0.27 within each
   leak rate) with a hold of 1 s and −0.18 with 3 s, and with the lead there −0.40
   (−0.21 to −0.39) and −0.16 (+0.10 to −0.34).
+
+## Step 4: held out
+
+Fixed before the runs. 1,050 ESNs that no step before saw: report 011's leak rates,
+spectral radii, and input scalings with seeds 10 to 19, screened as in step 2
+(`screen_seeds10to19.toml`, the runs from rest 60 s long) and run on the robot by
+report 011's sweeps, unchanged but for the seeds
+(`sweep_robot_following_lr<leak rate>_{nominal,block,pushes}_filtered_seeds10to19.toml`):
+
+```bash
+uv run python experiments/screen_esns.py experiments/manual_demonstration_v2_esn_screening/screen_seeds10to19.toml
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_esn_screening/sweep_robot_following_lr0.03_nominal_filtered_seeds10to19.toml
+```
+
+`screen_against_robot.py` sets them against each other as in step 2, and now also
+scores each rule's flag, and the lead, by the area under the ROC curve for failing,
+as the leak rate alone is scored. What step 2 found, as claims for the held-out
+ESNs:
+
+1. **(a)** at each of the leak rates 0.015, 0.02, 0.07, and 0.1, the share failing
+   is larger among the flagged ESNs than among the unflagged; and at 0.04 and 0.05,
+   that excess is smaller than at each of those four;
+2. **(d)** within each leak rate from 0.015 to 0.05, the largest scaling of a
+   posture's deviation has a rank correlation of at least 0.5 with the following;
+3. an unstable fixed point nearer the path tells the failing ESNs apart, with an
+   area under the ROC curve above 0.5 within each of the seven leak rates (of the
+   ESNs with one);
+4. over all the ESNs, no rule's flag, (a), (b), or (c), nor the lead, has a larger
+   area under the ROC curve for failing than the leak rate alone.

@@ -153,6 +153,12 @@ def main() -> None:
         scores.append(
             score("smaller lead", "ends_away", name, "auc", auc(-measure["lead_median_deg"][group], ends_away[group]))
         )
+        # Against failing, as the leak rate alone is scored: each rule's flag, and the lead.
+        scores.append(
+            score("smaller lead", "failing", name, "auc", auc(-measure["lead_median_deg"][group], failing[group]))
+        )
+        for flag in ("flag_a", "flag_b", "flag_c"):
+            scores.append(score(flag, "failing", name, "auc", auc(table[flag][group].astype(float), failing[group])))
         for arrival in ("arrival_nominal_s", "arrival_block_s"):
             scores.append(
                 score(
