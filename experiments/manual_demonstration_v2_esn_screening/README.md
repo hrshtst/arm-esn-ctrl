@@ -301,3 +301,39 @@ ESNs:
    ESNs with one);
 4. over all the ESNs, no rule's flag, (a), (b), or (c), nor the lead, has a larger
    area under the ROC curve for failing than the leak rate alone.
+
+### Step 4's results
+
+```bash
+uv run python experiments/screen_against_robot.py \
+    experiments/manual_demonstration_v2_esn_screening/against_robot_seeds10to19.toml
+```
+
+At commit `8da99e6`: report 011's sweeps with seeds 10 to 19,
+`20261020-19421?-sweep_robot_following_lr<leak rate>_{nominal,block,pushes}_filtered_seeds10to19`
+(21 min, one process each), and their screen, `20261020-200400-screen_seeds10to19`
+(65 min on 30 processes); set against each other at commit `3de6eee`:
+`20261020-210939-against_robot_seeds10to19`. Step 2's set, rerun with the scores
+added: `20261020-194204-against_robot`. Of the held-out ESNs, 604 pass on the robot
+and 446 fail.
+
+1. **Holds in part.** At 0.015, 0.02, 0.07, and 0.1, the share failing is larger
+   among the flagged ESNs than among the unflagged: 0.59 against 0.15, 0.61 against
+   0.12, 0.77 against 0.71, and 0.81 against 0.67. But the excess at 0.04 (0.36
+   against 0.26) and at 0.05 (0.59 against 0.40) is not smaller than at 0.07: of
+   these ESNs, (a) tells failing apart at every leak rate (at 0.03, 0.26 against
+   0.12), the most at 0.015 and 0.02.
+2. **Holds:** within each leak rate from 0.015 to 0.05, +0.64, +0.78, +0.66, +0.60,
+   and +0.55 (+0.61 at 0.07, +0.44 at 0.1; pooled, +0.61).
+3. **Holds:** within each leak rate, 0.63, 0.76, 0.68, 0.70, 0.57, 0.64, and 0.61
+   (over all the ESNs, 0.76).
+4. **Holds:** the leak rate alone has 0.766; the lead 0.748, and the flags of (a),
+   (b), and (c) 0.710, 0.724, and 0.618 (of seeds 0 to 9: 0.749; 0.736, 0.721,
+   0.717, and 0.599).
+
+Beyond the claims: (b)'s area under the ROC curve for ending away, within each leak
+rate, is 0.24, 0.30, 0.51, 0.58, 0.65, 0.72, and 0.69, as of seeds 0 to 9; (c)'s
+release arrival has a rank correlation of +0.29 with the arrival under the block
+over all the ESNs, but of −0.02 to +0.21 within each leak rate (of seeds 0 to 9,
++0.16 to +0.31 up to 0.07): that link does not hold beyond the leak rate. (a)
+rejects 8 of the qualifying settings' 110 held-out ESNs, (c) 58.
