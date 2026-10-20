@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_esn_screening/block8to11_robot_lr0.03_sr1.2_is1_seed2.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_esn_screening/block8to11_robot_lr0.03_sr1.2_is1_seed2.toml"
+started = 2026-10-20 21:20:45+09:00
+host = "delbosque"
+commit = "5ac6c3480a3a60a67ab30bf99a44b35d10c22948"
+uncommitted_changes = false

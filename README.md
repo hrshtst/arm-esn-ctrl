@@ -259,6 +259,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_stable_equal_gains](experiments/manual_demonstration_v2_robot_stable_equal_gains/README.md) | every scenario of the following search and the recorded pushes with the same gains for both joints, estimated to keep the torque held for 10 ms stable (Stage 2) | [013](reports/013-equal-gains/README.md) |
 | [manual_demonstration_v2_robot_progress_replay](experiments/manual_demonstration_v2_robot_progress_replay/README.md) | every scenario of the following search and the recorded pushes with a third arm, the take replayed by the arm's progress along the taught path (Stage 2) | [014](reports/014-progress-replay/README.md) |
 | [manual_demonstration_v2_esn_dynamics](experiments/manual_demonstration_v2_esn_dynamics/README.md) | what the following search's two ESNs learned as dynamical systems: run on their own from rest anywhere in the joint space, with other warm-ups, pushed by short pulses along the reach on the robot, and read as the map of their reservoir state for its fixed points (Stages 1 and 2) | [015](reports/015-what-the-esns-learned/README.md) |
+| [manual_demonstration_v2_esn_screening](experiments/manual_demonstration_v2_esn_screening/README.md) | the following search's 1,050 ESNs screened without the robot, by their fixed points, their lead over a held posture, and their rates, against its robot outcomes; the passing ESNs held still on the robot; and 1,050 held-out ESNs alike (Stages 1 and 2) | [016](reports/016-screening-esns/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -435,6 +436,18 @@ The reports so far:
   reservoir drifting. The path attracts slowly, after a transient: changes across it
   decay only over windows of 4 s, and the ESNs' hands come back in 2 to 3 s. ESN #2
   has two unstable fixed points near the path, where it lingers.
+- [016 Screening ESNs without the robot: within a leak rate, not across](reports/016-screening-esns/README.md)
+  (Stages 1 and 2): report 011's 1,050 ESNs screened on their own, in under two minutes
+  each, by where they can rest, how far their output leads a held posture, and how
+  changes along their run decay, against its robot outcomes, and checked on 1,050
+  held-out ESNs. Across the grid no rule tells failing ESNs apart better than the leak
+  rate does (an area under the ROC curve of 0.75 to 0.77); within a leak rate, an
+  attracting fixed point off the target and an unstable one near the path do, and how
+  much the ESN's own run scales a deviation of its output ranks how much it follows
+  the arm (rank correlation about 0.6). Unstable fixed points near the path are in
+  three ESNs of four and harmless under blocks; but released at one after 4 s, a fifth
+  of the passing ESNs that have one never reach the target, as the ESN on its own
+  predicts to within a quarter of a second.
 
 Each report has five parts:
 

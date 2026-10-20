@@ -1,0 +1,172 @@
+measure,against,leak_rate,statistic,value,n
+leak rate,failing,all,auc,0.7661628010572269,1050
+leak rate,following,all,spearman,0.766834618776831,1050
+smaller lead,ends_away,all,auc,0.7555418557181576,1050
+smaller lead,failing,all,auc,0.7484965699521872,1050
+flag_a,failing,all,auc,0.7103242954295726,1050
+flag_b,failing,all,auc,0.7239813797404449,1050
+flag_c,failing,all,auc,0.6178577792296499,1050
+release arrival,arrival_nominal_s,all,spearman,0.01531604792334474,862
+release arrival,arrival_block_s,all,spearman,0.29323653735433614,862
+across_rate_median_per_s,return_s,all,spearman,0.13274275218904694,239
+across_rate_median_per_s,following,all,spearman,-0.6658662599370029,1050
+across_rate_max_per_s,return_s,all,spearman,0.2870394014270335,239
+across_rate_max_per_s,following,all,spearman,-0.3442364456955128,1050
+posture_scale_median,return_s,all,spearman,-0.20585485785759186,239
+posture_scale_median,following,all,spearman,0.22433431685652325,1050
+posture_scale_max,return_s,all,spearman,-0.21328957008776384,239
+posture_scale_max,following,all,spearman,0.6850885436501206,1050
+nearer unstable fixed point,failing,all,auc,0.755656108597285,862
+slower growth there,failing,all,auc,0.34371902607196725,862
+later release arrival,failing,all,auc,0.6924854557207498,862
+nearer unstable fixed point,never_arrives,all,auc,0.7905917280917281,862
+slower growth there,never_arrives,all,auc,0.30134111384111384,862
+later release arrival,never_arrives,all,auc,0.6631475225225225,862
+smaller lead,ends_away,0.015,auc,0.24290060851926978,150
+smaller lead,failing,0.015,auc,0.2315527950310559,150
+flag_a,failing,0.015,auc,0.6807453416149069,150
+flag_b,failing,0.015,auc,0.5,150
+flag_c,failing,0.015,auc,0.5602484472049689,150
+release arrival,arrival_nominal_s,0.015,spearman,0.07831871424485679,99
+release arrival,arrival_block_s,0.015,spearman,0.03800528056387769,99
+across_rate_median_per_s,return_s,0.015,spearman,0.483076923076923,26
+across_rate_median_per_s,following,0.015,spearman,-0.29529312413885067,150
+across_rate_max_per_s,return_s,0.015,spearman,0.3558974358974359,26
+across_rate_max_per_s,following,0.015,spearman,-0.07255255789146184,150
+posture_scale_median,return_s,0.015,spearman,-0.13914529914529913,26
+posture_scale_median,following,0.015,spearman,0.5975181119160853,150
+posture_scale_max,return_s,0.015,spearman,-0.08854700854700855,26
+posture_scale_max,following,0.015,spearman,0.6365385128227922,150
+nearer unstable fixed point,failing,0.015,auc,0.6269757639620653,99
+slower growth there,failing,0.015,auc,0.8366701791359326,99
+later release arrival,failing,0.015,auc,0.5987881981032666,99
+nearer unstable fixed point,never_arrives,0.015,auc,nan,99
+slower growth there,never_arrives,0.015,auc,nan,99
+later release arrival,never_arrives,0.015,auc,nan,99
+smaller lead,ends_away,0.02,auc,0.3014888337468983,150
+smaller lead,failing,0.02,auc,0.2647477913935594,150
+flag_a,failing,0.02,auc,0.7041892277001995,150
+flag_b,failing,0.02,auc,0.5131091479053862,150
+flag_c,failing,0.02,auc,0.610002849814762,150
+release arrival,arrival_nominal_s,0.02,spearman,-0.10191608326704037,89
+release arrival,arrival_block_s,0.02,spearman,0.0977071066853669,89
+across_rate_median_per_s,return_s,0.02,spearman,0.3666574048346764,60
+across_rate_median_per_s,following,0.02,spearman,-0.41471887639450644,150
+across_rate_max_per_s,return_s,0.02,spearman,0.41617115865518206,60
+across_rate_max_per_s,following,0.02,spearman,-0.17375172229876887,150
+posture_scale_median,return_s,0.02,spearman,-0.30458460683523203,60
+posture_scale_median,following,0.02,spearman,0.5776096715409573,150
+posture_scale_max,return_s,0.02,spearman,-0.1547652125590442,60
+posture_scale_max,following,0.02,spearman,0.775179341304058,150
+nearer unstable fixed point,failing,0.02,auc,0.7619047619047619,89
+slower growth there,failing,0.02,auc,0.8102240896358543,89
+later release arrival,failing,0.02,auc,0.6449579831932774,89
+nearer unstable fixed point,never_arrives,0.02,auc,nan,89
+slower growth there,never_arrives,0.02,auc,nan,89
+later release arrival,never_arrives,0.02,auc,nan,89
+smaller lead,ends_away,0.03,auc,0.5049833887043189,150
+smaller lead,failing,0.03,auc,0.49609375,150
+flag_a,failing,0.03,auc,0.5809659090909091,150
+flag_b,failing,0.03,auc,0.6278409090909091,150
+flag_c,failing,0.03,auc,0.6264204545454546,150
+release arrival,arrival_nominal_s,0.03,spearman,0.036102442536638066,108
+release arrival,arrival_block_s,0.03,spearman,0.05362676858934067,108
+across_rate_median_per_s,return_s,0.03,spearman,0.2485004870575923,56
+across_rate_median_per_s,following,0.03,spearman,-0.3837557224765545,150
+across_rate_max_per_s,return_s,0.03,spearman,0.40086125879500767,56
+across_rate_max_per_s,following,0.03,spearman,-0.22839237299435533,150
+posture_scale_median,return_s,0.03,spearman,-0.03123771766890928,56
+posture_scale_median,following,0.03,spearman,0.6204097959909329,150
+posture_scale_max,return_s,0.03,spearman,-0.11579145236571625,56
+posture_scale_max,following,0.03,spearman,0.6547722120983155,150
+nearer unstable fixed point,failing,0.03,auc,0.6776135741652983,108
+slower growth there,failing,0.03,auc,0.8002189381499726,108
+later release arrival,failing,0.03,auc,0.5487137383689108,108
+nearer unstable fixed point,never_arrives,0.03,auc,0.6915887850467289,108
+slower growth there,never_arrives,0.03,auc,0.7476635514018691,108
+later release arrival,never_arrives,0.03,auc,0.9532710280373832,108
+smaller lead,ends_away,0.04,auc,0.5767140468227425,150
+smaller lead,failing,0.04,auc,0.5732286717620326,150
+flag_a,failing,0.04,auc,0.5590787027473663,150
+flag_b,failing,0.04,auc,0.5187977690559802,150
+flag_c,failing,0.04,auc,0.5448254492873373,150
+release arrival,arrival_nominal_s,0.04,spearman,0.05754344058173732,131
+release arrival,arrival_block_s,0.04,spearman,0.21183960796032192,131
+across_rate_median_per_s,return_s,0.04,spearman,0.20297625560783453,38
+across_rate_median_per_s,following,0.04,spearman,-0.3615325125561136,150
+across_rate_max_per_s,return_s,0.04,spearman,0.33406280774701824,38
+across_rate_max_per_s,following,0.04,spearman,-0.24926085603804612,150
+posture_scale_median,return_s,0.04,spearman,-0.29051318525002734,38
+posture_scale_median,following,0.04,spearman,0.4783732610338237,150
+posture_scale_max,return_s,0.04,spearman,-0.20932268300689352,38
+posture_scale_max,following,0.04,spearman,0.5985706031379173,150
+nearer unstable fixed point,failing,0.04,auc,0.7011494252873564,131
+slower growth there,failing,0.04,auc,0.44618599791013586,131
+later release arrival,failing,0.04,auc,0.5978317659352143,131
+nearer unstable fixed point,never_arrives,0.04,auc,0.7403100775193798,131
+slower growth there,never_arrives,0.04,auc,0.8178294573643411,131
+later release arrival,never_arrives,0.04,auc,0.374031007751938,131
+smaller lead,ends_away,0.05,auc,0.6503111111111111,150
+smaller lead,failing,0.05,auc,0.5965288960458043,150
+flag_a,failing,0.05,auc,0.5762211486849168,150
+flag_b,failing,0.05,auc,0.5789049919484702,150
+flag_c,failing,0.05,auc,0.5456253354804079,150
+release arrival,arrival_nominal_s,0.05,spearman,0.009768601627444801,140
+release arrival,arrival_block_s,0.05,spearman,-0.01587227136133442,140
+across_rate_median_per_s,return_s,0.05,spearman,0.31965811965811963,26
+across_rate_median_per_s,following,0.05,spearman,-0.19631272501000044,150
+across_rate_max_per_s,return_s,0.05,spearman,0.2731623931623931,26
+across_rate_max_per_s,following,0.05,spearman,-0.11515356238055025,150
+posture_scale_median,return_s,0.05,spearman,-0.18769230769230769,26
+posture_scale_median,following,0.05,spearman,0.51705586914974,150
+posture_scale_max,return_s,0.05,spearman,-0.12068376068376069,26
+posture_scale_max,following,0.05,spearman,0.5449753322369882,150
+nearer unstable fixed point,failing,0.05,auc,0.5710728366881096,140
+slower growth there,failing,0.05,auc,0.39219755135920314,140
+later release arrival,failing,0.05,auc,0.5657812824237394,140
+nearer unstable fixed point,never_arrives,0.05,auc,0.7422126745435016,140
+slower growth there,never_arrives,0.05,auc,0.27926960257787325,140
+later release arrival,never_arrives,0.05,auc,0.7368421052631579,140
+smaller lead,ends_away,0.07,auc,0.7218181818181818,150
+smaller lead,failing,0.07,auc,0.6983430799220273,150
+flag_a,failing,0.07,auc,0.5285087719298246,150
+flag_b,failing,0.07,auc,0.5241228070175439,150
+flag_c,failing,0.07,auc,0.5146198830409356,150
+release arrival,arrival_nominal_s,0.07,spearman,-0.11856321505682518,146
+release arrival,arrival_block_s,0.07,spearman,0.021684362174896173,146
+across_rate_median_per_s,return_s,0.07,spearman,0.034055727554179564,18
+across_rate_median_per_s,following,0.07,spearman,-0.00010133783723721055,150
+across_rate_max_per_s,return_s,0.07,spearman,0.2982456140350877,18
+across_rate_max_per_s,following,0.07,spearman,-0.049301746744299754,150
+posture_scale_median,return_s,0.07,spearman,-0.15789473684210525,18
+posture_scale_median,following,0.07,spearman,0.5612213876172274,150
+posture_scale_max,return_s,0.07,spearman,-0.3353973168214654,18
+posture_scale_max,following,0.07,spearman,0.6046970976487844,150
+nearer unstable fixed point,failing,0.07,auc,0.6432432432432432,146
+slower growth there,failing,0.07,auc,0.3884169884169884,146
+later release arrival,failing,0.07,auc,0.6203346203346203,146
+nearer unstable fixed point,never_arrives,0.07,auc,0.6497395833333334,146
+slower growth there,never_arrives,0.07,auc,0.44140625,146
+later release arrival,never_arrives,0.07,auc,0.5123697916666666,146
+smaller lead,ends_away,0.1,auc,0.6911801242236025,150
+smaller lead,failing,0.1,auc,0.6641949152542372,150
+flag_a,failing,0.1,auc,0.5572033898305084,150
+flag_b,failing,0.1,auc,0.4957627118644068,150
+flag_c,failing,0.1,auc,0.515625,150
+release arrival,arrival_nominal_s,0.1,spearman,-0.11935200408250564,149
+release arrival,arrival_block_s,0.1,spearman,0.04291366486858889,149
+across_rate_median_per_s,return_s,0.1,spearman,0.5178571428571428,15
+across_rate_median_per_s,following,0.1,spearman,-0.1381696964309525,150
+across_rate_max_per_s,return_s,0.1,spearman,0.6071428571428571,15
+across_rate_max_per_s,following,0.1,spearman,-0.1558451486732744,150
+posture_scale_median,return_s,0.1,spearman,-0.017857142857142853,15
+posture_scale_median,following,0.1,spearman,0.5128956842526334,150
+posture_scale_max,return_s,0.1,spearman,-0.22499999999999998,15
+posture_scale_max,following,0.1,spearman,0.440380461353838,150
+nearer unstable fixed point,failing,0.1,auc,0.6082558775287042,149
+slower growth there,failing,0.1,auc,0.44532531437944234,149
+later release arrival,failing,0.1,auc,0.6409240021869874,149
+nearer unstable fixed point,never_arrives,0.1,auc,0.6050387596899225,149
+slower growth there,never_arrives,0.1,auc,0.47403100775193796,149
+later release arrival,never_arrives,0.1,auc,0.5065891472868217,149
+posture_scale_max,following,within each leak rate,spearman,0.6078733658003845,1050

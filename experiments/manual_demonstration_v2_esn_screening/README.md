@@ -5,7 +5,8 @@ where they can rest: ESN #2, which passed every scenario of report 011's robot s
 has two unstable fixed points beside the take's path, where an arm held still for a
 few seconds stands still long after it is let go. This study asks whether such
 measures, computed from an ESN on its own in seconds, tell which ESNs the robot
-search passes or fails, and why, and what it misses.
+search passes or fails, and why, and what it misses. The results are in
+[report 016](../../reports/016-screening-esns/README.md).
 
 ## The ESNs
 
@@ -337,3 +338,18 @@ release arrival has a rank correlation of +0.29 with the arrival under the block
 over all the ESNs, but of −0.02 to +0.21 within each leak rate (of seeds 0 to 9,
 +0.16 to +0.31 up to 0.07): that link does not hold beyond the leak rate. (a)
 rejects 8 of the qualifying settings' 110 held-out ESNs, (c) 58.
+
+## Shown in report 016
+
+ESN #1 and #2 against the replay of the take, with report 011's tracker, in two of
+step 3's blocks and one of its releases, for the report's time series
+(`robot_esn.py`, whose `[evaluation]` now takes a `warmup` of its own):
+
+| Configuration | What it runs |
+| --- | --- |
+| `block5to8_robot_<ESN>.toml`, `block8to11_robot_<ESN>.toml` | the tip held from 5 s to 8 s, and from 8 s to 11 s |
+| `released_robot_<ESN>.toml` | the arm at rest at ESN #2's unstable fixed point beside the path, (39.85°, 97.12°), the ESN held there 4 s |
+
+At commits `5ac6c34` (the blocks) and `d1c1983` (the releases):
+`20261020-212045-block{5to8,8to11}_robot_<ESN>` and
+`20261020-212252-released_robot_<ESN>`.

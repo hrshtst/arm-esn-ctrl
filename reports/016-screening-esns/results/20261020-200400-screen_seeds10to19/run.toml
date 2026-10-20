@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_esn_screening/screen_seeds10to19.toml"
+command = "experiments/screen_esns.py --workers 30 experiments/manual_demonstration_v2_esn_screening/screen_seeds10to19.toml"
+started = 2026-10-20 20:04:00+09:00
+host = "delbosque"
+commit = "8da99e6e0434fe1c2ab01e1a42ff9e8bd5d789b8"
+uncommitted_changes = false

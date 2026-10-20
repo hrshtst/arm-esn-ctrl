@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_esn_screening/against_robot.toml"
+command = "experiments/screen_against_robot.py experiments/manual_demonstration_v2_esn_screening/against_robot.toml"
+started = 2026-10-20 19:42:04+09:00
+host = "delbosque"
+commit = "8da99e6e0434fe1c2ab01e1a42ff9e8bd5d789b8"
+uncommitted_changes = false

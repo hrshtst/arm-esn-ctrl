@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_esn_screening/screen.toml"
+command = "experiments/screen_esns.py --workers 30 experiments/manual_demonstration_v2_esn_screening/screen.toml"
+started = 2026-10-20 13:41:12+09:00
+host = "delbosque"
+commit = "da23be04ccb232f4c745eed67e483cf20a0935e2"
+uncommitted_changes = false

@@ -1,0 +1,53 @@
+# Screening ESNs without the robot, step 2: the screen of report 011's 1,050 ESNs, its
+# runs from rest 60 s long, against report 011's robot sweeps of the same ESNs, scored
+# as the study README fixed before they were read.
+#
+#   uv run python experiments/screen_against_robot.py experiments/manual_demonstration_v2_esn_screening/against_robot.toml
+
+[runs]
+screen = "results/manual_demonstration_v2_esn_screening/20261020-165217-screen"
+# Report 011's sweeps (sweep_robot_following_lr*_{nominal,block,pushes}_filtered.toml):
+# one run per leak rate and scenario, undisturbed, under the block, and under the pushes.
+robot = [
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.015_nominal_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.015_block_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145410-sweep_robot_following_lr0.015_pushes_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.02_nominal_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.02_block_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.02_pushes_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.03_nominal_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.03_block_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.03_pushes_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.04_nominal_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.04_block_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.04_pushes_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.05_nominal_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.05_block_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145410-sweep_robot_following_lr0.05_pushes_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.07_nominal_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.07_block_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.07_pushes_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.1_nominal_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.1_block_filtered",
+    "results/manual_demonstration_v2_robot_following_search/20261014-145411-sweep_robot_following_lr0.1_pushes_filtered",
+]
+
+[rules]
+lead_deg = 10.0    # (b): a median lead near the path under this (deg)
+path_deg = 30.0    # (c): an unstable fixed point within this of the take's joint path (deg) ...
+release_s = 9.58   # ... or, held 4 s there and released, arriving later than the take does (s)
+far_m = 0.1        # (a), apart from the rules: only attracting fixed points whose hand is this far off the target (m)
+
+[qualifying]
+# Report 011's 11 qualifying settings: leak rate, spectral radius, input scaling.
+settings = [
+    [0.03, 1.2, 1.5], [0.03, 1.2, 1.0], [0.03, 1.35, 1.5], [0.02, 0.99, 1.5], [0.03, 1.35, 1.0], [0.02, 1.2, 1.5],
+    [0.02, 1.2, 2.0], [0.02, 1.35, 2.0], [0.02, 1.35, 1.5], [0.015, 1.2, 2.0], [0.015, 1.2, 1.5],
+]
+
+[named]
+# Leak rate, spectral radius, input scaling, seed: report 011's shortlist and report 007's ESN.
+"ESN #1" = [0.03, 1.2, 1.5, 8]
+"ESN #2" = [0.03, 1.2, 1.0, 2]
+"ESN #3" = [0.03, 1.35, 1.5, 6]
+"report 007's" = [0.02, 1.35, 2.0, 7]

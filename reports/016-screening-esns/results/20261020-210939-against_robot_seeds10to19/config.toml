@@ -1,0 +1,47 @@
+# Screening ESNs without the robot, step 4, held out: the screen of seeds 10 to 19
+# against report 011's sweeps of the same ESNs, scored as step 2 scored seeds 0 to 9.
+#
+#   uv run python experiments/screen_against_robot.py \
+#       experiments/manual_demonstration_v2_esn_screening/against_robot_seeds10to19.toml
+
+[runs]
+screen = "results/manual_demonstration_v2_esn_screening/20261020-200400-screen_seeds10to19"
+# Report 011's sweeps with seeds 10 to 19: one run per leak rate and scenario.
+robot = [
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.015_nominal_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.015_block_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.015_pushes_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.02_nominal_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.02_block_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.02_pushes_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.03_nominal_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.03_block_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.03_pushes_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.04_nominal_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.04_block_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.04_pushes_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.05_nominal_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.05_block_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.05_pushes_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.07_nominal_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.07_block_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.07_pushes_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.1_nominal_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194214-sweep_robot_following_lr0.1_block_filtered_seeds10to19",
+    "results/manual_demonstration_v2_esn_screening/20261020-194213-sweep_robot_following_lr0.1_pushes_filtered_seeds10to19",
+]
+[rules]
+lead_deg = 10.0    # (b): a median lead near the path under this (deg)
+path_deg = 30.0    # (c): an unstable fixed point within this of the take's joint path (deg) ...
+release_s = 9.58   # ... or, held 4 s there and released, arriving later than the take does (s)
+far_m = 0.1        # (a), apart from the rules: only attracting fixed points whose hand is this far off the target (m)
+
+[qualifying]
+# Report 011's 11 qualifying settings: leak rate, spectral radius, input scaling.
+settings = [
+    [0.03, 1.2, 1.5], [0.03, 1.2, 1.0], [0.03, 1.35, 1.5], [0.02, 0.99, 1.5], [0.03, 1.35, 1.0], [0.02, 1.2, 1.5],
+    [0.02, 1.2, 2.0], [0.02, 1.35, 2.0], [0.02, 1.35, 1.5], [0.015, 1.2, 2.0], [0.015, 1.2, 1.5],
+]
+
+[named]
+# None: report 011's shortlist and report 007's ESN are of seeds 0 to 9.

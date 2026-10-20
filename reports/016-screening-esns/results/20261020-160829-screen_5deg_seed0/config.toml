@@ -1,0 +1,47 @@
+# Screening ESNs without the robot, step 1's check of the grid: the first seed of each of
+# report 011's 105 settings (seven leak rates, five spectral radii, three input
+# scalings), screened as screen.toml screens it but with R(q) every 5 deg, to see whether
+# its 10 deg grid misses fixed points.
+#
+#   uv run python experiments/screen_esns.py experiments/manual_demonstration_v2_esn_screening/screen_5deg_seed0.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# Report 011's sweeps' (experiments/manual_demonstration_v2_robot_following_search/
+# sweep_robot_following_lr*_filtered.toml); the leak rate, spectral radius, input
+# scaling, and seed are swept.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.35
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.03
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 8
+
+[sweep]
+leak_rate = [0.015, 0.02, 0.03, 0.04, 0.05, 0.07, 0.1]
+spectral_radius = [0.99, 1.2, 1.35, 1.5, 1.75]
+input_scaling = [1.0, 1.5, 2.0]
+seed = [0]            # the random reservoir, its input weights, and its biases: the first of screen.toml's ten
+
+[screen]
+grid_step_deg = 5.0    # R(q) over both joints' whole range, every this much in each: half screen.toml's
+check_stride = 3       # the held reservoir's fixed point is checked from random states at every third posture of the grid
+band_deg = 15.0        # the lead over a held posture: over the grid's postures within this of the take's joint path ...
+max_progress = 0.9     # ... up to this far along it
+start_step_deg = 30.0  # from rest anywhere: start postures every this much in each joint (144)
+ring_deg = [10.0, 20.0]  # and at these distances from the take's end posture, in 8 directions
+duration = 20.0        # each of those runs (s); the take arrives at 9.6 s
+release_hold = 4.0     # held at an unstable fixed point this long from the reset, then released (s) ...
+release_duration = 60.0  # ... and run this long (s)
+rate_duration = 14.0   # the rates along the run from the take's start, over this long (s) ...
+rate_window = 4.0      # ... over windows this long (s) ...
+rate_stride = 0.5      # ... starting this often (s)
