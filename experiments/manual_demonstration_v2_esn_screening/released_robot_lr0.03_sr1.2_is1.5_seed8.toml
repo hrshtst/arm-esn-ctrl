@@ -22,9 +22,11 @@ control_period = 0.01  # the torque is computed this often and held between (s);
 duration = 30.0        # task (s), after the warm-up
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 warmup = 4.0           # the start posture held this long before the task (s), as step 3's releases
-# ESN #2's unstable fixed point, (39.847876, 97.119086) deg, less the demonstrated start, (29.999612, 30.001280) deg.
-start_offsets_deg = [[9.848263656080231, 67.11780574801105]]
 return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
 ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz)
 ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
 following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)
+start_offsets_deg = []  # not from the demonstrated start, but from:
+
+[evaluation.extra_starts]
+unstable = [[39.847875667273854, 97.11908595660277]]  # ESN #2's unstable fixed point beside the path (deg)

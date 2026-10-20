@@ -55,6 +55,7 @@ EVALUATION_KEYS = {
     "ringing_cutoff_hz",
     "ringing_window",
     "following_window",
+    "warmup",  # robot_esn.py: the start posture held this long, in place of the ESN's warm-up (s)
 }
 # A demonstrator's reach this close to the training path, on average, has no course of its own to
 # compare with: from a start along the demonstrated path, the ratio would divide by almost nothing (rad).
