@@ -250,10 +250,9 @@ At commit `2deb92c`: `20261020-182057-release_robot` (77 min on 30 processes).
   at one only the ESN on its own. Arriving later than the take's 9.58 s: the robot
   498, the ESN on its own 490.
 - **The 99 where the robot never arrives (in 86 ESNs) do not stall:** the arm
-  leaves the posture within 5 s at 80 of them,
-  and stays within 1° for the whole 60 s at 3; 76 of the 86 ESNs have an attracting
-  fixed point off the target, where the arm goes. Their fixed points lie at the
-  start of the path (the median progress 0) and 7.5° from it (the median), their
+  leaves the posture within 5 s at 80 of them, and stays within 1° for the whole
+  60 s at 3; 76 of the 86 ESNs also have an attracting fixed point off the target
+  (rule (a)). Their unstable fixed points lie at the start of the path (the median progress 0) and 7.5° from it (the median), their
   modes growing at 1.2 per second (the median; 0.75 at the others). The 86 are 75
   ESNs at leak rates 0.04 to 0.1 and 11 at 0.015 to 0.03, 3 of them in qualifying
   settings; none of ESN #1, #2, #3, and report 007's. ESN #2 released at
@@ -270,6 +269,6 @@ At commit `2deb92c`: `20261020-182057-release_robot` (77 min on 30 processes).
   the lead is small:** the median delay is −0.54 s with an unstable fixed point
   near the path and −0.65 s without (a hold of 1 s; −0.53 and −0.72 s with 3 s, the
   90th percentiles +0.78 and +0.59 s). Its rank correlation with the held posture's
-  distance to the nearest unstable fixed point is −0.19 (−0.08 to −0.27 within each
+  distance to the nearest unstable fixed point is −0.19 (−0.07 to −0.27 within each
   leak rate) with a hold of 1 s and −0.18 with 3 s, and with the lead there −0.40
   (−0.21 to −0.39) and −0.16 (+0.10 to −0.34).
