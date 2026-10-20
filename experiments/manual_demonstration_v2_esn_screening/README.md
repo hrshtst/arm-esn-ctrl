@@ -77,7 +77,7 @@ uv run python experiments/screen_esns.py experiments/manual_demonstration_v2_esn
 | `screen.toml` | the 1,050 ESNs: the fixed points from R every 10° and where the runs from rest come to rest, the lead |R| near the path, runs from rest every 30° and around the take's end posture, runs held 4 s at each unstable fixed point, and the rates along the run from the take's start over 4 s windows |
 | `screen_5deg_seed0.toml` | the first seed of each of the 105 settings, with R every 5°, to check that 10° misses no fixed point |
 
-The runs, at commit `fe2a921`, are under
+The runs, at commit `fe2a921` with the runs from rest 20 s long, are under
 `results/manual_demonstration_v2_esn_screening/`: `20261020-151050-screen` (58 min on
 30 processes, 97 s per ESN) and `20261020-160829-screen_5deg_seed0` (18 min).
 
@@ -99,12 +99,22 @@ The runs, at commit `fe2a921`, are under
   held reservoir settles, in about half of them, and are identical in the rest;
   whether a cell holds a fixed point differs only in ESNs with a spectral radius of
   1.75, where the held reservoir does not settle.
+- 49 ESNs, 36 of them at a spectral radius of 1.75, have no fixed point within the
+  goal radius. Their runs from the take's start pass through the goal and leave it at
+  20.6 to 29 s (the 10th to 90th percentiles; the median 23.4 s), after the 20 s runs
+  end but within report 011's 24 s robot runs, and 36 of them come to rest elsewhere
+  within 120 s.
+
+So `screen.toml`'s runs from rest are 60 s long, past report 011's robot runs and
+past those departures, and step 2 uses the screen run again with them. The 5° check
+stands as it was run, against the screen of 20 s runs: it checks the grid.
 
 ## Step 2: what the screen predicts
 
 The rules, fixed before the screen's results, each against report 011's robot
 outcomes by its rule (undisturbed and under the block: arrives, holds, and ends within
-the goal; under the pushes: arrives and ends within it):
+the goal; under the pushes: arrives and ends within it; report 011's offset starts,
+run only for some settings, are not counted):
 
 - (a) an attracting fixed point whose hand is outside the goal radius predicts ending
   away from the target under the pushes;
@@ -123,3 +133,27 @@ the goal; under the pushes: arrives and ends within it):
 For each, how many of the 430 failing ESNs it catches, how many of the 620 passing
 ones it rejects, and whether it keeps report 011's 11 qualifying settings and ESN #1
 and #2, over the grid and within each leak rate.
+
+How (b), (c), and (d) are scored, fixed after the screen's ESN-alone results (above)
+and before they were set against the robot's outcomes:
+
+- (a) flags an ESN with an attracting fixed point (every eigenvalue inside the unit
+  circle) whose hand is more than the goal radius (20 mm) from the target, against
+  ending away from the target under the pushes;
+- (b) by the area under the ROC curve of the lead for ending away from the target
+  under the pushes, over the grid and within each leak rate (whether the lead tells
+  more than the leak rate does); and, for the counts, a lead under 10°;
+- (c) flags an ESN by either of its two conditions, counted against never arriving in
+  any scenario; and arriving late, by the rank correlation of the arrival after the
+  release with the robot's arrival time undisturbed and under the block;
+- (d) the rank correlations of the median and largest rate across the run and the
+  median and largest scaling of a posture's deviation with the return time (the mean
+  over the three pushes, of the runs that return) and with report 011's following
+  (the mean of the following gain over the block and the three pushes).
+
+The counts, for (a) to (c): the failing ESNs caught, in all and of its own outcome;
+the passing ones rejected; the qualifying settings' 110 ESNs rejected; ESN #1 and #2;
+over the grid and within each leak rate. Beyond the rules, and apart from them: (a)
+for attracting fixed points more than 10 cm off the target only, and whether the
+unstable fixed points' growth rates or distances from the path tell the outcomes
+apart.
