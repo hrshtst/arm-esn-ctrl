@@ -21,6 +21,11 @@ with its rerun by the same ESN and tracker (Section 2). With ``--animations``, i
 animates log 001 with ESN #1, ESN #2, and the replay side by side, each rendered by
 skelarm's player, at the damping ratio 0.4 given the reference velocity and given a
 zero reference velocity (``recorded001_reference.gif``, ``recorded001_zero.gif``).
+With ``--videos``, it exports every arm of ARMS with every tracker under every log,
+and each recording as made in the app, as MP4s for slides, with the player's side
+panel, into VIDEOS under the storage root, since they are not kept in Git.
+
+    uv run python reports/012-pushes-by-hand/make_figures.py --videos
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ import os
 import subprocess
 import sys
 import tomllib
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +49,7 @@ from numpy.typing import NDArray
 from skelarm import RecordedForce, StateLog, Task
 
 from arm_esn_ctrl.demonstrations import endpoint_positions
-from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path
+from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, storage_root
 
 REPORT = Path(__file__).resolve().parent
 DATA = REPORT / "data"
@@ -92,11 +98,80 @@ ANIMATION_SPAN = (-0.2, DURATION)
 ANIMATION_FPS = 10.0
 ANIMATION_HOLD_MS = 1500  # the last frame stays this long before the GIF loops
 
+# The videos for slides: every log, with every arm of ARMS and every tracker, and each recording, named by these.
+VIDEOS = storage_root() / "reports" / REPORT.name / "videos"
+VIDEO_FPS = 30.0
+VIDEO_ARMS = {"ESN #1": "esn1", "ESN #2": "esn2", "replay": "replay"}
+# Per log, what it shows: the headings of Sections 3.1 to 3.3, and when each push begins (Section 2).
+VIDEO_LOGS = {
+    "000": "log 000: four short pushes, from 2.4, 6.1, 8.6, and 14.0 s",
+    "001": "log 001: three long pushes, one strong (14 N at its peak), from 2.3, 7.2, and 14.4 s",
+    "002": "log 002: three short pushes, one forward, from 2.6, 6.0, and 13.6 s",
+}
+VIDEOS_README = """# Videos of report 012's runs, for slides
+
+These MP4s show the runs of report 012, *Pushes by hand*
+(`reports/012-pushes-by-hand/` in the arm-esn-ctrl repository), one arm per video:
+the three recorded logs, each with every arm the report compares and every tracker,
+and the recordings themselves. They are not kept in Git. The take's videos are
+report 005's, in `reports/005-tuned-on-the-robot/videos/` here.
+
+All are H.264 at {fps:g} fps, 1104 x 800, rendered by skelarm's player with its side
+panel: the time, the joint angles, the tip's position, the tip's speed, and the
+external force. The red arrow is the force at the tip; the purple dot is the
+target. The videos have no labels: their names say what they show.
+
+`<log>_<arm>_<tracker>.mp4`, {count} in all, and `<log>_as_recorded.mp4`, {recordings}:
+
+| Name | Pushes |
+| --- | --- |
+{logs}
+
+- **The pushes:** in the robot app, ESN #2's arm, with the tracker
+  `pd_z0.4_reference_velocity`, was pushed by dragging its tip with the mouse. The
+  runs replay each log's tip force by time, so that every arm and tracker meets the
+  same force at the same times; replayed, the force no longer reacts to the arm.
+- **The recordings:** `<log>_as_recorded.mp4` is the app's own log, ESN #2's arm as
+  it was pushed, until the recording ends, at 19.4 to 19.7 s. The app's joint PD
+  was then about 0.4% stiffer in joint 1 than the runs'; ESN #2's run with the same
+  tracker retraces each recording within 0.45 deg in the joints.
+- **Arms:** `esn1`, driven by ESN #1 (leak rate 0.03, spectral radius 1.2, input
+  scaling 1.5, seed 8), and `esn2`, by ESN #2 (leak rate 0.03, spectral radius 1.2,
+  input scaling 1, seed 2), each from the arm's measured joint angles every 10 ms;
+  `replay`, tracking the take replayed by time. Both ESNs are report 011's: 400
+  neurons, sparsity 0.05, and a random bias, trained by teacher forcing with ridge
+  1e-2 and a 1 s warm-up, without noise, on the take filtered at 2 Hz
+  (`results/demonstrations/20261008-170034-reach_manual_v2` here).
+- **Trackers:** joint PD at omega = 20 rad/s, `pd_z<damping ratio>_<velocity>`: the
+  damping ratios 0.2, 0.4, and 0.8, each given a zero reference velocity
+  (`zero_velocity`) or the reference's (`reference_velocity`), with the torque
+  computed every 10 ms and held between. The report's animations show log 001 with
+  `pd_z0.4_reference_velocity` and `pd_z0.4_zero_velocity`.
+- **Span:** the whole run, from the warm-up at -1 s to the end at 24 s, from the
+  demonstrated start.
+
+[`videos.csv`](videos.csv) lists each video's scenario, arm, tracker, and the log it
+shows, relative to the storage root.
+
+## Reproducing them
+
+From the repository, at commit `{commit}`:
+
+    uv run python reports/012-pushes-by-hand/make_figures.py --videos
+
+It reads the logs under the storage root and overwrites the files here, this
+README included, in about four minutes. The runs are deterministic, so the videos
+show the same motion.
+
+Exported on {day} at commit `{commit}`{dirty}.
+"""
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--logs", action="store_true", help="also compare the recordings with their reruns")
     parser.add_argument("--animations", action="store_true", help="also export GIFs from the logs in the storage root")
+    parser.add_argument("--videos", action="store_true", help="also export MP4s for slides into the storage root")
     args = parser.parse_args()
 
     SUMMARY.mkdir(parents=True, exist_ok=True)
@@ -109,6 +184,8 @@ def main() -> None:
     if args.animations:
         for velocity in VELOCITIES:
             export_animation(velocity)
+    if args.videos:
+        export_videos()
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -348,18 +425,69 @@ def plot_pushes() -> Figure:
     return fig
 
 
-# ---------------------------------------------------------------------------- the animations
+# ---------------------------------------------------------------------------- the animations and the videos
 
 
-def player_export(log: Path, out: Path, fps: float) -> None:
-    """Render a run's log into ``out`` (a GIF) with skelarm's player, without a window."""
+def player_export(log: Path, out: Path, fps: float, *, panel: bool = False) -> None:
+    """Render a run's log into ``out`` (a GIF or an MP4) with skelarm's player, without a window.
+
+    With ``panel``, each frame has the player's side panel: the time, the joint
+    angles, the tip, and the external force.
+    """
     player = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
+    command = [sys.executable, str(player), str(log), "--export", str(out), "--fps", f"{fps:g}"]
     subprocess.run(
-        [sys.executable, str(player), str(log), "--export", str(out), "--fps", f"{fps:g}"],
+        command + (["--panel"] if panel else []),
         check=True,
         capture_output=True,
         env=os.environ | {"QT_QPA_PLATFORM": "offscreen"},  # render without a window
     )
+
+
+def export_videos() -> None:
+    """Export every log, with every arm of ARMS and every tracker, and each recording, as MP4s for slides into VIDEOS.
+
+    Each video is one log, rendered by skelarm's player at VIDEO_FPS with its side
+    panel: each arm's whole run, the warm-up included. A run's video is named
+    ``recorded<log>_<arm>_<tracker>.mp4`` (VIDEO_ARMS), such as
+    ``recorded001_esn1_pd_z0.4_zero_velocity.mp4``, and a recording's
+    ``recorded<log>_as_recorded.mp4``; ``videos.csv`` lists each video's scenario, arm,
+    tracker, and the log it shows, and ``README.md`` (VIDEOS_README) explains them
+    and how to reproduce them, with the commit they were exported at.
+    """
+    VIDEOS.mkdir(parents=True, exist_ok=True)
+    rows, recordings = [], []
+    for log, title in VIDEO_LOGS.items():
+        for arm_name, tag, arm, _, _ in ARMS:
+            for damping in DAMPINGS:
+                for velocity, given in VELOCITIES.items():
+                    run = resolve_run_path(f"results/{run_name(stem_of(log, tag, velocity))}")
+                    path = run / f"pd_w20_z{damping:g}" / f"{arm}_00.sklog.npz"
+                    video = VIDEOS / f"recorded{log}_{VIDEO_ARMS[arm_name]}_pd_z{damping:g}_{velocity}_velocity.mp4"
+                    rows.append((video, title, arm_name, f"joint PD, damping ratio {damping:g}, {given}", path))
+        recorded = storage_root() / "data" / "recorded_forces" / f"recorded_forces_{log}.sklog.npz"
+        tracker = "joint PD, damping ratio 0.4, reference velocity, in the app"
+        recordings.append((VIDEOS / f"recorded{log}_as_recorded.mp4", title, "ESN #2", tracker, recorded))
+    for video, *_, path in rows + recordings:
+        player_export(path, video, VIDEO_FPS, panel=True)
+    with (VIDEOS / "videos.csv").open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["video", "scenario", "arm", "tracker", "log"])
+        for video, title, arm_name, tracker, path in rows + recordings:
+            writer.writerow([video.name, title, arm_name, tracker, path.relative_to(storage_root())])
+    git = [["git", "rev-parse", "--short", "HEAD"], ["git", "status", "--porcelain"]]
+    commit, changes = (subprocess.run(c, cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout for c in git)
+    readme = VIDEOS_README.format(
+        count=len(rows),
+        recordings=len(recordings),
+        logs="\n".join(f"| `recorded{log}` | {title} |" for log, title in VIDEO_LOGS.items()),
+        fps=VIDEO_FPS,
+        commit=commit.strip(),
+        dirty=" (with uncommitted changes)" if changes.strip() else "",
+        day=date.today().isoformat(),
+    )
+    (VIDEOS / "README.md").write_text(readme)
+    print(f"wrote {len(rows) + len(recordings)} videos and their README to {VIDEOS}")
 
 
 def export_animation(velocity: str) -> None:

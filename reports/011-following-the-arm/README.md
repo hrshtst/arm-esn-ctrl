@@ -158,7 +158,12 @@ draws `grid.png`, `undisturbed.png`, and `disturbed.png` and prints the tables o
 Section 3 from the copies. With `--logs`, it reads the runs' logs under the storage
 root, which are not kept in Git, to draw each arm's distance from the taught path and
 its joint angles and torques over time. With `--animations`, it exports `block.gif`
-and `pushes.gif`, each arm rendered by skelarm's player.
+and `pushes.gif`, each arm rendered by skelarm's player. With `--videos`, it exports
+the four runs drawn over time (undisturbed, the block, the pushes, and the start
+offset by +15° in both joints), for ESN #1, ESN #2, and the replay with each of the
+six trackers, as 72 MP4s for slides into
+`<storage root>/reports/011-following-the-arm/videos/`, explained in a `README.md`
+there; they are not kept in Git.
 
 ## 3. Results
 

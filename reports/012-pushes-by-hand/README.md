@@ -123,7 +123,11 @@ configuration, its run record, and its figures. [`make_figures.py`](make_figures
 draws `forces.png` and `pushes.png` and prints the tables of this report from the
 copies. With `--logs`, it compares each recording with its rerun, from the runs' logs
 under the storage root, which are not kept in Git. With `--animations`, it exports the
-animations of Section 3.6.
+animations of Section 3.6. With `--videos`, it exports the three logs, for ESN #1,
+ESN #2, and the replay with each of the six trackers, and the three recordings as
+made in the app, as 57 MP4s for slides into
+`<storage root>/reports/012-pushes-by-hand/videos/`, explained in a `README.md`
+there; they are not kept in Git.
 
 ## 3. Results
 
