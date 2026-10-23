@@ -3,7 +3,7 @@
 
 """Sweep ESN hyperparameters by how the robot follows the taught path with each ESN (Stage 2).
 
-    uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<sweep>.toml
+    uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<sweep>.toml [--workers 30]
 
 The configuration holds the ``[demonstrations]`` and ``[esn]`` tables of
 ``experiments/autonomous_esn.py``; a ``[sweep]`` table, which lists values for one
@@ -60,6 +60,9 @@ run directory also receives:
   worst path RMSE, the seeds with a failed run, the largest final distance, and
   the median latest arrival.
 
+With ``--workers``, the combinations are spread over that many processes, each
+computing with one thread; their results are the same as in one process.
+
 The runs are not saved. To look at one combination, copy its values into a
 configuration for ``autonomous_esn.py`` and run its ESN with ``robot_esn.py``.
 """
@@ -69,7 +72,12 @@ from __future__ import annotations
 import argparse
 import csv
 import itertools
+import multiprocessing
+import os
 import tomllib
+from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -87,7 +95,7 @@ from robot_esn import (
 )
 from sweep_esn import plot_sweep
 
-from arm_esn_ctrl.autonomous import load_setup
+from arm_esn_ctrl.autonomous import Setup, load_setup
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.disturbances import (
     check_recorded_arm,
@@ -145,9 +153,32 @@ PER_SETTING = {
 }
 
 
+@dataclass(frozen=True)
+class Context:
+    """What every combination's runs need, loaded once per process."""
+
+    config: dict[str, Any]
+    setup: Setup
+    simulator: dict[str, Any]
+    settings: list[Setting]
+    trackers: dict[str, tuple[TrackerConfig, tuple[NDArray[np.float64], NDArray[np.float64]]]]
+    duration: float
+    window: list[float]
+    spans: list[tuple[float, float]]
+    tolerance: float
+    ringing: tuple[float, float]
+    following: float
+
+
+_context: Context | None = None  # this process's, set by init_worker
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("config", type=Path, help="sweep configuration file (TOML)")
+    parser.add_argument(
+        "--workers", type=int, default=1, help="worker processes, of one thread each (default 1: in this process)"
+    )
     args = parser.parse_args()
 
     config, run_dir = start_run(args.config)
@@ -155,77 +186,32 @@ def main() -> None:
     if len(sweep) not in (1, 2, 3):
         msg = f"[sweep] must list one to three hyperparameters, not {len(sweep)}"
         raise ValueError(msg)
+    context = sweep_context(config)
     disturbance = config.get("disturbance")
-    # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
-    evaluation = recorded_evaluation(config["evaluation"], disturbance)
-    setup = load_setup(
-        {"demonstrations": config["demonstrations"], "esn": {"dt": config["esn"]["dt"]}, "evaluation": evaluation}
-    )
-    check_recorded_arm(disturbance, setup.skeleton)
+    check_recorded_arm(disturbance, context.setup.skeleton)
     keep_recorded_logs(disturbance, run_dir)
-    with (resolve_run_path(config["demonstrations"]["run"]) / "config.toml").open("rb") as f:
-        simulator = tomllib.load(f)["simulator"]
-    tracker = config["tracker"]
-    settings = tracker_settings(tracker)
-    end_posture = gain_posture(setup.demos.values())  # where the reaches end, for joint PD's gains
-    trackers = {}
-    for setting in settings:
-        tracker_config = TrackerConfig(
-            setting.law,
-            setting.omega,
-            tracker["acceleration_filter"],
-            damping=setting.damping,
-            reference_velocity=tracker.get("reference_velocity", True),
-            control_period=tracker.get("control_period"),
-        )
-        trackers[setting.name] = (tracker_config, setting.gains(tracker_config, setup.skeleton, end_posture))
-    duration = float(evaluation["duration"])
-    window = evaluation.get("effort_window", [0.0, duration])
-    spans = disturbance_spans(disturbance)
-    tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
-    ringing = ringing_settings(evaluation)
-    following = evaluation.get("following_window", FOLLOWING_WINDOW)
+    settings, spans = context.settings, context.spans
     print(
-        f"{len(setup.starts)} start postures, {len(settings)} tracker settings"
-        f" ({', '.join(setting.label for setting in settings)}), {duration:g} s runs"
+        f"{len(context.setup.starts)} start postures, {len(settings)} tracker settings"
+        f" ({', '.join(setting.label for setting in settings)}), {context.duration:g} s runs"
     )
     print(f"Disturbance: {disturbance or 'none'}")
 
     combinations = [dict(zip(sweep, values, strict=True)) for values in itertools.product(*sweep.values())]
     rows, run_rows = [], []
-    for k, combination in enumerate(combinations):
-        esn = ReachingEsn(EsnConfig(**(config["esn"] | combination)))
-        esn.fit(list(setup.demos.values()))
-        runs = []
-        for setting in settings:
-            tracker_config, gains = trackers[setting.name]
-            for i, start in enumerate(setup.starts):
-                log = track(
-                    posed(setup.skeleton, start.q),
-                    EsnSource(esn),
-                    tracker_config,
-                    gains,
-                    period=esn.config.dt,
-                    warmup_steps=esn.config.warmup_steps,
-                    duration=duration,
-                    dt=simulator["dt"],
-                    enforce_limits=simulator.get("enforce_limits", True),
-                    external_force=make_disturbance(
-                        disturbance,
-                        endpoint_positions(setup.skeleton, start.q[np.newaxis])[0],
-                        setup.target,
-                        dt=simulator["dt"],
-                    ),
-                )
-                metrics = arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
-                hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, duration))
-                runs.append(
-                    {"setting": setting.name, "start": i, "origin": start.origin}
-                    | metrics
-                    | {"detour_m": detour(hand, setup.demo_hands[nearest_demonstration(start.q, setup.demos)])}
-                    | {"failed": not metrics["success"] or metrics["hold_observed_s"] < setup.hold - 1e-9}
-                )
-        row = combination | summarize(runs, settings, len(spans))
+    if args.workers == 1:
+        results: Iterable[tuple[dict[str, Any], list[dict[str, Any]]]] = (
+            sweep_combination(context, combination) for combination in combinations
+        )
+        pool = None
+    else:
+        # Many processes of one thread each, rather than threads that the processes would contend for.
+        os.environ["OPENBLAS_NUM_THREADS"] = os.environ["OMP_NUM_THREADS"] = "1"
+        pool = ProcessPoolExecutor(
+            args.workers, mp_context=multiprocessing.get_context("spawn"), initializer=init_worker, initargs=(config,)
+        )
+        results = pool.map(sweep_job, combinations)
+    for k, (combination, (row, runs)) in enumerate(zip(combinations, results, strict=True)):
         rows.append(row)
         run_rows += [combination | run for run in runs]
         values = ", ".join(f"{name}={value:g}" for name, value in combination.items())
@@ -233,8 +219,11 @@ def main() -> None:
         returns = f"; {row['unreturned']} not back, latest return {row['latest_return_s']:.2f} s" if spans else ""
         print(
             f"[{k + 1:3d}/{len(combinations)}] {values}: {row['failures']} of {row['runs']} runs fail;"
-            f" worst path RMSE {1000 * row['worst_path_rmse_m']:6.1f} mm; arrival {arrivals}{returns}"
+            f" worst path RMSE {1000 * row['worst_path_rmse_m']:6.1f} mm; arrival {arrivals}{returns}",
+            flush=True,
         )
+    if pool is not None:
+        pool.shutdown()
 
     tables = {"sweep.csv": rows, "runs.csv": run_rows}
     names = [name for name in sweep if name != "seed"]  # the settings, each tried with every seed
@@ -268,6 +257,109 @@ def main() -> None:
                 run_dir / "seeds.png", dpi=150
             )
     print(f"\nWrote the results to {run_dir}")
+
+
+def sweep_context(config: dict[str, Any]) -> Context:
+    """What every combination's runs need, from the sweep's configuration."""
+    disturbance = config.get("disturbance")
+    # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
+    evaluation = recorded_evaluation(config["evaluation"], disturbance)
+    setup = load_setup(
+        {"demonstrations": config["demonstrations"], "esn": {"dt": config["esn"]["dt"]}, "evaluation": evaluation}
+    )
+    with (resolve_run_path(config["demonstrations"]["run"]) / "config.toml").open("rb") as f:
+        simulator = tomllib.load(f)["simulator"]
+    tracker = config["tracker"]
+    settings = tracker_settings(tracker)
+    end_posture = gain_posture(setup.demos.values())  # where the reaches end, for joint PD's gains
+    trackers = {}
+    for setting in settings:
+        tracker_config = TrackerConfig(
+            setting.law,
+            setting.omega,
+            tracker["acceleration_filter"],
+            damping=setting.damping,
+            reference_velocity=tracker.get("reference_velocity", True),
+            control_period=tracker.get("control_period"),
+        )
+        trackers[setting.name] = (tracker_config, setting.gains(tracker_config, setup.skeleton, end_posture))
+    duration = float(evaluation["duration"])
+    return Context(
+        config,
+        setup,
+        simulator,
+        settings,
+        trackers,
+        duration,
+        evaluation.get("effort_window", [0.0, duration]),
+        disturbance_spans(disturbance),
+        evaluation.get("return_tolerance", RETURN_TOLERANCE),
+        ringing_settings(evaluation),
+        evaluation.get("following_window", FOLLOWING_WINDOW),
+    )
+
+
+def init_worker(config: dict[str, Any]) -> None:
+    """Load this process's context."""
+    global _context
+    _context = sweep_context(config)
+
+
+def sweep_job(combination: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Run one combination in this worker."""
+    assert _context is not None
+    return sweep_combination(_context, combination)
+
+
+def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Train the ESN of ``combination`` and run it from every start posture with every tracker setting.
+
+    Returns its row of ``sweep.csv`` and its runs' metrics, one dict a run.
+    """
+    setup, simulator, settings = context.setup, context.simulator, context.settings
+    disturbance = context.config.get("disturbance")
+    esn = ReachingEsn(EsnConfig(**(context.config["esn"] | combination)))
+    esn.fit(list(setup.demos.values()))
+    runs = []
+    for setting in settings:
+        tracker_config, gains = context.trackers[setting.name]
+        for i, start in enumerate(setup.starts):
+            log = track(
+                posed(setup.skeleton, start.q),
+                EsnSource(esn),
+                tracker_config,
+                gains,
+                period=esn.config.dt,
+                warmup_steps=esn.config.warmup_steps,
+                duration=context.duration,
+                dt=simulator["dt"],
+                enforce_limits=simulator.get("enforce_limits", True),
+                external_force=make_disturbance(
+                    disturbance,
+                    endpoint_positions(setup.skeleton, start.q[np.newaxis])[0],
+                    setup.target,
+                    dt=simulator["dt"],
+                ),
+            )
+            metrics = arm_metrics(
+                log,
+                i,
+                setup,
+                esn.config.dt,
+                context.window,
+                context.spans,
+                context.tolerance,
+                context.ringing,
+                context.following,
+            )
+            hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, context.duration))
+            runs.append(
+                {"setting": setting.name, "start": i, "origin": start.origin}
+                | metrics
+                | {"detour_m": detour(hand, setup.demo_hands[nearest_demonstration(start.q, setup.demos)])}
+                | {"failed": not metrics["success"] or metrics["hold_observed_s"] < setup.hold - 1e-9}
+            )
+    return combination | summarize(runs, settings, len(context.spans)), runs
 
 
 def detour(hand: NDArray[np.float64], taught_hand: NDArray[np.float64], every: int = 5) -> float:
