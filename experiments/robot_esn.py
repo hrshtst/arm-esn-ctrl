@@ -114,6 +114,7 @@ from arm_esn_ctrl.metrics import (
     disturbance_returns,
     disturbance_ringing,
     hand_speed,
+    motor_effort,
     path_progress,
     path_rmse,
 )
@@ -444,6 +445,10 @@ def arm_metrics(
     - ``settling_time_s``: the time from which the hand stays within the goal
       radius until the end of the run (NaN if it ends outside);
     - ``final_distance_m``: the hand's distance to the target at the end of the run;
+    - ``task_torque_nms``, ``task_effort_n2m2s``, and ``task_work_j``: how hard the
+      motors work over the whole task, whatever the effort window: the integrals of
+      the joint torques' sizes, of their squares, and of the positive work the
+      joints do (see :func:`arm_esn_ctrl.metrics.motor_effort`);
 
     and over the effort window (``effort_window`` in ``[evaluation]``):
 
@@ -532,6 +537,7 @@ def arm_metrics(
     for metric, values in measured.items():
         disturbance_metrics |= dict(zip(per_disturbance(metric, len(spans)), values or [nan], strict=True))
     reference_path_rmse = nan if reference_hand is None else path_rmse(reference_hand, taught_hand)
+    task_torque, task_effort, task_work = motor_effort(times[task], tau[task], log.channel("dq")[task])
     return run_metrics(run, setup) | {
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
         "reference_path_rmse_m": reference_path_rmse,
@@ -539,6 +545,9 @@ def arm_metrics(
         "peak_hand_speed_mps": float(hand_speed(setup.times, hand).max()),
         "settling_time_s": settling_time,
         "final_distance_m": float(distance[-1]),
+        "task_torque_nms": task_torque,
+        "task_effort_n2m2s": task_effort,
+        "task_work_j": task_work,
         "peak_torque_nm": float(np.abs(tau[in_window]).max()),
         "effort_n2m2s": float(np.sum(tau[in_window] ** 2) * np.diff(times).mean()),
         "peak_external_force_n": float(np.linalg.norm(force[in_window], axis=1).max()),

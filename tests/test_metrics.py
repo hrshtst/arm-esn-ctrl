@@ -15,6 +15,7 @@ from arm_esn_ctrl.metrics import (
     hold_metrics,
     jitter,
     join_index,
+    motor_effort,
     onset_index,
     path_distance,
     path_progress,
@@ -372,3 +373,27 @@ def test_following_is_undefined_without_a_displacement_or_a_sample():
 
     assert np.isnan(unmoved)
     assert np.isnan(late)
+
+
+def test_the_motors_effort_sums_the_joints_and_counts_only_the_work_they_do():
+    times = np.arange(0.0, 2.0, 0.002)
+    torques = np.column_stack([np.full(len(times), 3.0), np.full(len(times), -0.5)])
+    velocities = np.column_stack([np.full(len(times), 2.0), np.full(len(times), 4.0)])  # joint 2 is driven backward
+    duration = len(times) * 0.002
+
+    torque, squared, work = motor_effort(times, torques, velocities)
+
+    assert torque == pytest.approx((3.0 + 0.5) * duration)
+    assert squared == pytest.approx((9.0 + 0.25) * duration)
+    assert work == pytest.approx(6.0 * duration)  # joint 2's negative power is not recovered
+
+
+def test_pressing_without_moving_costs_torque_but_no_work():
+    times = np.arange(0.0, 1.0, 0.002)
+    torques = np.full((len(times), 2), 4.0)
+
+    torque, squared, work = motor_effort(times, torques, np.zeros_like(torques))
+
+    assert torque > 0.0
+    assert squared > 0.0
+    assert work == 0.0

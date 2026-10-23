@@ -314,6 +314,32 @@ def disturbance_following(
     return result
 
 
+def motor_effort(
+    times: NDArray[np.float64], torques: NDArray[np.float64], velocities: NDArray[np.float64]
+) -> tuple[float, float, float]:
+    """Return how hard the motors work: the accumulated torque, the squared torque, and the positive work.
+
+    ``torques`` (N m) and ``velocities`` (rad/s) are the joints' at ``times``, evenly
+    spaced, shaped ``(n, joints)``. Each is an integral over ``times`` (a sum over
+    the samples, times their spacing) of a sum over the joints:
+
+    - the accumulated torque, of |τ_i| (N m s);
+    - the squared torque, of τ_i² (N² m² s): a motor's current is proportional to
+      its torque, and its copper losses to the square of the current;
+    - the positive work, of max(τ_i q̇_i, 0) (J): the mechanical work the motors
+      do, each joint on its own, none of it recovered while a joint is driven
+      backward. Pressing against a block without moving costs no work, while the
+      squared torque grows.
+    """
+    spacing = float(np.diff(times).mean())
+    power = torques * velocities
+    return (
+        float(np.abs(torques).sum() * spacing),
+        float(np.sum(torques**2) * spacing),
+        float(np.clip(power, 0.0, None).sum() * spacing),
+    )
+
+
 def path_progress(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:
     """Return how far along the ``reference`` path the nearest point to each of ``points`` lies.
 
