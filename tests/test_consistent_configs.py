@@ -90,3 +90,42 @@ def test_the_guards_runs_meet_the_grids_tracker_and_disturbances(scenario):
     assert config["tracker"] == grid["tracker"]
     assert config["evaluation"] == grid["evaluation"]
     assert config["disturbance"] == grid["disturbance"]
+
+
+def test_the_choice_reads_one_run_of_seeds_0_to_9_per_leak_rate_and_scenario():
+    config = load("select")
+
+    assert set(config["runs"]) == {*SCENARIOS, "replay"}
+    for scenario in SCENARIOS:
+        assert [path.rsplit("-", 1)[1] for path in config["runs"][scenario]] == [
+            f"sweep_lr{leak:g}_{scenario}" for leak in LEAKS
+        ]
+    assert [path.rsplit("-", 1)[1] for path in config["runs"]["replay"]] == ["guard_block_robot", "guard_pushes_robot"]
+    assert config["rule"] == {"chosen": 2, "fallback_seeds": 9}
+
+
+CHECKS = {"size": {"n_neurons": [100, 200, 400, 800]}, "ridge": {"ridge": [1e-4, 1e-3, 1e-2, 1e-1, 1.0]}}
+
+
+@pytest.mark.parametrize("check", sorted(CHECKS))
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+def test_the_size_and_ridge_checks_are_the_grid_at_esn_1s_setting(check, scenario):
+    config, grid = load(f"{check}_{scenario}"), load(f"sweep_lr0.03_{scenario}")
+
+    assert config["sweep"] == CHECKS[check] | {"seed": SEEDS[""]}
+    assert {key: value for key, value in config.items() if key != "sweep"} == {
+        key: value for key, value in grid.items() if key != "sweep"
+    }
+    assert (config["esn"]["spectral_radius"], config["esn"]["input_scaling"]) == (1.2, 1.5)
+
+
+@pytest.mark.parametrize(
+    ("name", "scaling", "seed"),
+    [("esn1_lr0.03_sr1.2_is1.5_seed8", 1.5, 8), ("esn2_lr0.03_sr1.2_is1_seed2", 1.0, 2)],
+)
+def test_the_chosen_esns_are_trained_with_the_protocols_settings(name, scaling, seed):
+    config = load(name)
+
+    assert config["demonstrations"] == DEMONSTRATIONS
+    chosen = {"leak_rate": 0.03, "spectral_radius": 1.2, "input_scaling": scaling, "seed": seed}
+    assert config["esn"] == FIXED_ESN | chosen

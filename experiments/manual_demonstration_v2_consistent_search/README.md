@@ -165,15 +165,32 @@ The report also ranks the qualifying settings by the measures the earlier search
 ranked by (the path RMSE, the ringing, and the return), to show how much the choice
 depends on the measure, and asks of the held-out seeds whether the qualifying
 settings qualify again and keep their order (the rank correlation of the following).
-The two ESNs are then trained by [`autonomous_esn.py`](../autonomous_esn.py), by
-configurations written once they are known.
+The two ESNs are then trained by [`autonomous_esn.py`](../autonomous_esn.py):
+
+```bash
+uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_consistent_search/esn1_lr0.03_sr1.2_is1.5_seed8.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `select.toml` | the rule over the runs of step 1 with seeds 0 to 9, and the guard's runs of step 0 |
+| `esn1_lr0.03_sr1.2_is1.5_seed8.toml`, `esn2_lr0.03_sr1.2_is1_seed2.toml` | ESN #1 and ESN #2, as the rule chose them, trained and run on their own from the 49 offset starts |
 
 ### Step 3: the size and the ridge
 
-At ESN #1's setting, by configurations written once it is known, every scenario of
-step 1 with seeds 0 to 9: 100, 200, 400, and 800 neurons, at the ridge of 10⁻², and
-ridges of 10⁻⁴, 10⁻³, 10⁻², 10⁻¹, and 1, with 400 neurons. They are reported with the
-grid's measures, and do not change the choice.
+At ESN #1's setting, every scenario of step 1 with seeds 0 to 9: 100, 200, 400, and
+800 neurons, at the ridge of 10⁻², and ridges of 10⁻⁴, 10⁻³, 10⁻², 10⁻¹, and 1, with
+400 neurons. They are reported with the grid's measures, and do not change the
+choice.
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_consistent_search/size_offsets.toml --workers 30
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `size_{nominal,block,pushes,offsets}.toml` | 100 to 800 neurons × seeds 0 to 9 at ESN #1's setting, in one scenario |
+| `ridge_{nominal,block,pushes,offsets}.toml` | ridges of 10⁻⁴ to 1 × seeds 0 to 9 at ESN #1's setting, in one scenario |
 
 ## Part 2: the trackers (report 018)
 
