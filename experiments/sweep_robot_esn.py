@@ -3,7 +3,7 @@
 
 """Sweep ESN hyperparameters by how the robot follows the taught path with each ESN (Stage 2).
 
-    uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<sweep>.toml [--workers 30]
+    uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_robot_tracking/<sweep>.toml
 
 The configuration holds the ``[demonstrations]`` and ``[esn]`` tables of
 ``experiments/autonomous_esn.py``; a ``[sweep]`` table, which lists values for one
