@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_search/bias_esn2_pushes.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_consistent_search/bias_esn2_pushes.toml --workers 30"
+started = 2026-10-26 14:59:04+09:00
+host = "delbosque"
+commit = "6f4e35f554ca7d0115930f6c1fee9d0385bc4301"
+uncommitted_changes = false

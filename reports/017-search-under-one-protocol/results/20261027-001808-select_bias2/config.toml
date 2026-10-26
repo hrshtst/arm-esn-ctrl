@@ -1,0 +1,38 @@
+# The runs of step 5's bias check around the qualifying region at a bias scale of 2 (leak rates
+# 0.015 to 0.04, seeds 0 to 9), under the storage root, and the rule's settings: the rule's
+# measures, reported beside the grid's; they do not change the choice (see README.md).
+
+[runs]
+nominal = [
+  "results/manual_demonstration_v2_consistent_search/20261026-211536-bias2_lr0.015_nominal",
+  "results/manual_demonstration_v2_consistent_search/20261026-220012-bias2_lr0.02_nominal",
+  "results/manual_demonstration_v2_consistent_search/20261026-224501-bias2_lr0.03_nominal",
+  "results/manual_demonstration_v2_consistent_search/20261026-233020-bias2_lr0.04_nominal",
+]
+block = [
+  "results/manual_demonstration_v2_consistent_search/20261026-211628-bias2_lr0.015_block",
+  "results/manual_demonstration_v2_consistent_search/20261026-220106-bias2_lr0.02_block",
+  "results/manual_demonstration_v2_consistent_search/20261026-224554-bias2_lr0.03_block",
+  "results/manual_demonstration_v2_consistent_search/20261026-233113-bias2_lr0.04_block",
+]
+pushes = [
+  "results/manual_demonstration_v2_consistent_search/20261026-211730-bias2_lr0.015_pushes",
+  "results/manual_demonstration_v2_consistent_search/20261026-220207-bias2_lr0.02_pushes",
+  "results/manual_demonstration_v2_consistent_search/20261026-224655-bias2_lr0.03_pushes",
+  "results/manual_demonstration_v2_consistent_search/20261026-233216-bias2_lr0.04_pushes",
+]
+offsets = [
+  "results/manual_demonstration_v2_consistent_search/20261026-211833-bias2_lr0.015_offsets",
+  "results/manual_demonstration_v2_consistent_search/20261026-220310-bias2_lr0.02_offsets",
+  "results/manual_demonstration_v2_consistent_search/20261026-224757-bias2_lr0.03_offsets",
+  "results/manual_demonstration_v2_consistent_search/20261026-233318-bias2_lr0.04_offsets",
+]
+# report 011's ESN #1 and the replay with the search's tracker: the replay's ringing sets the guard
+replay = [
+  "results/manual_demonstration_v2_consistent_search/20261023-201957-guard_block_robot",
+  "results/manual_demonstration_v2_consistent_search/20261023-202012-guard_pushes_robot",
+]
+
+[rule]
+chosen = 2
+fallback_seeds = 9

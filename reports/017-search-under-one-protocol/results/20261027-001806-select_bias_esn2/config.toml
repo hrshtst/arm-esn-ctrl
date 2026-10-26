@@ -1,0 +1,18 @@
+# The runs of step 5's bias check at ESN #2's setting (bias scales of 0 to 2, seeds 0 to 9),
+# under the storage root, and the rule's settings: the rule's measures of each scale, reported
+# beside the grid's; they do not change the choice (see README.md).
+
+[runs]
+nominal = ["results/manual_demonstration_v2_consistent_search/20261026-145824-bias_esn2_nominal"]
+block = ["results/manual_demonstration_v2_consistent_search/20261026-145842-bias_esn2_block"]
+pushes = ["results/manual_demonstration_v2_consistent_search/20261026-145904-bias_esn2_pushes"]
+offsets = ["results/manual_demonstration_v2_consistent_search/20261026-145927-bias_esn2_offsets"]
+# report 011's ESN #1 and the replay with the search's tracker: the replay's ringing sets the guard
+replay = [
+  "results/manual_demonstration_v2_consistent_search/20261023-201957-guard_block_robot",
+  "results/manual_demonstration_v2_consistent_search/20261023-202012-guard_pushes_robot",
+]
+
+[rule]
+chosen = 2
+fallback_seeds = 9

@@ -1,0 +1,3 @@
+esn,leak_rate,spectral_radius,input_scaling,seed
+ESN #1,0.03,1.35,1.5,3
+ESN #2,0.03,1.35,2.0,3

@@ -11,7 +11,8 @@ before any run:
 - every ESN run with the search's tracker, undisturbed, under the block, under the
   pushes, and from all 49 offset starts;
 - ESN #1 and ESN #2 chosen by report 011's rule, written as code;
-- the choice checked on 5,040 held-out ESNs, and on the reservoir's size and ridge.
+- the choice checked on 5,040 held-out ESNs, and on the reservoir's size and ridge;
+- added after the grid, the scale of the reservoir's bias checked as well.
 
 The findings:
 
@@ -42,6 +43,15 @@ The findings:
   - 100, 200, and 800 neurons pass 6, 8, and 7 seeds; ridges of 10⁻⁴ and 10⁻³ overfit,
     and pass none; 10⁻¹ and 1 pass 9 and 6.
   - The following hardly changes, 0.72 to 0.78, wherever seeds pass.
+- **The bias is needed. Scaling it moves the qualifying settings, but none follows
+  more.** Each neuron's bias, drawn from [−1, 1] and not scaled in the grid, was
+  scaled by 0 to 2 around the qualifying region:
+  - Without a bias, no setting qualifies: 214 of the 640 ESNs pass, against 426 with
+    the grid's scale of 1. Most of the others end away from the goal after the pushes.
+  - At scales of 0.5 and 2, 13 and 6 settings qualify, against 11. A smaller bias
+    favours smaller leak rates and spectral radii; a larger one, larger spectral
+    radii. The best follow by 0.76 and 0.75, as ESN #1's setting does (0.76).
+  - ESN #1's and ESN #2's settings qualify only at the scale of 1. The choice stands.
 - **On the robot with the search's tracker,** both ESNs repeat report 011's runs: they
   wait under the block, give way to the pushes, ring less than the replay, and come
   back to the taught path more slowly.
@@ -62,7 +72,8 @@ The findings:
    - on counting the offset starts for every ESN;
    - on the measure the settings are ranked by;
    - on the seeds;
-   - on the reservoir's size and ridge.
+   - on the reservoir's size and ridge;
+   - on the scale of its bias (asked after the grid had run).
 3. **The chosen ESNs:** how do they compare on the robot with the replay and the
    progress replay, with the search's tracker? How hard do the motors work?
 
@@ -90,7 +101,7 @@ robot by the arm's measured joint angles every 10 ms. Fixed:
 | --- | --- |
 | Neurons | 400, tanh |
 | Sparsity (nonzero reservoir connections) | 0.05 |
-| Bias | yes, random |
+| Bias | one per neuron, drawn uniformly from [−1, 1] by the seed and not scaled: a bias scale of 1, apart from the input scaling |
 | Ridge | 10⁻² |
 | Warm-up (the start posture held before the ESN moves, in training and on the robot) | 1 s |
 | Sampling period | 10 ms |
@@ -177,6 +188,7 @@ medians, and typical seeds exactly.
 | Seeds | 0 to 9 | 0 to 9, and 10 to 19 held out |
 | The choice | in the robot app, from a shortlist of three | by the rule, the typical seeds of the top two |
 | Size and ridge | fixed | fixed, and checked at ESN #1's setting |
+| The bias's scale | fixed at 1 | fixed at 1, and checked afterwards at 0 to 2 |
 | How hard the motors work | not measured | the accumulated torque, the squared torque, and the positive work |
 
 ### Reproducing the results
@@ -197,11 +209,17 @@ configurations are in
 | `sweep_lr<leak rate>_<scenario>_seeds10to19` (48), `size_<scenario>` (4), `ridge_<scenario>` (4) | as the sweeps | `f00cb38` |
 | `select_seeds10to19`, `select_size`, `select_ridge` | as `select` | `8056861` |
 | `<scenario>_robot_esn1_lr0.03_sr1.2_is1.5_seed8`, `<scenario>_robot_esn2_lr0.03_sr1.2_is1_seed2` (8) | as the guard's | `eadfff8` |
+| `bias_esn{1,2}_<scenario>` (8), `bias{0,0.5,2}_lr<leak rate>_<scenario>` (48) | as the sweeps | `6f4e35f` |
+| `select_bias_esn1`, `select_bias_esn2`, `select_bias0`, `select_bias0.5`, `select_bias2` | as `select` | `e30c1c1` |
 | [`summary`](results/summary) | `uv run python reports/017-search-under-one-protocol/make_figures.py --logs` | |
+
+The bias checks need rclib's scaling of the bias, from `f61d5ae` on (rclib `7f81902`);
+the earlier runs used the rclib before it, which drew the same bias, unscaled.
 
 **Running time.** Each set of 48 sweeps took 23.5 h on 30 worker processes of one
 thread each (an i9-14900KF); each leak rate's sweep from the offset starts takes
-1.8 h of it.
+1.8 h of it. The bias checks took 31 min at the chosen ESNs' settings and 9.0 h around
+the qualifying region.
 
 **Checks against the earlier runs.** Before the grid, the current code ran again what
 reports 011 and 015 ran (the experiment's step 0):
@@ -217,6 +235,15 @@ The grid's runs at report 011's settings repeat report 011's:
 
 The two ESNs, trained again here, repeat report 011's runs from the 49 starts
 exactly. Their robot runs repeat their sweeps' runs within 10⁻⁸.
+
+The bias checks, with the new rclib, repeat the grid's runs:
+- at a scale of 1, the 20 ESNs of ESN #1's and ESN #2's settings, within a relative
+  2.7 × 10⁻⁹;
+- the 60 ESNs that both bias checks ran, at scales of 0, 0.5, and 2, within
+  1.8 × 10⁻⁸;
+- with every outcome the same.
+
+Two runs of the same ESN in different sweeps agree to rounding, then, not bit for bit.
 
 **What is kept here.** Every run record (`run.toml`) shows no uncommitted changes.
 Each run directory here holds:
@@ -410,7 +437,94 @@ ESN #1's setting itself; they repeat the grid's runs.
   the outcome depends on the size and the ridge. It does not show that 400 and 10⁻²
   are best for the reservoir in general.
 
-### 3.6 The chosen ESNs on the robot
+### 3.6 The bias scale
+
+Added after the grid had run, and so outside the protocol; like the size and ridge
+checks, it does not change the choice.
+
+Each neuron's bias is drawn uniformly from [−1, 1] by the seed. The grid leaves it
+unscaled, a bias scale of 1, apart from the input scaling. Here it is multiplied by
+0 to 2. The draws do not depend on the scale: a seed keeps its reservoir and input
+weights, and a scale of 0 removes the bias.
+
+**At the chosen ESNs' settings,** seeds 0 to 9, every scenario of the search (ESN #1's
+setting / ESN #2's):
+
+| Bias scale | Passing seeds | Following | Ringing | Return | Undisturbed path RMSE |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 7 / 6 | 0.80 / 0.79 | 4.95 / 5.02 mm | 4.88 / 5.68 s | 0.73 / 0.89 mm |
+| 0.25 | 10 / 9 | 0.76 / 0.76 | 5.39 / 5.48 mm | 2.78 / 3.94 s | 0.65 / 0.82 mm |
+| 0.5 | 8 / 7 | 0.75 / 0.75 | 5.59 / 5.88 mm | 3.11 / 3.51 s | 0.65 / 0.83 mm |
+| **1** | **10 / 10** | 0.76 / 0.74 | 5.68 / 5.72 mm | 2.92 / 3.27 s | 0.69 / 0.88 mm |
+| 2 | 8 / 5 | 0.78 / 0.80 | 5.14 / 5.09 mm | 3.47 / 5.79 s | 0.79 / 1.13 mm |
+
+The figures are medians over the seeds. The row of scale 1 repeats the grid's runs.
+
+- **Only the scale of 1 passes all ten seeds at both settings.** 0.25 passes ten at
+  ESN #1's setting and nine at ESN #2's.
+- **Most failing seeds fail under the pushes:** 16 of the 20, 14 of them ending away
+  from the goal. A few fail under the block or from some of the offset starts. At a
+  scale of 2, one of ESN #2's setting's seeds fails in every scenario.
+- **At 0 and 2, both settings follow a little more and come back more slowly:** 0.78
+  to 0.80, and 3.5 to 5.8 s. They ring a little less, 4.95 to 5.14 mm. At 0.25 and
+  0.5, they stay within 0.02 of the scale of 1 in the following and within 0.3 mm in
+  the ringing.
+
+**Around the qualifying region:** leak rates 0.015 to 0.04, spectral radii 0.99 to 1.5,
+and input scalings 0.5 to 2, seeds 0 to 9, every scenario of the search, at scales of
+0, 0.5, and 2. These 64 settings hold all 11 that qualify in the grid, whose runs give
+the scale of 1.
+
+![Each setting's passing seeds at each bias scale](results/summary/bias.png)
+
+| Bias scale | ESNs passing, of 640 | ESNs failing undisturbed / block / pushes / offsets | Settings with 10 / 9 seeds passing |
+| ---: | ---: | --- | --- |
+| 0 | 214 | 145 / 212 / 388 / 231 | 0 / 0 |
+| 0.5 | 393 | 77 / 87 / 195 / 157 | 13 / 5 |
+| **1** (the grid) | **426** | 41 / 59 / 148 / 126 | 11 / 10 |
+| 2 | 332 | 125 / 182 / 263 / 220 | 6 / 10 |
+
+The top three qualifying settings at each scale, ranked by the rule (medians over the
+seeds):
+
+| Bias scale | Rank | Leak rate | Spectral radius | Input scaling | Following | Ringing | Return | Undisturbed path RMSE | At a scale of 1: passing seeds, rank |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 0.5 | 1 | 0.02 | 0.99 | 2 | 0.76 | 5.39 mm | 3.24 s | 0.74 mm | 8, - |
+| 0.5 | 2 | 0.02 | 0.99 | 1.5 | 0.74 | 5.39 mm | 3.09 s | 0.82 mm | 10, 4 |
+| 0.5 | 3 | 0.02 | 1.2 | 2 | 0.73 | 5.51 mm | 3.00 s | 0.63 mm | 10, 7 |
+| **1** | 1 | 0.03 | 1.2 | 1.5 | 0.76 | 5.68 mm | 2.92 s | 0.69 mm | 10, 1 (ESN #1's) |
+| **1** | 2 | 0.03 | 1.2 | 1 | 0.74 | 5.72 mm | 3.27 s | 0.88 mm | 10, 2 (ESN #2's) |
+| **1** | 3 | 0.03 | 1.35 | 1.5 | 0.73 | 6.14 mm | 2.84 s | 0.58 mm | 10, 3 |
+| 2 | 1 | 0.03 | 1.35 | 1.5 | 0.75 | 5.53 mm | 2.97 s | 0.71 mm | 10, 3 |
+| 2 | 2 | 0.03 | 1.35 | 2 | 0.73 | 5.47 mm | 2.60 s | 0.55 mm | 8, - |
+| 2 | 3 | 0.03 | 1.5 | 1.5 | 0.72 | 5.72 mm | 2.73 s | 0.61 mm | 7, - |
+
+- **Without a bias, no setting qualifies,** and none passes more than eight seeds.
+  - 388 of the 426 failing ESNs fail under the pushes, most ending away from the goal.
+  - 135 fail in every scenario, 101 of them at an input scaling of 0.5. At that
+    scaling, 5 of the 160 ESNs pass, against 73 at a scale of 1.
+- **At 0.5 and 2, about as many settings qualify as at 1, but elsewhere:**
+  - **At 0.5,** 13, at leak rates 0.015 and 0.02 and input scalings 1.5 and 2, down to
+    the spectral radius of 0.99. None qualifies at 0.03, and leak rate 0.04 passes 58
+    of its 160 ESNs.
+  - **At 2,** 6, at spectral radii 1.35 and 1.5. An input scaling of 0.5 passes 17 of
+    its 160.
+  - Seven of the 13 at 0.5, and two of the 6 at 2, qualify at 1 as well; one setting
+    (leak rate 0.02, spectral radius 1.35, input scaling 2) qualifies at all three.
+  - ESN #1's and ESN #2's settings, and leak rate 0.03, spectral radius 1.35, input
+    scaling 1, qualify at 1 alone.
+- **None follows more than ESN #1's setting.**
+  - The best at 0.5 follows by 0.76, and at 2 by 0.75, against 0.76. They ring 5.39 and
+    5.53 mm, against 5.68 mm. They come back in 3.24 and 2.97 s, against 2.92 s.
+  - The scale of 1 passes the most ESNs, 426 of the 640, against 393 at 0.5 and 332
+    at 2. It has the fewest failing in each scenario.
+- **The region limits what this shows.** At 0.5, the qualifying settings reach the
+  region's smallest leak rate and spectral radius; at 2, its largest spectral radius
+  and input scaling. Settings beyond them may qualify too, and follow more. The check
+  shows that the grid's scale of 1 holds against 0.5 and 2 within the region. It
+  does not tune the bias scale.
+
+### 3.7 The chosen ESNs on the robot
 
 The ESNs, as trained here:
 
@@ -420,7 +534,7 @@ The ESNs, as trained here:
 | Spectral radius | 1.2 | 1.2 |
 | Input scaling | 1.5 | 1 |
 | Seed | 8 | 2 |
-| Fixed | 400 tanh neurons, sparsity 0.05, a random bias, ridge 10⁻², a 1 s warm-up, a 10 ms period | the same |
+| Fixed | 400 tanh neurons, sparsity 0.05, a bias drawn from [−1, 1] and not scaled, ridge 10⁻², a 1 s warm-up, a 10 ms period | the same |
 | Training | teacher forcing on the take (`demo_00_filtered`, untrimmed), without noise | the same |
 
 Each runs against the replay and the progress replay with the search's tracker, in
@@ -533,6 +647,13 @@ ESN #1's joint angles and torques over time, against both replays (ESN #2's:
 - **The rule's measure decides the choice among the qualifying settings.** Ranked by
   the path RMSE, the ringing, or the return, as the earlier searches were, the top
   setting is a different one each time, the return's being report 007's choice.
+- **The bias is needed; its scale moves the qualifying settings, not the best
+  following.**
+  - Without a bias, no setting near the qualifying region passes with every seed.
+  - At half or twice the grid's scale, other settings qualify, at smaller or larger
+    spectral radii, and the best of them follow as ESN #1's setting does.
+  - The chosen settings qualify at the grid's scale alone: the search fitted the
+    leak rate, spectral radius, and input scaling to that scale.
 - **Waiting is cheap, following costs the return.** The ESNs' motors work a quarter
   of the replay's undisturbed and under the block, and alike under the pushes. A
   pushed arm whose reference goes with it comes back over seconds, where the replays
@@ -556,3 +677,9 @@ ESN #1's joint angles and torques over time, against both replays (ESN #2's:
    - A closing table of the claims of reports 011 to 016.
 3. **The offset starts nearer straight:** why starts with joint 2 at −10° to −15° fail
    most, and whether the warm-up or the take's own start decides it.
+4. **The bias:**
+   - Why the ESNs without a bias end away from the goal after a push, with report
+     019's analyses. A reservoir without a bias is odd-symmetric in its state and
+     input (J. Herteux and C. Räth, "Breaking symmetries of the reservoir equations
+     in echo state networks," *Chaos*, 30:123142, 2020).
+   - Should the bias scale be tuned, the region widened past its edges at 0.5 and 2.

@@ -20,13 +20,16 @@ runs' metrics), it prints the tables of the report and draws into
 - ``following.png``: each setting's median ringing against its median following
   (Section 3.3);
 - ``held_out.png``: each setting's passing seeds and median following, seeds 0 to 9
-  against the held-out seeds 10 to 19 (Section 3.4).
+  against the held-out seeds 10 to 19 (Section 3.4);
+- ``bias.png``: around the qualifying region, each setting's passing seeds at each
+  bias scale, a panel per scale and leak rate, the grid's runs giving the scale of 1
+  (Section 3.6).
 
 With ``--logs``, it reads the robot runs' logs, which are not kept in Git, from the
 runs under the storage root, and draws ``joints_esn1.png``, ``torques_esn1.png``,
 ``joints_esn2.png``, and ``torques_esn2.png``: each ESN's joint angles or torques
 over time against the replay's and the progress replay's, a column per scenario, the
-ESN's lines over the replays' (Section 3.6).
+ESN's lines over the replays' (Section 3.7).
 """
 
 from __future__ import annotations
@@ -68,13 +71,25 @@ SEEDS_PER_SETTING = 10
 OFFSETS = [-15, -10, -5, 0, 5, 10, 15]  # deg, in each joint
 SCENARIOS = {"nominal": "undisturbed", "block": "the block", "pushes": "the pushes", "offsets": "the offset starts"}
 DISTURBANCES = {"block": "the block", "push1": "push at 3 s", "push2": "push at 7 s", "push3": "push at 15 s"}
-# The rule's runs: the search over seeds 0 to 9, the held-out seeds, and the size and ridge checks.
+# The rule's runs: the search over seeds 0 to 9, the held-out seeds, the size and ridge checks, and the bias checks,
+# at the chosen ESNs' settings and around the qualifying region at each bias scale but the grid's.
 SELECTS = {
     "search": "select",
     "held_out": "select_seeds10to19",
     "size": "select_size",
     "ridge": "select_ridge",
+    "bias_esn1": "select_bias_esn1",
+    "bias_esn2": "select_bias_esn2",
+    "bias0": "select_bias0",
+    "bias0.5": "select_bias0.5",
+    "bias2": "select_bias2",
 }
+# The bias check around the qualifying region: its leak rates, spectral radii, and input scalings, and the rule's
+# run at each bias scale, the grid's at the scale of 1.
+BIAS_LEAKS = [0.015, 0.02, 0.03, 0.04]
+BIAS_RADII = [0.99, 1.2, 1.35, 1.5]
+BIAS_SCALINGS = [0.5, 1.0, 1.5, 2.0]
+BIAS_REGION = {0.0: "bias0", 0.5: "bias0.5", 1.0: "search", 2.0: "bias2"}
 # The chosen ESNs: their name, the tag of their runs, and their setting.
 CHOSEN = {
     "ESN #1": ("esn1_lr0.03_sr1.2_is1.5_seed8", (0.03, 1.2, 1.5)),
@@ -122,6 +137,7 @@ def main() -> None:
         "offsets.png": plot_offsets(),
         "following.png": plot_following(),
         "held_out.png": plot_held_out(),
+        "bias.png": plot_bias(),
     }
     if args.logs:
         for name, (tag, _) in CHOSEN.items():
@@ -255,10 +271,40 @@ def ink_on(color: tuple[float, ...]) -> str:
     return TITLE_COLOR if 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 else "#ffffff"
 
 
+def draw_passing(
+    ax: Axes,
+    rows: dict[tuple[float, float, float], dict[str, Any]],
+    leak: float,
+    radii: list[float],
+    scalings: list[float],
+    mark: bool,
+) -> None:
+    """One leak rate's settings, spectral radius across and input scaling up: each one's passing seeds, the
+    qualifying settings outlined, and with ``mark``, the chosen ESNs' settings marked."""
+    cmap, norm = count_colormap(SEEDS_PER_SETTING)
+    counts = np.array([[rows[(leak, r, s)]["passing_seeds"] for r in radii] for s in scalings])
+    ax.imshow(counts, cmap=cmap, norm=norm, origin="lower", aspect="auto")
+    for i, scaling in enumerate(scalings):
+        for j, radius in enumerate(radii):
+            row = rows[(leak, radius, scaling)]
+            count = int(row["passing_seeds"])
+            text = str(count)
+            for name, (_, setting) in CHOSEN.items():
+                if mark and setting == (leak, radius, scaling):
+                    text += f"\n{name[-2:]}"
+            ax.text(j, i, text, ha="center", va="center", fontsize=8, color=ink_on(cmap(norm(count))))
+            if row["qualifies"]:
+                ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False, edgecolor=TITLE_COLOR, linewidth=2))
+    ax.set_xticks(range(len(radii)), [f"{r:g}" for r in radii])
+    ax.set_yticks(range(len(scalings)), [f"{s:g}" for s in scalings])
+    ax.tick_params(colors=TEXT_COLOR, labelcolor=TEXT_COLOR, length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
 def plot_grid(select: str) -> Figure:
     """Each setting's passing seeds: a panel per leak rate, spectral radius across and input scaling up."""
     rows = settings(select)
-    cmap, norm = count_colormap(SEEDS_PER_SETTING)
     fig = Figure(figsize=(17, 11.5), facecolor=SURFACE_COLOR, layout="constrained")
     seeds = "0 to 9" if select == "search" else "10 to 19 (held out)"
     qualifying = sum(row["qualifies"] for row in rows.values())
@@ -272,29 +318,35 @@ def plot_grid(select: str) -> Figure:
     for row in esns(select):
         passing[row["leak_rate"]] += row["passes"]
     for ax, leak in zip(axes.flat, LEAKS, strict=True):
-        counts = np.array([[rows[(leak, r, s)]["passing_seeds"] for r in RADII] for s in SCALINGS])
-        ax.imshow(counts, cmap=cmap, norm=norm, origin="lower", aspect="auto")
-        for i, scaling in enumerate(SCALINGS):
-            for j, radius in enumerate(RADII):
-                row = rows[(leak, radius, scaling)]
-                count = int(row["passing_seeds"])
-                text = str(count)
-                for name, (_, setting) in CHOSEN.items():
-                    if select == "search" and setting == (leak, radius, scaling):
-                        text += f"\n{name[-2:]}"
-                ax.text(j, i, text, ha="center", va="center", fontsize=8, color=ink_on(cmap(norm(count))))
-                if row["qualifies"]:
-                    ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False, edgecolor=TITLE_COLOR, linewidth=2))
+        draw_passing(ax, rows, leak, RADII, SCALINGS, mark=select == "search")
         ax.set_title(f"leak rate {leak:g}: {passing[leak]} of 420 ESNs pass", color=TITLE_COLOR, fontsize=10)
-        ax.set_xticks(range(len(RADII)), [f"{r:g}" for r in RADII])
-        ax.set_yticks(range(len(SCALINGS)), [f"{s:g}" for s in SCALINGS])
-        ax.tick_params(colors=TEXT_COLOR, labelcolor=TEXT_COLOR, length=0)
-        for spine in ax.spines.values():
-            spine.set_visible(False)
     for ax in axes[-1]:
         ax.set_xlabel("spectral radius", color=TEXT_COLOR)
     for ax in axes[:, 0]:
         ax.set_ylabel("input scaling", color=TEXT_COLOR)
+    return fig
+
+
+def plot_bias() -> Figure:
+    """Around the qualifying region, each setting's passing seeds at each bias scale: a row of panels per scale,
+    one per leak rate."""
+    fig = Figure(figsize=(14, 14), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(
+        "Seeds 0 to 9 around the qualifying region: each setting's seeds that pass (of 10) at each bias scale;"
+        " outlined, the settings\nwhose ten seeds all pass; #1, #2: the chosen ESNs' settings; the scale of 1 is"
+        " the grid's runs",
+        color=TITLE_COLOR,
+    )
+    axes = fig.subplots(len(BIAS_REGION), len(BIAS_LEAKS), sharex=True, sharey=True)
+    for row_axes, (bias, select) in zip(axes, BIAS_REGION.items(), strict=True):
+        rows = settings(select)
+        for ax, leak in zip(row_axes, BIAS_LEAKS, strict=True):
+            draw_passing(ax, rows, leak, BIAS_RADII, BIAS_SCALINGS, mark=True)
+            passing = sum(rows[(leak, r, s)]["passing_seeds"] for r in BIAS_RADII for s in BIAS_SCALINGS)
+            ax.set_title(f"leak rate {leak:g}: {int(passing)} of 160 pass", color=TITLE_COLOR, fontsize=10)
+        row_axes[0].set_ylabel(f"bias scale {bias:g}\n\ninput scaling", color=TEXT_COLOR)
+    for ax in axes[-1]:
+        ax.set_xlabel("spectral radius", color=TEXT_COLOR)
     return fig
 
 
@@ -658,6 +710,7 @@ def print_tables() -> None:
     print_measures()
     print_held_out()
     print_checks()
+    print_bias()
     print_robot()
 
 
@@ -836,10 +889,15 @@ def print_held_out() -> None:
 
 
 def print_checks() -> None:
-    """The size and ridge checks at ESN #1's setting."""
-    for check, column, label in (("size", "n_neurons", "Neurons"), ("ridge", "ridge", "Ridge")):
+    """The size and ridge checks at ESN #1's setting, and the bias checks at both chosen ESNs' settings."""
+    for check, column, label, at in (
+        ("size", "n_neurons", "Neurons", "ESN #1"),
+        ("ridge", "ridge", "Ridge", "ESN #1"),
+        ("bias_esn1", "bias_scaling", "Bias scale", "ESN #1"),
+        ("bias_esn2", "bias_scaling", "Bias scale", "ESN #2"),
+    ):
         rows = read_csv(RESULTS / run_name(SELECTS[check]) / "settings.csv")
-        print(f"\nThe {check} check at ESN #1's setting, seeds 0 to 9:")
+        print(f"\nThe {check} check at {at}'s setting, seeds 0 to 9:")
         print(
             f"| {label} | Passing seeds | Following | Ringing | Return | Undisturbed path RMSE | How the others fail |"
         )
@@ -856,6 +914,94 @@ def print_checks() -> None:
                 f" {row['ringing_mm']:.2f} mm |"
                 f" {row['return_s']:.2f} s | {row['path_rmse_mm']:.2f} mm | {dict(how)} |"
             )
+
+
+def in_bias_region(key: tuple[float, float, float]) -> bool:
+    return key[0] in BIAS_LEAKS and key[1] in BIAS_RADII and key[2] in BIAS_SCALINGS
+
+
+def print_bias() -> None:
+    """Around the qualifying region at each bias scale: the ESNs that pass, how the others fail, the qualifying
+    settings ranked; and whether the runs of the same ESNs agree."""
+    print("\nAround the qualifying region, seeds 0 to 9, at each bias scale (1: the grid's runs):")
+    print(
+        "| Bias scale | ESNs passing (of 640) | Failing undisturbed / block / pushes / offsets | Settings: 10 / 9 seeds"
+        " passing | Top following |"
+    )
+    print("| ---: | ---: | --- | --- | --- |")
+    for bias, select in BIAS_REGION.items():
+        at = [row for row in esns(select) if in_bias_region(setting_of(row))]
+        fail = [sum(s in failing_scenarios(row) for row in at) for s in SCENARIOS]
+        rows = {k: row for k, row in settings(select).items() if in_bias_region(k)}
+        ten = sum(row["passing_seeds"] == 10 for row in rows.values())
+        nine = sum(row["passing_seeds"] == 9 for row in rows.values())
+        top = max((row for row in rows.values() if row["qualifies"]), key=lambda r: r["following"], default=None)
+        best = f"{top['following']:.2f} at {setting_of(top)}" if top else "-"
+        print(f"| {bias:g} | {sum(r['passes'] for r in at)} | {' / '.join(map(str, fail))} | {ten} / {nine} | {best} |")
+    for bias, select in BIAS_REGION.items():
+        if select == "search":
+            continue
+        print(f"\nThe qualifying settings at a bias scale of {bias:g}, ranked; their rank in the grid (scale 1):")
+        if not ranked(select):
+            print("  none qualify")
+        else:
+            print_bias_ranking(select)
+        failing = [row for row in esns(select) if not row["passes"]]
+        how = Counter(frozenset(failing_scenarios(row)) for row in failing)
+        print(
+            f"  {len(failing)} ESNs fail; the most common sets of failing scenarios:",
+            "; ".join(f"{' + '.join(sorted(k))} {n}" for k, n in how.most_common(4)),
+        )
+    # The same ESN in two runs: the chosen ESNs' settings at a scale of 1 in the grid and in the check at their
+    # setting, and at the other scales in both bias checks.
+    pairs = []
+    for name, (_, setting) in CHOSEN.items():
+        check = esns(f"bias_esn{name[-1]}")
+        for bias, select in BIAS_REGION.items():
+            other = {row["seed"]: row for row in esns(select) if setting_of(row) == setting}
+            pairs += [(row, other[row["seed"]], bias) for row in check if row["bias_scaling"] == bias]
+    for label, chosen in (("the grid", [1.0]), ("the region's runs", [0.0, 0.5, 2.0])):
+        differences = [largest_difference(a, b) for a, b, bias in pairs if bias in chosen]
+        print(
+            f"  The checks at the chosen ESNs' settings against {label}: {len(differences)} ESNs,"
+            f" within a relative {max(differences):.1e}"
+        )
+
+
+def print_bias_ranking(select: str) -> None:
+    """The qualifying settings of a bias scale, ranked, with their outcome in the grid."""
+    print(
+        "| Rank | Leak rate | Spectral radius | Input scaling | Following | Ringing | Return | Undisturbed path RMSE |"
+        " Typical seed | Scale 1: passing seeds, rank |"
+    )
+    print("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    grid = settings("search")
+    for key, row in ranked(select):
+        g = grid[key]
+        rank = int(g["rank"]) if g["rank"] != "" else "-"
+        print(
+            f"| {int(row['rank'])} | {key[0]:g} | {key[1]:g} | {key[2]:g} | {row['following']:.2f} |"
+            f" {row['ringing_mm']:.2f} mm | {row['return_s']:.2f} s | {row['path_rmse_mm']:.2f} mm |"
+            f" {int(row['typical_seed'])} | {int(g['passing_seeds'])}, {rank} |"
+        )
+
+
+def largest_difference(a: dict[str, Any], b: dict[str, Any]) -> float:
+    """The largest relative difference between the measures of two runs of the same ESN; infinite if they pass or
+    fail differently."""
+    if (a["passes"], a["failures"]) != (b["passes"], b["failures"]):
+        return math.inf
+    largest = 0.0
+    for key, x in a.items():
+        y = b.get(key)
+        if not isinstance(x, float) or not isinstance(y, float):
+            continue
+        if math.isnan(x) or math.isnan(y):
+            if math.isnan(x) != math.isnan(y):
+                return math.inf
+            continue
+        largest = max(largest, abs(x - y) / max(abs(x), abs(y), 1e-12))
+    return largest
 
 
 def print_robot() -> None:

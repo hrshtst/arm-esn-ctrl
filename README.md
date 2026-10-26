@@ -260,7 +260,7 @@ that run them are shared:
 | [manual_demonstration_v2_robot_progress_replay](experiments/manual_demonstration_v2_robot_progress_replay/README.md) | every scenario of the following search and the recorded pushes with a third arm, the take replayed by the arm's progress along the taught path (Stage 2) | [014](reports/014-progress-replay/README.md) |
 | [manual_demonstration_v2_esn_dynamics](experiments/manual_demonstration_v2_esn_dynamics/README.md) | what the following search's two ESNs learned as dynamical systems: run on their own from rest anywhere in the joint space, with other warm-ups, pushed by short pulses along the reach on the robot, and read as the map of their reservoir state for its fixed points (Stages 1 and 2) | [015](reports/015-what-the-esns-learned/README.md) |
 | [manual_demonstration_v2_esn_screening](experiments/manual_demonstration_v2_esn_screening/README.md) | the following search's 1,050 ESNs screened without the robot, by their fixed points, their lead over a held posture, and their rates, against its robot outcomes; the passing ESNs held still on the robot; and 1,050 held-out ESNs alike (Stages 1 and 2) | [016](reports/016-screening-esns/README.md) |
-| [manual_demonstration_v2_consistent_search](experiments/manual_demonstration_v2_consistent_search/README.md) | the main results run again under one protocol fixed before any run: an ESN search over a wider grid with one tracker, every ESN from 49 offset starts, chosen by a rule in code and checked on held-out seeds (Stage 2); its README holds the protocol of reports 017 to 019 | [017](reports/017-search-under-one-protocol/README.md) |
+| [manual_demonstration_v2_consistent_search](experiments/manual_demonstration_v2_consistent_search/README.md) | the main results run again under one protocol fixed before any run: an ESN search over a wider grid with one tracker, every ESN from 49 offset starts, chosen by a rule in code and checked on held-out seeds and, afterwards, on the bias's scale (Stage 2); its README holds the protocol of reports 017 to 019 | [017](reports/017-search-under-one-protocol/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -458,8 +458,10 @@ The reports so far:
   those with the elbow nearer straight the most. With 5,040 held-out ESNs, the
   following keeps its order (rank correlation 0.99), but which settings pass with every
   seed changes: ESN #1's setting passes 19 of 20 seeds, ESN #2's 20. Only 400 neurons
-  and a ridge of 10⁻² pass every seed at ESN #1's setting. The ESNs' motors work a
-  quarter as hard as the replay's undisturbed and under the block.
+  and a ridge of 10⁻² pass every seed at ESN #1's setting. Checked after the grid,
+  the bias is needed: without it no setting qualifies; at half or twice its scale,
+  other settings qualify, and none follows more. The ESNs' motors work a quarter as
+  hard as the replay's undisturbed and under the block.
 
 Each report has five parts:
 
