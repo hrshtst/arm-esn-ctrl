@@ -169,6 +169,28 @@ def test_there_are_no_other_bias_checks():
     assert len(names) == 8 + 48
 
 
+BIAS_CHECKS = {
+    "_esn1": {scenario: [f"bias_esn1_{scenario}"] for scenario in SCENARIOS},
+    "_esn2": {scenario: [f"bias_esn2_{scenario}"] for scenario in SCENARIOS},
+    **{
+        bias: {
+            scenario: [f"bias{bias}_lr{leak:g}_{scenario}" for leak in [0.015, 0.02, 0.03, 0.04]]
+            for scenario in SCENARIOS
+        }
+        for bias in ["0", "0.5", "2"]
+    },
+}
+
+
+@pytest.mark.parametrize("check", sorted(BIAS_CHECKS))
+def test_the_bias_checks_are_measured_by_the_choices_rule(check):
+    config, choice = load(f"select_bias{check}"), load("select")
+
+    assert {scenario: run_names(config["runs"][scenario]) for scenario in SCENARIOS} == BIAS_CHECKS[check]
+    assert config["runs"]["replay"] == choice["runs"]["replay"]
+    assert config["rule"] == choice["rule"]
+
+
 CHOSEN = {"esn1_lr0.03_sr1.2_is1.5_seed8": (1.5, 8), "esn2_lr0.03_sr1.2_is1_seed2": (1.0, 2)}
 
 

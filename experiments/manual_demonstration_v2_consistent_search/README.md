@@ -237,6 +237,12 @@ uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2
 | --- | --- |
 | `bias_{esn1,esn2}_{nominal,block,pushes,offsets}.toml` (8) | bias scales 0 to 2 × seeds 0 to 9 at ESN #1's or ESN #2's setting, in one scenario |
 | `bias{0,0.5,2}_lr<leak rate>_{nominal,block,pushes,offsets}.toml` (48) | spectral radius 0.99 to 1.5 × input scaling 0.5 to 2 × seeds 0 to 9 at one leak rate and bias scale, in one scenario |
+| `select_bias_{esn1,esn2}.toml` | the rule's measures of each bias scale at ESN #1's or ESN #2's setting, over their runs |
+| `select_bias{0,0.5,2}.toml` | the rule over the region's runs at one bias scale |
+
+```bash
+uv run python experiments/select_esns.py experiments/manual_demonstration_v2_consistent_search/select_bias_esn1.toml
+```
 
 ## Part 2: the trackers (report 018)
 
