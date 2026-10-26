@@ -134,10 +134,23 @@ def test_the_size_and_ridge_checks_are_the_grid_at_esn_1s_setting(check, scenari
     assert (config["esn"]["spectral_radius"], config["esn"]["input_scaling"]) == (1.2, 1.5)
 
 
-@pytest.mark.parametrize(
-    ("name", "scaling", "seed"),
-    [("esn1_lr0.03_sr1.2_is1.5_seed8", 1.5, 8), ("esn2_lr0.03_sr1.2_is1_seed2", 1.0, 2)],
-)
+CHOSEN = {"esn1_lr0.03_sr1.2_is1.5_seed8": (1.5, 8), "esn2_lr0.03_sr1.2_is1_seed2": (1.0, 2)}
+
+
+@pytest.mark.parametrize("esn", sorted(CHOSEN))
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+def test_the_chosen_esns_run_on_the_robot_as_in_the_grid(esn, scenario):
+    config, grid = load(f"{scenario}_robot_{esn}"), load(f"sweep_lr0.03_{scenario}")
+
+    assert config["esn"]["model"].startswith("results/manual_demonstration_v2_consistent_search/")
+    assert config["esn"]["model"].endswith(f"-{esn}/esn.toml")
+    assert config["progress"] == {"lead_deg": 2.5, "window": 1.0}
+    assert config["tracker"] == grid["tracker"]
+    assert config["evaluation"] == grid["evaluation"]
+    assert config.get("disturbance") == grid.get("disturbance")
+
+
+@pytest.mark.parametrize(("name", "scaling", "seed"), [(name, *chosen) for name, chosen in CHOSEN.items()])
 def test_the_chosen_esns_are_trained_with_the_protocols_settings(name, scaling, seed):
     config = load(name)
 

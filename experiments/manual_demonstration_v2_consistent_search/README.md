@@ -198,6 +198,21 @@ uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2
 uv run python experiments/select_esns.py experiments/manual_demonstration_v2_consistent_search/select_size.toml
 ```
 
+### Step 4: the chosen ESNs on the robot
+
+ESN #1 and ESN #2, as trained in step 2, against the replay and the progress replay
+with the search's tracker, in every scenario of step 1, so that the report can draw
+their runs over time:
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_consistent_search/pushes_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `{nominal,block,pushes,offsets}_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml` | ESN #1, the replay, and the progress replay, in one scenario |
+| `{nominal,block,pushes,offsets}_robot_esn2_lr0.03_sr1.2_is1_seed2.toml` | the same with ESN #2 |
+
 ## Part 2: the trackers (report 018)
 
 ESN #1 and ESN #2 against the replay and the progress replay, by
