@@ -1,0 +1,52 @@
+# The consistent search's grid at leak rate 0.02 (one of 0.01 to 0.5, one configuration
+# each): spectral radius 0.7 to 1.75 and input scaling 0.1 to 2, each setting with ten
+# random reservoirs (seeds 0 to 9), run with the search's tracker undisturbed, from the
+# take's start. See README.md.
+#
+#   uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_consistent_search/sweep_lr0.02_nominal.toml --workers 30
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_v2.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261008-170034-reach_manual_v2"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# The protocol's fixed settings (see README.md); a swept key's value here is replaced
+# by each swept value.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.2
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.02
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 0
+
+[sweep]
+# The heatmap axes of sweep.png: x, then y.
+spectral_radius = [0.7, 0.9, 0.99, 1.2, 1.35, 1.5, 1.75]
+input_scaling = [0.1, 0.2, 0.5, 1.0, 1.5, 2.0]
+seed = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]  # the random reservoir, its input weights, and its biases
+
+[tracker]
+# The search's tracker: joint PD at omega = 20 rad/s and a damping ratio of 0.4, given
+# the reference's velocity, its torque computed every 10 ms, the ESN's period, and
+# held between.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up; the take lasts 18.5 s, and the last push comes at 15 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the take's start
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 2.9 Hz
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)

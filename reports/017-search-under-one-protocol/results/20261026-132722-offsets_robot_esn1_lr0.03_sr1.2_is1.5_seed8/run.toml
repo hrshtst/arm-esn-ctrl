@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_search/offsets_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_consistent_search/offsets_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml"
+started = 2026-10-26 13:27:22+09:00
+host = "delbosque"
+commit = "eadfff8a746695e268d9e2b95354af39cca02f79"
+uncommitted_changes = false

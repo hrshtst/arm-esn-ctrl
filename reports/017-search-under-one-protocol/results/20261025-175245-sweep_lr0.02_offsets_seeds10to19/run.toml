@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_search/sweep_lr0.02_offsets_seeds10to19.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_consistent_search/sweep_lr0.02_offsets_seeds10to19.toml --workers 30"
+started = 2026-10-25 17:52:45+09:00
+host = "delbosque"
+commit = "f00cb38de1586a86abb52269a52f0d6496a56d00"
+uncommitted_changes = false

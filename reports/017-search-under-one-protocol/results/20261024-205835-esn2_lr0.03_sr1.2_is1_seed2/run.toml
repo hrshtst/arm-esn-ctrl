@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_search/esn2_lr0.03_sr1.2_is1_seed2.toml"
+command = "experiments/autonomous_esn.py experiments/manual_demonstration_v2_consistent_search/esn2_lr0.03_sr1.2_is1_seed2.toml"
+started = 2026-10-24 20:58:35+09:00
+host = "delbosque"
+commit = "f00cb38de1586a86abb52269a52f0d6496a56d00"
+uncommitted_changes = false

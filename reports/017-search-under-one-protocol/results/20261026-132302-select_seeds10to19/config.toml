@@ -1,0 +1,69 @@
+# The runs of step 1 with the held-out seeds 10 to 19, under the storage root, and the rule's
+# settings: the rule applied to them alone, to check the choice of select.toml (see README.md).
+
+[runs]
+nominal = [
+  "results/manual_demonstration_v2_consistent_search/20261025-135324-sweep_lr0.01_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-154932-sweep_lr0.015_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-174526-sweep_lr0.02_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-194158-sweep_lr0.03_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-213829-sweep_lr0.04_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-233542-sweep_lr0.05_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-013301-sweep_lr0.07_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-033048-sweep_lr0.1_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-052856-sweep_lr0.15_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-072703-sweep_lr0.2_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-092519-sweep_lr0.3_nominal_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-112356-sweep_lr0.5_nominal_seeds10to19",
+]
+block = [
+  "results/manual_demonstration_v2_consistent_search/20261025-135541-sweep_lr0.01_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-155146-sweep_lr0.015_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-174741-sweep_lr0.02_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-194414-sweep_lr0.03_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-214043-sweep_lr0.04_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-233756-sweep_lr0.05_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-013517-sweep_lr0.07_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-033303-sweep_lr0.1_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-053111-sweep_lr0.15_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-072918-sweep_lr0.2_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-092735-sweep_lr0.3_block_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-112610-sweep_lr0.5_block_seeds10to19",
+]
+pushes = [
+  "results/manual_demonstration_v2_consistent_search/20261025-135811-sweep_lr0.01_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-155415-sweep_lr0.015_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-175011-sweep_lr0.02_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-194643-sweep_lr0.03_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-214313-sweep_lr0.04_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-234025-sweep_lr0.05_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-013746-sweep_lr0.07_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-033534-sweep_lr0.1_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-053341-sweep_lr0.15_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-073149-sweep_lr0.2_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-093005-sweep_lr0.3_pushes_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-112840-sweep_lr0.5_pushes_seeds10to19",
+]
+offsets = [
+  "results/manual_demonstration_v2_consistent_search/20261025-140042-sweep_lr0.01_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-155647-sweep_lr0.015_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-175245-sweep_lr0.02_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-194917-sweep_lr0.03_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-214547-sweep_lr0.04_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261025-234301-sweep_lr0.05_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-014022-sweep_lr0.07_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-033809-sweep_lr0.1_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-053616-sweep_lr0.15_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-073423-sweep_lr0.2_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-093239-sweep_lr0.3_offsets_seeds10to19",
+  "results/manual_demonstration_v2_consistent_search/20261026-113115-sweep_lr0.5_offsets_seeds10to19",
+]
+# report 011's ESN #1 and the replay with the search's tracker: the replay's ringing sets the guard
+replay = [
+  "results/manual_demonstration_v2_consistent_search/20261023-201957-guard_block_robot",
+  "results/manual_demonstration_v2_consistent_search/20261023-202012-guard_pushes_robot",
+]
+
+[rule]
+chosen = 2
+fallback_seeds = 9

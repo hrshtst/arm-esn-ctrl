@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_search/select_size.toml"
+command = "experiments/select_esns.py experiments/manual_demonstration_v2_consistent_search/select_size.toml"
+started = 2026-10-26 13:23:06+09:00
+host = "delbosque"
+commit = "8056861d98a90f4ce63f35bd58c15de40d9b14b9"
+uncommitted_changes = false
