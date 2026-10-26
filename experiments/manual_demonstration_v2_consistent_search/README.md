@@ -174,6 +174,7 @@ uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_
 | Configurations | What they run |
 | --- | --- |
 | `select.toml` | the rule over the runs of step 1 with seeds 0 to 9, and the guard's runs of step 0 |
+| `select_seeds10to19.toml` | the rule over the runs of step 1 with the held-out seeds 10 to 19 alone |
 | `esn1_lr0.03_sr1.2_is1.5_seed8.toml`, `esn2_lr0.03_sr1.2_is1_seed2.toml` | ESN #1 and ESN #2, as the rule chose them, trained and run on their own from the 49 offset starts |
 
 ### Step 3: the size and the ridge
@@ -191,6 +192,11 @@ uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2
 | --- | --- |
 | `size_{nominal,block,pushes,offsets}.toml` | 100 to 800 neurons × seeds 0 to 9 at ESN #1's setting, in one scenario |
 | `ridge_{nominal,block,pushes,offsets}.toml` | ridges of 10⁻⁴ to 1 × seeds 0 to 9 at ESN #1's setting, in one scenario |
+| `select_{size,ridge}.toml` | the rule's measures of each size and each ridge, over their runs |
+
+```bash
+uv run python experiments/select_esns.py experiments/manual_demonstration_v2_consistent_search/select_size.toml
+```
 
 ## Part 2: the trackers (report 018)
 

@@ -92,19 +92,34 @@ def test_the_guards_runs_meet_the_grids_tracker_and_disturbances(scenario):
     assert config["disturbance"] == grid["disturbance"]
 
 
-def test_the_choice_reads_one_run_of_seeds_0_to_9_per_leak_rate_and_scenario():
-    config = load("select")
+def run_names(paths: list[str]) -> list[str]:
+    """The configuration stems of runs, their directories' names but for the time stamps."""
+    return [path.rsplit("-", 1)[1] for path in paths]
+
+
+@pytest.mark.parametrize("tag", sorted(SEEDS))
+def test_the_choice_reads_one_run_per_leak_rate_and_scenario(tag):
+    config = load(f"select{tag}")
 
     assert set(config["runs"]) == {*SCENARIOS, "replay"}
     for scenario in SCENARIOS:
-        assert [path.rsplit("-", 1)[1] for path in config["runs"][scenario]] == [
-            f"sweep_lr{leak:g}_{scenario}" for leak in LEAKS
-        ]
-    assert [path.rsplit("-", 1)[1] for path in config["runs"]["replay"]] == ["guard_block_robot", "guard_pushes_robot"]
+        assert run_names(config["runs"][scenario]) == [f"sweep_lr{leak:g}_{scenario}{tag}" for leak in LEAKS]
+    assert run_names(config["runs"]["replay"]) == ["guard_block_robot", "guard_pushes_robot"]
     assert config["rule"] == {"chosen": 2, "fallback_seeds": 9}
 
 
 CHECKS = {"size": {"n_neurons": [100, 200, 400, 800]}, "ridge": {"ridge": [1e-4, 1e-3, 1e-2, 1e-1, 1.0]}}
+
+
+@pytest.mark.parametrize("check", sorted(CHECKS))
+def test_the_size_and_ridge_checks_are_measured_by_the_choices_rule(check):
+    config, choice = load(f"select_{check}"), load("select")
+
+    assert {scenario: run_names(config["runs"][scenario]) for scenario in SCENARIOS} == {
+        scenario: [f"{check}_{scenario}"] for scenario in SCENARIOS
+    }
+    assert config["runs"]["replay"] == choice["runs"]["replay"]
+    assert config["rule"] == choice["rule"]
 
 
 @pytest.mark.parametrize("check", sorted(CHECKS))
