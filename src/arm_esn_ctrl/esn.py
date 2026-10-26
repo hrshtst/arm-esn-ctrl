@@ -85,6 +85,7 @@ class EsnConfig:
     teacher_noise_deg: float = 0.0  # standard deviation of the noise on the teacher-forced input (deg)
     teacher_copies: int = 1  # how many times each training trajectory is fed in, each with its own noise
     teacher_noise_exponent: float = 0.0  # its power spectrum goes as 1/f to this: 0 white, 1 pink, 2 brown, -1 blue
+    bias_scaling: float = 1.0  # each neuron's bias is drawn from [-1, 1] and multiplied by this
 
     @property
     def warmup_steps(self) -> int:
@@ -121,6 +122,7 @@ class ReachingEsn:
                 input_scaling=config.input_scaling,
                 include_bias=config.bias,
                 seed=config.seed,
+                bias_scaling=config.bias_scaling,
             )
         )
         self.model.set_readout(rclib.readouts.Ridge(alpha=config.ridge, include_bias=True))

@@ -223,6 +223,38 @@ def test_an_esn_saved_before_the_teacher_noise_loads_without_it(tmp_path):
     np.testing.assert_array_equal(loaded.generate(q[0], 150), trained(CONFIG, q).generate(q[0], 150))
 
 
+def test_the_bias_scaling_scales_the_bias_alone():
+    """Each neuron's bias is its unscaled draw times the bias scaling; the weights do not change."""
+    reservoirs = {
+        scaling: ReachingEsn(dataclasses.replace(CONFIG, bias_scaling=scaling)).model.get_reservoir(0)
+        for scaling in (1.0, 0.5, 0.0)
+    }
+    unscaled = reservoirs[1.0].getBias()
+
+    assert CONFIG.bias_scaling == 1.0
+    np.testing.assert_array_equal(ReachingEsn(CONFIG).model.get_reservoir(0).getBias(), unscaled)
+    np.testing.assert_array_equal(reservoirs[0.5].getBias(), 0.5 * unscaled)
+    assert not np.any(reservoirs[0.0].getBias())
+    for scaling in (0.5, 0.0):
+        for got, want in zip(
+            reservoirs[scaling].getRecurrentWeights(), reservoirs[1.0].getRecurrentWeights(), strict=True
+        ):
+            np.testing.assert_array_equal(got, want)
+    unbiased = ReachingEsn(dataclasses.replace(CONFIG, bias=False, bias_scaling=0.5))
+    assert not np.any(unbiased.model.get_reservoir(0).getBias())
+
+
+def test_an_esn_saved_before_the_bias_scaling_loads_with_a_scaling_of_one(tmp_path):
+    q = joint_reach()
+    path = tmp_path / "esn.toml"
+    trained(CONFIG, q).save(path)
+    text = path.read_text()
+    path.write_text("".join(line for line in text.splitlines(keepends=True) if not line.startswith("bias_scaling")))
+    loaded = ReachingEsn.load(path)
+    assert loaded.config.bias_scaling == 1.0
+    np.testing.assert_array_equal(loaded.generate(q[0], 150), trained(CONFIG, q).generate(q[0], 150))
+
+
 def test_white_teacher_noise_is_drawn_directly():
     """The white noise is the generator's own draws, so ESNs trained with it before the colors are trained alike."""
     np.testing.assert_array_equal(

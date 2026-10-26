@@ -134,6 +134,41 @@ def test_the_size_and_ridge_checks_are_the_grid_at_esn_1s_setting(check, scenari
     assert (config["esn"]["spectral_radius"], config["esn"]["input_scaling"]) == (1.2, 1.5)
 
 
+def without(config: dict, *keys: str) -> dict:
+    """A configuration but for some of its tables."""
+    return {key: value for key, value in config.items() if key not in keys}
+
+
+@pytest.mark.parametrize(("esn", "scaling"), [("esn1", 1.5), ("esn2", 1.0)])
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+def test_the_bias_check_at_a_chosen_esns_setting_is_the_grid_with_a_scaled_bias(esn, scaling, scenario):
+    config, grid = load(f"bias_{esn}_{scenario}"), load(f"sweep_lr0.03_{scenario}")
+
+    assert config["sweep"] == {"bias_scaling": [0.0, 0.25, 0.5, 1.0, 2.0], "seed": SEEDS[""]}
+    assert config["esn"] == grid["esn"] | {"input_scaling": scaling, "bias_scaling": 1.0}
+    assert without(config, "sweep", "esn") == without(grid, "sweep", "esn")
+
+
+BIAS_REGION = {"spectral_radius": [0.99, 1.2, 1.35, 1.5], "input_scaling": [0.5, 1.0, 1.5, 2.0]}
+
+
+@pytest.mark.parametrize("bias", ["0", "0.5", "2"])
+@pytest.mark.parametrize("leak", [0.015, 0.02, 0.03, 0.04])
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+def test_the_bias_check_around_the_qualifying_region_is_the_grid_with_a_scaled_bias(bias, leak, scenario):
+    config, grid = load(f"bias{bias}_lr{leak:g}_{scenario}"), load(f"sweep_lr{leak:g}_{scenario}")
+
+    assert config["sweep"] == BIAS_REGION | {"seed": SEEDS[""]}
+    assert config["esn"] == grid["esn"] | {"bias_scaling": float(bias)}
+    assert without(config, "sweep", "esn") == without(grid, "sweep", "esn")
+
+
+def test_there_are_no_other_bias_checks():
+    names = {path.stem for path in SEARCH.glob("bias*.toml")}
+
+    assert len(names) == 8 + 48
+
+
 CHOSEN = {"esn1_lr0.03_sr1.2_is1.5_seed8": (1.5, 8), "esn2_lr0.03_sr1.2_is1_seed2": (1.0, 2)}
 
 

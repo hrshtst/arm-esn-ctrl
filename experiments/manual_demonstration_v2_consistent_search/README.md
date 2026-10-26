@@ -36,7 +36,7 @@ every 2 ms. The ESNs are trained on its one take, untrimmed, filtered at 2 Hz:
 | --- | --- |
 | Neurons | 400 |
 | Sparsity (nonzero reservoir connections) | 0.05 |
-| Bias | yes, random |
+| Bias | yes: one per neuron, drawn uniformly from [−1, 1] by the seed, unscaled (a bias scale of 1, apart from the input scaling) |
 | Ridge | 10⁻² |
 | Warm-up (the start posture held before the ESN moves, in training and on the robot) | 1 s |
 | Sampling period | 10 ms |
@@ -213,6 +213,30 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_consi
 | --- | --- |
 | `{nominal,block,pushes,offsets}_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml` | ESN #1, the replay, and the progress replay, in one scenario |
 | `{nominal,block,pushes,offsets}_robot_esn2_lr0.03_sr1.2_is1_seed2.toml` | the same with ESN #2 |
+
+### Step 5: the bias scale
+
+Added after the grid had run, and so outside the protocol: like step 3, it does not
+change the choice. The bias of the grid's ESNs is drawn uniformly from [−1, 1] and
+not scaled, a bias scale of 1 held apart from the input scaling. Step 5 scales it
+(rclib's `bias_scaling`, `[esn]`'s `bias_scaling`; the draws do not depend on it, so
+a seed keeps its reservoir and input weights, and a scale of 1 repeats the grid's
+ESNs exactly):
+
+1. at ESN #1's and ESN #2's settings, bias scales of 0, 0.25, 0.5, 1, and 2, seeds 0
+   to 9, every scenario of step 1;
+2. around the qualifying region, leak rates 0.015 to 0.04, spectral radii 0.99 to
+   1.5, and input scalings 0.5 to 2, at bias scales of 0, 0.5, and 2, seeds 0 to 9,
+   every scenario of step 1; the grid's runs give the same settings at a scale of 1.
+
+```bash
+uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_consistent_search/bias_esn1_offsets.toml --workers 30
+```
+
+| Configurations | What they sweep |
+| --- | --- |
+| `bias_{esn1,esn2}_{nominal,block,pushes,offsets}.toml` (8) | bias scales 0 to 2 × seeds 0 to 9 at ESN #1's or ESN #2's setting, in one scenario |
+| `bias{0,0.5,2}_lr<leak rate>_{nominal,block,pushes,offsets}.toml` (48) | spectral radius 0.99 to 1.5 × input scaling 0.5 to 2 × seeds 0 to 9 at one leak rate and bias scale, in one scenario |
 
 ## Part 2: the trackers (report 018)
 
