@@ -7,7 +7,8 @@ holds with this part's plan
 the two ESNs that [the search](../manual_demonstration_v2_consistent_search/README.md)
 chose ([report 017](../../reports/017-search-under-one-protocol/README.md)), with every
 tracker of the protocol, in every scenario of the search and under the pushes given by
-hand in report 012. Results: report 018, to be written.
+hand in report 012. Results:
+[report 018](../../reports/018-trackers-under-one-protocol/README.md).
 
 - **The arms:** ESN #1 (leak rate 0.03, spectral radius 1.2, input scaling 1.5,
   seed 8) and ESN #2 (input scaling 1, seed 2), as the search trained them

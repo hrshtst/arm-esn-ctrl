@@ -261,7 +261,7 @@ that run them are shared:
 | [manual_demonstration_v2_esn_dynamics](experiments/manual_demonstration_v2_esn_dynamics/README.md) | what the following search's two ESNs learned as dynamical systems: run on their own from rest anywhere in the joint space, with other warm-ups, pushed by short pulses along the reach on the robot, and read as the map of their reservoir state for its fixed points (Stages 1 and 2) | [015](reports/015-what-the-esns-learned/README.md) |
 | [manual_demonstration_v2_esn_screening](experiments/manual_demonstration_v2_esn_screening/README.md) | the following search's 1,050 ESNs screened without the robot, by their fixed points, their lead over a held posture, and their rates, against its robot outcomes; the passing ESNs held still on the robot; and 1,050 held-out ESNs alike (Stages 1 and 2) | [016](reports/016-screening-esns/README.md) |
 | [manual_demonstration_v2_consistent_search](experiments/manual_demonstration_v2_consistent_search/README.md) | the main results run again under one protocol fixed before any run: an ESN search over a wider grid with one tracker, every ESN from 49 offset starts, chosen by a rule in code and checked on held-out seeds and, afterwards, on the bias's scale (Stage 2); its README holds the protocol of reports 017 to 019 | [017](reports/017-search-under-one-protocol/README.md) |
-| [manual_demonstration_v2_consistent_trackers](experiments/manual_demonstration_v2_consistent_trackers/README.md) | the consistent search's two ESNs, the replay, and the progress replay with nine trackers, joint PD with and without the reference velocity and computed torque, in every scenario of the search and under the pushes given by hand (Stage 2) | 018, to be written |
+| [manual_demonstration_v2_consistent_trackers](experiments/manual_demonstration_v2_consistent_trackers/README.md) | the consistent search's two ESNs, the replay, and the progress replay with nine trackers, joint PD with and without the reference velocity and computed torque, in every scenario of the search and under the pushes given by hand (Stage 2) | [018](reports/018-trackers-under-one-protocol/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -463,6 +463,17 @@ The reports so far:
   the bias is needed: without it no setting qualifies; at half or twice its scale,
   other settings qualify, and none follows more. The ESNs' motors work a quarter as
   hard as the replay's undisturbed and under the block.
+- [018 The trackers under one protocol: the chosen ESNs and both replays with nine trackers](reports/018-trackers-under-one-protocol/README.md)
+  (Stage 2): report 017's two ESNs, the replay, and the progress replay with joint PD at
+  damping ratios 0.2, 0.4, and 0.8, given a zero or the reference's velocity, and with
+  computed torque, in the search's scenarios and under report 012's pushes by hand.
+  Every arm completes the task with every tracker. The ESNs follow the arm by 0.7 to
+  0.8 with every tracker, wait under the block, and ring about a quarter of the
+  replay's after its release; after a push they ring less only with light damping, and
+  come back to the path over 3 to 4 s against the replays' 1 s at most. Undisturbed,
+  their smoother reference needs an eighth to under half of the replays' accumulated
+  torque, and under the block a quarter or less of the replay's extra torque. The
+  replay with computed torque tracks the take closest and works the motors hardest.
 
 Each report has five parts:
 

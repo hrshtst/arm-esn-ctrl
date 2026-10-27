@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_trackers/recorded001_robot_esn1_lr0.03_sr1.2_is1.5_seed8_reference_velocity.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_consistent_trackers/recorded001_robot_esn1_lr0.03_sr1.2_is1.5_seed8_reference_velocity.toml"
+started = 2026-10-27 10:13:46+09:00
+host = "delbosque"
+commit = "5513ef36d648d2d77a2f72fdfa8a107b5b3d6387"
+uncommitted_changes = false
