@@ -1,4 +1,4 @@
-# The consistent study's part 3, step 4: the consistent search's 5,040 held-out ESNs, every combination of its 12
+# The consistent study's part 3, step 5: the consistent search's 5,040 held-out ESNs, every combination of its 12
 # leak rates, 7 spectral radii, 6 input scalings, and seeds 10 to 19, trained on the take as the search's
 # sweeps trained them, each screened on its own as report 016 screened report 011's grid
 # (its screen.toml, unchanged but for the ESNs): its fixed points from the zeros of R(q)

@@ -95,3 +95,17 @@ def test_where_they_rest_is_report_015s_from_step_1s_run():
     assert config["global_starts"]["run"].endswith("-global_starts")
     assert config["global_starts"]["run"].startswith("results/manual_demonstration_v2_consistent_dynamics/")
     assert without(config, "esn", "global_starts") == without(earlier, "esn", "global_starts")
+
+
+def test_what_the_screen_predicts_is_scored_against_the_searchs_sweeps_with_report_016s_rules():
+    config, earlier = load(DYNAMICS, "against_robot"), load(REPORT_016, "against_robot")
+    runs = load(SEARCH, "select")["runs"]
+
+    assert config["runs"]["screen"].startswith("results/manual_demonstration_v2_consistent_dynamics/")
+    assert config["runs"]["screen"].endswith("-screen")
+    assert sorted(config["runs"]["robot"]) == sorted(runs["nominal"] + runs["block"] + runs["pushes"] + runs["offsets"])
+    assert config["rules"] == earlier["rules"]
+    # The search's 11 qualifying settings, ESN #1's and ESN #2's first.
+    assert len(config["qualifying"]["settings"]) == 11
+    assert config["qualifying"]["settings"][:2] == [[0.03, 1.2, 1.5], [0.03, 1.2, 1.0]]
+    assert config["named"] == earlier["named"]

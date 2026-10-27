@@ -90,6 +90,11 @@ uv run python experiments/screen_esns.py experiments/manual_demonstration_v2_con
 | `screen.toml` | the search's 5,040 ESNs, seeds 0 to 9 |
 | `screen_seeds10to19.toml` | its 5,040 held-out ESNs, seeds 10 to 19 |
 
+The held-out screen's first run stopped at its 4,609th ESN (leak rate 0.3, spectral
+radius 1.75, input scaling 1.5, seed 18), whose run from the take's start comes to rest
+on a fixed point to the last bit: the rates across a run at rest were 0/0, and are now
+those of every change. It ran again.
+
 ## Step 6: what the screen predicts
 
 [`screen_against_robot.py`](../screen_against_robot.py), report 016's steps 2 and 4: each
@@ -111,6 +116,14 @@ passing ESNs exactly). The qualifying settings are the search's: its 11 for seed
 9, and the 8 that qualify with seeds 10 to 19 for those. The named ESNs: ESN #1 and
 ESN #2, and report 016's ESN #3 (leak rate 0.03, spectral radius 1.35, input scaling 1.5,
 seed 6) and report 007's (0.02, 1.35, 2, seed 7).
+
+```bash
+uv run python experiments/screen_against_robot.py experiments/manual_demonstration_v2_consistent_dynamics/against_robot.toml
+```
+
+| Configuration | What it runs |
+| --- | --- |
+| `against_robot.toml` | step 5's screen of seeds 0 to 9, `20261027-183607-screen`, against the search's 48 sweeps of the same ESNs (its `select.toml`'s runs) |
 
 The claims, report 016's of its held-out ESNs, now of both sets, over the 12 leak rates,
 where a leak rate has both passing and failing ESNs among those counted:
