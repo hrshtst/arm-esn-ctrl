@@ -279,3 +279,6 @@ Its configurations are in
   blocked along the reach.
 - A closing section: every main claim of reports 011 to 016, confirmed, changed, or
   not tested here.
+
+Its configurations are in
+[manual_demonstration_v2_consistent_dynamics](../manual_demonstration_v2_consistent_dynamics/README.md).

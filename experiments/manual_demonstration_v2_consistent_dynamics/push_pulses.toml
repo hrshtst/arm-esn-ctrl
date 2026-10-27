@@ -1,0 +1,52 @@
+# The consistent study's part 3, step 3: the consistent search's ESN #1 (leak rate 0.03,
+# spectral radius 1.2, input scaling 1.5, seed 8) and ESN #2 (input scaling 1, seed 2) on
+# the robot, against the replay of the take by time and by the arm's progress, each
+# pushed at its tip by one short pulse a run: 3 N or 6 N for 0.2 s, every second along
+# the reach from 1 s to 9 s, and at 12 s, at the target, in 8 directions, with the
+# search's tracker, in runs of 24 s: report 015's step 2, its runs as long as the
+# search's. See README.md.
+#
+#   uv run python experiments/push_pulses.py experiments/manual_demonstration_v2_consistent_dynamics/push_pulses.toml
+
+[[esn]]
+key = "esn1"
+label = "ESN #1"
+model = "results/manual_demonstration_v2_consistent_search/20261024-205825-esn1_lr0.03_sr1.2_is1.5_seed8/esn.toml"
+
+[[esn]]
+key = "esn2"
+label = "ESN #2"
+model = "results/manual_demonstration_v2_consistent_search/20261024-205835-esn2_lr0.03_sr1.2_is1_seed2/esn.toml"
+
+[tracker]
+# The search's tracker: joint PD at omega = 20 rad/s and a damping ratio of 0.4, given
+# the reference's velocity, its torque computed every 10 ms, the ESN's period, and
+# held between.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[progress]
+# Report 014's progress replay: the take replayed by time, but never more than lead_deg
+# along its joint path past the arm's progress.
+lead_deg = 2.5
+window = 1.0  # s
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up, as the search's runs; the take lasts 18.5 s and arrives at 9.6 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the take's start
+return_tolerance = 0.005  # after a pulse, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a pulse, the hand's motion above this is its ringing (Hz)
+ringing_window = 2.0      # the ringing is measured over this long after the pulse's end (s)
+following_window = 0.5    # the following gain: from a pulse's onset to this long after its end (s)
+
+[pulses]
+forces = [3.0, 6.0]                                    # N
+onsets = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 12.0]  # task time (s)
+angles_deg = [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]  # from the direction toward the target, counterclockwise
+duration = 0.2          # s
+response_window = 2.0   # the peak torque is compared over this long from the onset (s)
