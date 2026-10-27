@@ -109,3 +109,13 @@ def test_what_the_screen_predicts_is_scored_against_the_searchs_sweeps_with_repo
     assert len(config["qualifying"]["settings"]) == 11
     assert config["qualifying"]["settings"][:2] == [[0.03, 1.2, 1.5], [0.03, 1.2, 1.0]]
     assert config["named"] == earlier["named"]
+
+
+def test_the_passing_esns_are_held_still_as_report_016_held_them_with_the_searchs_tracker():
+    config, earlier = load(DYNAMICS, "release_robot"), load(REPORT_016, "release_robot")
+
+    assert config["runs"]["screen"] == load(DYNAMICS, "against_robot")["runs"]["screen"]
+    assert config["runs"]["outcomes"].startswith("results/manual_demonstration_v2_consistent_dynamics/")
+    assert config["runs"]["outcomes"].endswith("-against_robot")
+    assert config["tracker"] == load(SEARCH, "sweep_lr0.03_block")["tracker"]
+    assert without(config, "runs") == without(earlier, "runs")

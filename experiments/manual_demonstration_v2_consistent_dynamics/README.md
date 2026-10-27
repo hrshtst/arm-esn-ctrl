@@ -147,6 +147,14 @@ seeds 0 to 9 (1,049), as step 6 counts them, with the search's tracker:
 - **blocked** from the take's start, the tip held for 1 s or for 3 s from each of 2, 3,
   4, 5, 6, 7, and 8 s, one block a run, for 30 s.
 
+```bash
+uv run python experiments/release_robot.py experiments/manual_demonstration_v2_consistent_dynamics/release_robot.toml --workers 30
+```
+
+| Configuration | What it runs |
+| --- | --- |
+| `release_robot.toml` | the passing ESNs of step 6's run `20261028-044632-against_robot`, trained as step 5's screen `20261027-183607-screen` trained them |
+
 The claims, report 016's findings of its step 3:
 
 1. released, the robot does what the ESN does on its own: where both arrive, the rank
