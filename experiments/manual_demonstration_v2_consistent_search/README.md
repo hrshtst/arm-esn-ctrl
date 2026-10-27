@@ -261,6 +261,8 @@ The main comparison is the ESNs with joint PD against the replays with joint PD 
 the replay with computed torque; the ESNs with computed torque are noted in the
 tables. Besides the search's measures, how hard the motors work over the task, and
 how much more than the same arm undisturbed with the same tracker.
+Its configurations are in
+[manual_demonstration_v2_consistent_trackers](../manual_demonstration_v2_consistent_trackers/README.md).
 
 ## Part 3: the ESNs as dynamical systems (report 019)
 
