@@ -86,3 +86,12 @@ def test_the_screens_are_report_016s_over_the_searchs_esns(name, seeds):
     assert without(config["esn"], *SWEEP, "seed") == without(grid["esn"], *SWEEP, "seed")
     assert config["sweep"] == SWEEP | {"seed": list(seeds)}
     assert config["screen"] == earlier["screen"]
+
+
+def test_where_they_rest_is_report_015s_from_step_1s_run():
+    config, earlier = load(DYNAMICS, "fixed_points"), load(REPORT_015, "fixed_points")
+
+    assert [e["model"] for e in config["esn"]] == models()
+    assert config["global_starts"]["run"].endswith("-global_starts")
+    assert config["global_starts"]["run"].startswith("results/manual_demonstration_v2_consistent_dynamics/")
+    assert without(config, "esn", "global_starts") == without(earlier, "esn", "global_starts")

@@ -65,6 +65,14 @@ ESN's fixed points by Newton's method from the states of its runs, their eigenva
 the held reservoir's fixed point at each start posture, and the rates along its run
 from the take's start over windows of 0.5, 1, 2, and 4 s.
 
+```bash
+uv run python experiments/fixed_points.py experiments/manual_demonstration_v2_consistent_dynamics/fixed_points.toml
+```
+
+| Configuration | What it runs |
+| --- | --- |
+| `fixed_points.toml` | ESN #1 and ESN #2, from the states of step 1's run `20261027-180441-global_starts` |
+
 ## Step 5: the screen
 
 [`screen_esns.py`](../screen_esns.py), report 016's step 1 with its `screen.toml`
