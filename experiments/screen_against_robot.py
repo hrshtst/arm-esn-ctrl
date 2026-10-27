@@ -8,10 +8,14 @@
 
 The configuration names a screen run and the robot sweeps of
 ``experiments/sweep_robot_esn.py`` that ran the same ESNs (``[runs]``), one run per
-leak rate and scenario: undisturbed, under a block (one ``[disturbance]``), or under
-pushes (several). Each ESN's outcome is report 011's rule: undisturbed and under the
-block, it passes if its hand arrives, holds for the whole hold window, and ends within
-the goal; under the pushes, if it arrives and ends within it. The rules
+leak rate and scenario: undisturbed, under a block (one ``[disturbance]``), under
+pushes (several), and, optionally, from offset starts (an
+``[evaluation.start_grid]``). Each ESN's outcome is report 011's rule: undisturbed and
+under the block, it passes if its hand arrives, holds for the whole hold window, and
+ends within the goal; under the pushes, if it arrives and ends within it; and, with
+sweeps from the offset starts, if it arrives, holds, and ends within the goal from
+every one of them, as the consistent search counts them (report 017). An ESN that
+never arrives from one of them never arrives in some scenario. The rules
 (``[rules]``) flag ESNs from the screen alone:
 
 - **(a)** an attracting fixed point whose hand is outside the goal radius, against
@@ -31,8 +35,9 @@ Each count and score is taken over all the ESNs and within each leak rate; the
 counts also over the ESNs of the qualifying settings (``[qualifying]``), and the
 flags of the named ESNs (``[named]``) are listed. The run directory receives:
 
-- ``esns.csv``: one row per ESN, its outcomes on the robot, its flags, and the
-  screen's measures they come from;
+- ``esns.csv``: one row per ESN, its outcomes on the robot (with the offset starts,
+  how many of them it fails from), its flags, and the screen's measures they come
+  from;
 - ``rules.csv``: per rule, over all the ESNs and per leak rate, the ESNs flagged,
   the failing ones and those of the rule's own outcome caught, the passing and the
   qualifying ones rejected, and the share failing among the flagged and the
@@ -59,6 +64,8 @@ from arm_esn_ctrl.storage import resolve_run_path, start_run
 Key = tuple[float, float, float, int]  # leak rate, spectral radius, input scaling, seed
 SETTING = "pd_w20_z0.4"  # the sweeps' one tracker setting
 HOLD_S = 2.0  # the sweeps' hold window after arrival (s)
+# What the rule reads of a run from an offset start: the offset sweeps are large, and only these are kept.
+OFFSET_COLUMNS = ("arrived", "success", "hold_observed_s", "final_distance_m")
 RATES = ("across_rate_median_per_s", "across_rate_max_per_s", "posture_scale_median", "posture_scale_max")
 
 
@@ -84,8 +91,8 @@ def main() -> None:
     for p in read_csv(screen_dir / "fixed_points.csv"):
         fixed[esn_key(p)].append(p)
 
-    robot = robot_runs(config["runs"]["robot"])
-    if set(robot) != set(screen):
+    robot, offsets = robot_runs(config["runs"]["robot"])
+    if set(robot) != set(screen) or (offsets and set(offsets) != set(screen)):
         msg = "the robot sweeps and the screen must hold the same ESNs"
         raise ValueError(msg)
     keys = sorted(screen)
@@ -94,7 +101,7 @@ def main() -> None:
 
     rows = []
     for k in keys:
-        s, outcome = screen[k], outcomes(robot[k], radius)
+        s, outcome = screen[k], outcomes(robot[k], radius, offsets.get(k) if offsets else None)
         attracting_off = [p for p in fixed[k] if p["n_unstable"] == "0" and num(p, "target_distance_m") > radius]
         rows.append(
             dict(zip(("leak_rate", "spectral_radius", "input_scaling", "seed"), k, strict=True))
@@ -200,15 +207,31 @@ def main() -> None:
     print(f"\nWrote the results to {run_dir}")
 
 
-def robot_runs(references: list[str]) -> dict[Key, dict[str, dict[str, str]]]:
-    """Each ESN's row of ``runs.csv`` in each scenario, from the sweeps' run directories."""
+def robot_runs(
+    references: list[str],
+) -> tuple[dict[Key, dict[str, dict[str, str]]], dict[Key, list[dict[str, str]]]]:
+    """Each ESN's row of ``runs.csv`` in each scenario, and its runs from the offset starts, from the sweeps' runs.
+
+    A sweep from offset starts (one with an ``[evaluation.start_grid]``) gives every
+    ESN a run from each start, of which only the columns the rule reads are kept.
+    Without one, the second dictionary is empty.
+    """
     robot: dict[Key, dict[str, dict[str, str]]] = {}
+    offsets: dict[Key, list[dict[str, str]]] = {}
     for reference in references:
         run = resolve_run_path(reference)
         config = read_toml(run / "config.toml")
         disturbance = config.get("disturbance")
-        scenario = "nominal" if disturbance is None else "block" if isinstance(disturbance, dict) else "pushes"
         leak_rate = float(config["esn"]["leak_rate"])
+        if "start_grid" in config["evaluation"]:
+            for r in read_csv(run / "runs.csv"):
+                if r["setting"] != SETTING:
+                    msg = f"{run.name}: expected the runs of {SETTING}"
+                    raise ValueError(msg)
+                key = (leak_rate, num(r, "spectral_radius"), num(r, "input_scaling"), int(num(r, "seed")))
+                offsets.setdefault(key, []).append({c: r[c] for c in OFFSET_COLUMNS})
+            continue
+        scenario = "nominal" if disturbance is None else "block" if isinstance(disturbance, dict) else "pushes"
         for r in read_csv(run / "runs.csv"):
             if r["setting"] != SETTING or r["start"] != "0":
                 msg = f"{run.name}: expected one run per ESN, of {SETTING} from the demonstrated start"
@@ -220,32 +243,42 @@ def robot_runs(references: list[str]) -> dict[Key, dict[str, dict[str, str]]]:
                 msg = f"{run.name}: a second {scenario} run of an ESN"
                 raise ValueError(msg)
             scenarios[scenario] = r
-    return robot
+    return robot, offsets
 
 
-def outcomes(runs: dict[str, dict[str, str]], radius: float) -> dict[str, Any]:
-    """Report 011's rule for one ESN, and what the rules are set against."""
+def outcomes(
+    runs: dict[str, dict[str, str]], radius: float, offsets: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """Report 011's rule for one ESN, and what the rules are set against.
+
+    With its runs from the offset starts (``offsets``), it must also arrive, hold, and
+    end within the goal from each, and ``offset_failures`` counts those it does not.
+    """
     nominal, block, pushes = runs["nominal"], runs["block"], runs["pushes"]
 
     def holds(r: dict[str, str]) -> bool:
-        # success: arrived without leaving the goal after; the rule also asks for the whole hold and the end within it
+        # success: arrived without leaving the goal after; the rule also asks for the whole hold and the end within it,
+        # the hold short of the window by rounding alone, as the sweeps count it
         hold = float(r["hold_observed_s"]) if r["hold_observed_s"] != "nan" else 0.0
-        return yes(r["arrived"]) and yes(r["success"]) and hold >= HOLD_S and num(r, "final_distance_m") <= radius
+        whole_hold = hold >= HOLD_S - 1e-9
+        return yes(r["arrived"]) and yes(r["success"]) and whole_hold and num(r, "final_distance_m") <= radius
 
     returns = [num(pushes, f"return_time_s_{i}") for i in (1, 2, 3)]
     gains = [num(block, "following_gain")] + [num(pushes, f"following_gain_{i}") for i in (1, 2, 3)]
+    offset_failures = sum(not holds(r) for r in offsets or [])
     return {
         "passes": holds(nominal)
         and holds(block)
         and yes(pushes["arrived"])
-        and num(pushes, "final_distance_m") <= radius,
+        and num(pushes, "final_distance_m") <= radius
+        and offset_failures == 0,
         "ends_away": num(pushes, "final_distance_m") > radius,
-        "never_arrives": not all(yes(r["arrived"]) for r in runs.values()),
+        "never_arrives": not all(yes(r["arrived"]) for r in [*runs.values(), *(offsets or [])]),
         "arrival_nominal_s": num(nominal, "arrival_time_s") if yes(nominal["arrived"]) else np.inf,
         "arrival_block_s": num(block, "arrival_time_s") if yes(block["arrived"]) else np.inf,
         "return_s": float(np.mean(returns)) if np.all(np.isfinite(returns)) else np.nan,
         "following": float(np.mean(gains)),
-    }
+    } | ({"offset_failures": offset_failures} if offsets is not None else {})
 
 
 def counts(
