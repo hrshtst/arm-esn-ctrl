@@ -124,3 +124,12 @@ def test_the_rates_along_a_run_are_those_of_its_jacobians(loop, esn, demo):
     assert rates.posture.shape == (4, 2)
     with pytest.raises(ValueError, match="whole number of strides"):
         local_rates(loop, states, window=25, stride=10, n_rates=3)
+
+
+def test_at_rest_to_the_last_bit_every_change_is_across_the_run(loop, esn, demo):
+    _, states = run_states(esn, demo[0], 3000)
+    fixed, _ = loop.fixed_point(states[-1])
+    rates = local_rates(loop, np.repeat(fixed[np.newaxis], 41, axis=0), window=20, stride=10, n_rates=3)
+
+    assert np.all(np.isfinite(rates.across))
+    np.testing.assert_allclose(rates.across, rates.exponents, rtol=1e-12)

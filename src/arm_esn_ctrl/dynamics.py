@@ -215,6 +215,9 @@ def local_rates(loop: ClosedLoop, states: NDArray[np.float64], window: int, stri
 
 
 def _without(direction: NDArray[np.float64]) -> NDArray[np.float64]:
-    """The projection onto the changes orthogonal to ``direction``."""
-    unit = direction / np.linalg.norm(direction)
+    """The projection onto the changes orthogonal to ``direction``: every change, if the run has come to rest."""
+    norm = np.linalg.norm(direction)
+    if norm == 0.0:  # at a fixed point to the last bit, the run has no direction to leave out
+        return np.eye(len(direction))
+    unit = direction / norm
     return np.eye(len(unit)) - np.outer(unit, unit)
