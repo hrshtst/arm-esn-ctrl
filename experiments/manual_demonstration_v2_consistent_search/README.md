@@ -221,7 +221,7 @@ change the choice. The bias of the grid's ESNs is drawn uniformly from [−1, 1]
 not scaled, a bias scale of 1 held apart from the input scaling. Step 5 scales it
 (rclib's `bias_scaling`, `[esn]`'s `bias_scaling`; the draws do not depend on it, so
 a seed keeps its reservoir and input weights, and a scale of 1 repeats the grid's
-ESNs exactly):
+ESNs, their runs agreeing with the grid's to rounding, not bit for bit):
 
 1. at ESN #1's and ESN #2's settings, bias scales of 0, 0.25, 0.5, 1, and 2, seeds 0
    to 9, every scenario of step 1;
