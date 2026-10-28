@@ -119,3 +119,17 @@ def test_the_passing_esns_are_held_still_as_report_016_held_them_with_the_search
     assert config["runs"]["outcomes"].endswith("-against_robot")
     assert config["tracker"] == load(SEARCH, "sweep_lr0.03_block")["tracker"]
     assert without(config, "runs") == without(earlier, "runs")
+
+
+def test_the_held_out_screen_is_scored_as_seeds_0_to_9_against_the_searchs_held_out_sweeps():
+    config, scored = load(DYNAMICS, "against_robot_seeds10to19"), load(DYNAMICS, "against_robot")
+    runs = load(SEARCH, "select_seeds10to19")["runs"]
+
+    assert config["runs"]["screen"].startswith("results/manual_demonstration_v2_consistent_dynamics/")
+    assert config["runs"]["screen"].endswith("-screen_seeds10to19")
+    assert sorted(config["runs"]["robot"]) == sorted(runs["nominal"] + runs["block"] + runs["pushes"] + runs["offsets"])
+    assert config["rules"] == scored["rules"]
+    # The search's 8 qualifying settings with seeds 10 to 19, ESN #2's first.
+    assert len(config["qualifying"]["settings"]) == 8
+    assert config["qualifying"]["settings"][0] == [0.03, 1.2, 1.0]
+    assert config["named"] == {}

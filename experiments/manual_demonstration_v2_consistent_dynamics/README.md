@@ -93,7 +93,10 @@ uv run python experiments/screen_esns.py experiments/manual_demonstration_v2_con
 The held-out screen's first run stopped at its 4,609th ESN (leak rate 0.3, spectral
 radius 1.75, input scaling 1.5, seed 18), whose run from the take's start comes to rest
 on a fixed point to the last bit: the rates across a run at rest were 0/0, and are now
-those of every change. It ran again.
+those of every change. It ran again (`20261028-064044-screen_seeds10to19`). Of the 4,608
+ESNs both runs screened, 19, all at spectral radii of 1.5 and 1.75, whose runs from rest
+are chaotic, print a different count of fixed points or of starts ending at the target:
+the ESNs, trained again, agree with the first run's to rounding, not bit for bit.
 
 ## Step 6: what the screen predicts
 
@@ -124,6 +127,7 @@ uv run python experiments/screen_against_robot.py experiments/manual_demonstrati
 | Configuration | What it runs |
 | --- | --- |
 | `against_robot.toml` | step 5's screen of seeds 0 to 9, `20261027-183607-screen`, against the search's 48 sweeps of the same ESNs (its `select.toml`'s runs) |
+| `against_robot_seeds10to19.toml` | step 5's screen of seeds 10 to 19, `20261028-064044-screen_seeds10to19`, against the search's 48 sweeps of the same ESNs (its `select_seeds10to19.toml`'s runs) |
 
 The claims, report 016's of its held-out ESNs, now of both sets, over the 12 leak rates,
 where a leak rate has both passing and failing ESNs among those counted:

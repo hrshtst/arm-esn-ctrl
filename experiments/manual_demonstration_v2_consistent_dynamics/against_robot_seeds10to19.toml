@@ -1,0 +1,76 @@
+# The consistent study's part 3, step 6, held out: the screen of the search's held-out ESNs
+# (seeds 10 to 19) against the search's sweeps of the same ESNs, scored as against_robot.toml
+# scores seeds 0 to 9. See README.md.
+#
+#   uv run python experiments/screen_against_robot.py experiments/manual_demonstration_v2_consistent_dynamics/against_robot_seeds10to19.toml
+
+[runs]
+screen = "results/manual_demonstration_v2_consistent_dynamics/20261028-064044-screen_seeds10to19"
+# The search's step 1 with seeds 10 to 19 (its select_seeds10to19.toml's runs): one run per
+# leak rate and scenario, undisturbed, under the block, under the pushes, and from the 49 offset starts.
+robot = [
+    "results/manual_demonstration_v2_consistent_search/20261025-135324-sweep_lr0.01_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-135541-sweep_lr0.01_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-135811-sweep_lr0.01_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-140042-sweep_lr0.01_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-154932-sweep_lr0.015_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-155146-sweep_lr0.015_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-155415-sweep_lr0.015_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-155647-sweep_lr0.015_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-174526-sweep_lr0.02_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-174741-sweep_lr0.02_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-175011-sweep_lr0.02_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-175245-sweep_lr0.02_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-194158-sweep_lr0.03_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-194414-sweep_lr0.03_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-194643-sweep_lr0.03_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-194917-sweep_lr0.03_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-213829-sweep_lr0.04_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-214043-sweep_lr0.04_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-214313-sweep_lr0.04_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-214547-sweep_lr0.04_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-233542-sweep_lr0.05_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-233756-sweep_lr0.05_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-234025-sweep_lr0.05_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261025-234301-sweep_lr0.05_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-013301-sweep_lr0.07_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-013517-sweep_lr0.07_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-013746-sweep_lr0.07_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-014022-sweep_lr0.07_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-033048-sweep_lr0.1_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-033303-sweep_lr0.1_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-033534-sweep_lr0.1_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-033809-sweep_lr0.1_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-052856-sweep_lr0.15_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-053111-sweep_lr0.15_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-053341-sweep_lr0.15_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-053616-sweep_lr0.15_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-072703-sweep_lr0.2_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-072918-sweep_lr0.2_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-073149-sweep_lr0.2_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-073423-sweep_lr0.2_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-092519-sweep_lr0.3_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-092735-sweep_lr0.3_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-093005-sweep_lr0.3_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-093239-sweep_lr0.3_offsets_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-112356-sweep_lr0.5_nominal_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-112610-sweep_lr0.5_block_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-112840-sweep_lr0.5_pushes_seeds10to19",
+    "results/manual_demonstration_v2_consistent_search/20261026-113115-sweep_lr0.5_offsets_seeds10to19",
+]
+
+[rules]
+lead_deg = 10.0    # (b): a median lead near the path under this (deg)
+path_deg = 30.0    # (c): an unstable fixed point within this of the take's joint path (deg) ...
+release_s = 9.58   # ... or, held 4 s there and released, arriving later than the take does (s)
+far_m = 0.1        # (a), apart from the rules: only attracting fixed points whose hand is this far off the target (m)
+
+[qualifying]
+# The search's 8 qualifying settings with seeds 10 to 19, by its rank: leak rate, spectral radius, input scaling.
+settings = [
+    [0.03, 1.2, 1.0], [0.03, 1.35, 2.0], [0.03, 1.5, 2.0], [0.02, 0.99, 1.5], [0.02, 1.2, 1.5], [0.02, 1.35, 2.0],
+    [0.015, 0.99, 1.5], [0.01, 1.2, 2.0],
+]
+
+[named]
+# None: the search's ESN #1 and ESN #2, report 016's ESN #3, and report 007's ESN are of seeds 0 to 9.
