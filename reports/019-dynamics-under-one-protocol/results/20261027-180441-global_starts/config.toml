@@ -1,0 +1,33 @@
+# The consistent study's part 3, step 1: the consistent search's ESN #1 (leak rate 0.03,
+# spectral radius 1.2, input scaling 1.5, seed 8) and ESN #2 (input scaling 1, seed 2),
+# each on its own, fed its own output, from start postures all over both joints' range,
+# every 10 deg, each held for the ESN's 1 s warm-up first, as in training, for 60 s:
+# report 015's step 1, its runs 60 s long rather than 20 s. See README.md.
+#
+#   uv run python experiments/global_starts.py experiments/manual_demonstration_v2_consistent_dynamics/global_starts.toml
+
+[[esn]]
+key = "esn1"
+label = "ESN #1"
+model = "results/manual_demonstration_v2_consistent_search/20261024-205825-esn1_lr0.03_sr1.2_is1.5_seed8/esn.toml"
+
+[[esn]]
+key = "esn2"
+label = "ESN #2"
+model = "results/manual_demonstration_v2_consistent_search/20261024-205835-esn2_lr0.03_sr1.2_is1_seed2/esn.toml"
+
+[grid]
+step_deg = 10.0  # both joints from -180 to 170 deg: 36 x 36 = 1,296 start postures
+
+[evaluation]
+duration = 60.0  # task (s), after the warm-up; the take lasts 18.5 s and arrives at 9.6 s, and the robot runs last 24 s
+hold = 2.0       # hold window after arrival (s): the hand must stay within the goal radius
+
+[settling]
+hold = 4.0  # each start posture is also held this long (s), to see how far the state moves after the 1 s warm-up
+
+[analysis]
+rest_speed_dps = 0.5      # a run is at rest at its end when its joints move slower than this over the last second
+path_threshold_deg = 5.0  # a run joins the take's joint path once within this of it for good
+state_stride = 5          # the states are compared with the take's every this many steps (50 ms)
+n_components = 10         # the states are projected onto this many principal components of the take's

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_dynamics/against_robot_seeds10to19.toml"
+command = "experiments/screen_against_robot.py experiments/manual_demonstration_v2_consistent_dynamics/against_robot_seeds10to19.toml"
+started = 2026-10-28 11:55:52+09:00
+host = "delbosque"
+commit = "22cf71516a89931111023e6c54d40ed3d200b268"
+uncommitted_changes = false

@@ -1,0 +1,44 @@
+# The consistent study's part 3, step 7: the search's 1,049 passing ESNs of seeds 0 to 9,
+# as step 6 counts them, held still on the robot and let go, as report 016's step 3 held
+# report 011's: at each of their unstable fixed points within 30 deg of the take's joint
+# path, and by blocks along the reach. The search's tracker: joint PD at omega = 20 rad/s
+# and the damping ratio 0.4, given the reference's velocity, its torque computed every
+# 10 ms. See README.md.
+#
+#   uv run python experiments/release_robot.py experiments/manual_demonstration_v2_consistent_dynamics/release_robot.toml --workers 30
+
+[runs]
+screen = "results/manual_demonstration_v2_consistent_dynamics/20261027-183607-screen"
+outcomes = "results/manual_demonstration_v2_consistent_dynamics/20261028-044632-against_robot"
+
+[tracker]
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 30.0        # the blocks' runs (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the demonstrated start
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz)
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)
+
+[release]
+path_deg = 30.0        # the unstable fixed points within this of the take's joint path (deg)
+hold = 4.0             # the arm at rest there, the ESN held there this long (s) ...
+duration = 60.0        # ... then let go for this long (s)
+stay_deg = 1.0         # the arm stays while no joint is this far from the posture (deg)
+late_s = 9.58          # the take's arrival, from its start (s)
+
+[blocks]
+# Report 005's block, the tip gripped by a stiff spring, for each hold from each onset.
+onsets = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]  # task time (s); the take's hand moves from 0.6 s and arrives at 9.6 s
+holds = [1.0, 3.0]     # s
+duration = 30.0        # s
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m

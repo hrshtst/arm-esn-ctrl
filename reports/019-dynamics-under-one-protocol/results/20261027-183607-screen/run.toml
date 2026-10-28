@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_dynamics/screen.toml"
+command = "experiments/screen_esns.py experiments/manual_demonstration_v2_consistent_dynamics/screen.toml --workers 30"
+started = 2026-10-27 18:36:07+09:00
+host = "delbosque"
+commit = "4bcaddd12510c184c1c756845812eeef99ceadc0"
+uncommitted_changes = false

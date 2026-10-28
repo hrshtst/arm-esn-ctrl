@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_dynamics/released_robot_esn2_lr0.03_sr1.2_is1_seed2.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_consistent_dynamics/released_robot_esn2_lr0.03_sr1.2_is1_seed2.toml"
+started = 2026-10-28 15:50:31+09:00
+host = "delbosque"
+commit = "4bbc579a52d7c690d20e6af2fa3de410238ae080"
+uncommitted_changes = false

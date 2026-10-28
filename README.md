@@ -262,7 +262,7 @@ that run them are shared:
 | [manual_demonstration_v2_esn_screening](experiments/manual_demonstration_v2_esn_screening/README.md) | the following search's 1,050 ESNs screened without the robot, by their fixed points, their lead over a held posture, and their rates, against its robot outcomes; the passing ESNs held still on the robot; and 1,050 held-out ESNs alike (Stages 1 and 2) | [016](reports/016-screening-esns/README.md) |
 | [manual_demonstration_v2_consistent_search](experiments/manual_demonstration_v2_consistent_search/README.md) | the main results run again under one protocol fixed before any run: an ESN search over a wider grid with one tracker, every ESN from 49 offset starts, chosen by a rule in code and checked on held-out seeds and, afterwards, on the bias's scale (Stage 2); its README holds the protocol of reports 017 to 019 | [017](reports/017-search-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_trackers](experiments/manual_demonstration_v2_consistent_trackers/README.md) | the consistent search's two ESNs, the replay, and the progress replay with nine trackers, joint PD with and without the reference velocity and computed torque, in every scenario of the search and under the pushes given by hand (Stage 2) | [018](reports/018-trackers-under-one-protocol/README.md) |
-| [manual_demonstration_v2_consistent_dynamics](experiments/manual_demonstration_v2_consistent_dynamics/README.md) | the consistent search's two ESNs read as report 015 read report 011's, and all its 10,080 ESNs screened as report 016 screened report 011's, set against their outcomes with the offset starts counted; the passing ESNs released at their unstable fixed points and blocked along the reach on the robot (Stages 1 and 2) | 019, to be written |
+| [manual_demonstration_v2_consistent_dynamics](experiments/manual_demonstration_v2_consistent_dynamics/README.md) | the consistent search's two ESNs read as report 015 read report 011's, and all its 10,080 ESNs screened as report 016 screened report 011's, set against their outcomes with the offset starts counted; the passing ESNs released at their unstable fixed points and blocked along the reach on the robot (Stages 1 and 2) | [019](reports/019-dynamics-under-one-protocol/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -475,6 +475,16 @@ The reports so far:
   their smoother reference needs an eighth to under half of the replays' accumulated
   torque, and under the block a quarter or less of the replay's extra torque. The
   replay with computed torque tracks the take closest and works the motors hardest.
+- [019 The ESNs as dynamical systems under one protocol, and the study's claims](reports/019-dynamics-under-one-protocol/README.md)
+  (Stages 1 and 2): report 015's analyses of report 017's two ESNs, which repeat to the
+  digit, and report 016's screen of the search's 5,040 and 5,040 held-out ESNs, set
+  against their outcomes with the offset starts counted. Within a leak rate, the screen
+  tells what report 016 found; across the wider grid and with the offset starts, an
+  attracting fixed point off the target now predicts failing better than the leak rate.
+  The offset starts already catch most ESNs that never arrive after a release at an
+  unstable fixed point; on the robot, such a release does what the ESN on its own does
+  up to a leak rate of 0.1, not above. Of the 29 main claims of reports 011 to 016, 22
+  are confirmed, 2 in part, 3 of report 016's changed, and 2 of report 013's not tested.
 
 Each report has five parts:
 

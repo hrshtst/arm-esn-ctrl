@@ -7,8 +7,8 @@ holds with this part's plan
 report 015's analyses of the two ESNs that [the search](../manual_demonstration_v2_consistent_search/README.md)
 chose ([report 017](../../reports/017-search-under-one-protocol/README.md)), and report 016's
 screen of all the search's ESNs, set against their outcomes on the robot with the offset
-starts counted. Results: report 019, to be written, which also closes the study with
-the claims of reports 011 to 016.
+starts counted. Results: [report 019](../../reports/019-dynamics-under-one-protocol/README.md),
+which also closes the study with the claims of reports 011 to 016.
 
 - **The ESNs:** ESN #1 (leak rate 0.03, spectral radius 1.2, input scaling 1.5,
   seed 8) and ESN #2 (input scaling 1, seed 2), as the search trained them

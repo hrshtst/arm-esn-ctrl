@@ -1,8 +1,9 @@
 # Manual-demonstration consistent search, v2 (Stage 2)
 
-Results: [report 017](../../reports/017-search-under-one-protocol/README.md) (the search)
-and [report 018](../../reports/018-trackers-under-one-protocol/README.md) (the trackers),
-with report 019 (the ESNs as dynamical systems), to be written.
+Results: [report 017](../../reports/017-search-under-one-protocol/README.md) (the search),
+[report 018](../../reports/018-trackers-under-one-protocol/README.md) (the trackers), and
+[report 019](../../reports/019-dynamics-under-one-protocol/README.md) (the ESNs as
+dynamical systems, and the study's claims).
 
 Reports 005 to 016 changed their assumptions as they went: the tracker the search was
 run with (computed torque and joint PD at ζ = 0.1 with a zero reference velocity and

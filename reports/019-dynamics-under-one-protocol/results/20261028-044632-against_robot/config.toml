@@ -1,0 +1,81 @@
+# The consistent study's part 3, step 6: the screen of the search's 5,040 ESNs (seeds 0 to 9)
+# against the search's sweeps of the same ESNs, with the offset starts counted, scored with
+# report 016's rules and thresholds. See README.md.
+#
+#   uv run python experiments/screen_against_robot.py experiments/manual_demonstration_v2_consistent_dynamics/against_robot.toml
+
+[runs]
+screen = "results/manual_demonstration_v2_consistent_dynamics/20261027-183607-screen"
+# The search's step 1 (its select.toml's runs): one run per leak rate
+# and scenario, undisturbed, under the block, under the pushes, and from the 49 offset starts.
+robot = [
+    "results/manual_demonstration_v2_consistent_search/20261023-212736-sweep_lr0.01_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261023-212945-sweep_lr0.01_block",
+    "results/manual_demonstration_v2_consistent_search/20261023-213215-sweep_lr0.01_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261023-213447-sweep_lr0.01_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261023-232331-sweep_lr0.015_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261023-232544-sweep_lr0.015_block",
+    "results/manual_demonstration_v2_consistent_search/20261023-232813-sweep_lr0.015_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261023-233045-sweep_lr0.015_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-011940-sweep_lr0.02_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-012154-sweep_lr0.02_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-012424-sweep_lr0.02_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-012656-sweep_lr0.02_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-031601-sweep_lr0.03_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-031816-sweep_lr0.03_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-032045-sweep_lr0.03_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-032319-sweep_lr0.03_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-051233-sweep_lr0.04_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-051447-sweep_lr0.04_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-051717-sweep_lr0.04_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-051951-sweep_lr0.04_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-070839-sweep_lr0.05_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-071056-sweep_lr0.05_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-071327-sweep_lr0.05_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-071600-sweep_lr0.05_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-090615-sweep_lr0.07_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-090829-sweep_lr0.07_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-091100-sweep_lr0.07_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-091335-sweep_lr0.07_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-110405-sweep_lr0.1_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-110620-sweep_lr0.1_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-110850-sweep_lr0.1_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-111125-sweep_lr0.1_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-130152-sweep_lr0.15_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-130407-sweep_lr0.15_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-130638-sweep_lr0.15_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-130912-sweep_lr0.15_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-150027-sweep_lr0.2_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-150241-sweep_lr0.2_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-150511-sweep_lr0.2_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-150745-sweep_lr0.2_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-165844-sweep_lr0.3_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-170059-sweep_lr0.3_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-170330-sweep_lr0.3_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-170605-sweep_lr0.3_offsets",
+    "results/manual_demonstration_v2_consistent_search/20261024-185654-sweep_lr0.5_nominal",
+    "results/manual_demonstration_v2_consistent_search/20261024-185911-sweep_lr0.5_block",
+    "results/manual_demonstration_v2_consistent_search/20261024-190141-sweep_lr0.5_pushes",
+    "results/manual_demonstration_v2_consistent_search/20261024-190416-sweep_lr0.5_offsets",
+]
+
+[rules]
+lead_deg = 10.0    # (b): a median lead near the path under this (deg)
+path_deg = 30.0    # (c): an unstable fixed point within this of the take's joint path (deg) ...
+release_s = 9.58   # ... or, held 4 s there and released, arriving later than the take does (s)
+far_m = 0.1        # (a), apart from the rules: only attracting fixed points whose hand is this far off the target (m)
+
+[qualifying]
+# The search's 11 qualifying settings, by its rank: leak rate, spectral radius, input scaling.
+settings = [
+    [0.03, 1.2, 1.5], [0.03, 1.2, 1.0], [0.03, 1.35, 1.5], [0.02, 0.99, 1.5], [0.03, 1.35, 1.0], [0.02, 1.2, 1.5],
+    [0.02, 1.2, 2.0], [0.02, 1.35, 2.0], [0.02, 1.35, 1.5], [0.015, 1.2, 2.0], [0.015, 1.2, 1.5],
+]
+
+[named]
+# Leak rate, spectral radius, input scaling, seed: the search's ESN #1 and ESN #2, report
+# 016's ESN #3, and report 007's ESN.
+"ESN #1" = [0.03, 1.2, 1.5, 8]
+"ESN #2" = [0.03, 1.2, 1.0, 2]
+"ESN #3" = [0.03, 1.35, 1.5, 6]
+"report 007's" = [0.02, 1.35, 2.0, 7]
