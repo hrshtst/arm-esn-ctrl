@@ -159,6 +159,20 @@ uv run python experiments/release_robot.py experiments/manual_demonstration_v2_c
 | --- | --- |
 | `release_robot.toml` | the passing ESNs of step 6's run `20261028-044632-against_robot`, trained as step 5's screen `20261027-183607-screen` trained them |
 
+Shown over time, as report 016 showed them,
+[`robot_esn.py`](../robot_esn.py) runs ESN #1 and ESN #2 each against the replay and the
+progress replay, with the search's tracker, under two of the blocks and released at
+ESN #2's unstable fixed point beside the path:
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_consistent_dynamics/released_robot_esn2_lr0.03_sr1.2_is1_seed2.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `{block5to8,block8to11}_robot_{esn1_lr0.03_sr1.2_is1.5_seed8,esn2_lr0.03_sr1.2_is1_seed2}.toml` (4) | one ESN and both replays, the tip held from 5 s to 8 s or from 8 s to 11 s, from the take's start, for 30 s |
+| `released_robot_{esn1_lr0.03_sr1.2_is1.5_seed8,esn2_lr0.03_sr1.2_is1_seed2}.toml` (2) | one ESN and both replays, the arm at rest at ESN #2's unstable fixed point beside the path, (39.85°, 97.12°), the ESN held there 4 s, then let go for 30 s |
+
 The claims, report 016's findings of its step 3:
 
 1. released, the robot does what the ESN does on its own: where both arrive, the rank

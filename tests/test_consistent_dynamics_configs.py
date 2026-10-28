@@ -133,3 +133,16 @@ def test_the_held_out_screen_is_scored_as_seeds_0_to_9_against_the_searchs_held_
     assert len(config["qualifying"]["settings"]) == 8
     assert config["qualifying"]["settings"][0] == [0.03, 1.2, 1.0]
     assert config["named"] == {}
+
+
+@pytest.mark.parametrize("scenario", ["block5to8", "block8to11", "released"])
+@pytest.mark.parametrize(("tag", "earlier_tag"), CHOSEN.items())
+def test_the_shown_runs_are_report_016s_with_the_searchs_esns_and_both_replays(scenario, tag, earlier_tag):
+    config = load(DYNAMICS, f"{scenario}_robot_{tag}")
+    earlier = load(REPORT_016, f"{scenario}_robot_{earlier_tag}")
+    search = load(SEARCH, f"block_robot_{tag}")
+
+    assert config["esn"]["model"] == models()[list(CHOSEN).index(tag)]
+    assert config["tracker"] == search["tracker"]
+    assert config["progress"] == search["progress"]
+    assert without(config, "esn", "progress") == without(earlier, "esn")
