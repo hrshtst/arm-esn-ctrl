@@ -12,7 +12,8 @@ the report, runs its checks against reports 015 and 016, and draws into
 
 - report 015's analyses of ESN #1 and ESN #2 (Sections 3.1 to 3.4), drawn by report
   015's own code pointed at these runs: ``arrival.png`` (the arrival over the start
-  postures), ``series.png`` (the joint angles from six starts), ``warmup.png``,
+  postures), ``portrait.png`` (the runs from every 30° in joint space), ``hands.png``
+  (their hand paths), ``series.png`` (the joint angles from six starts), ``warmup.png``,
   ``pulse_maps.png`` (the measures of the pulses of 6 N), ``fixed_points.png``, and
   ``rates.png``;
 - ``pulses_esn1.png`` and ``pulses_esn2.png``: each ESN's joint angles and torques over
@@ -142,6 +143,8 @@ def main() -> None:
     report_015 = earlier_015()
     figures = {
         "arrival.png": report_015.plot_arrival(),
+        "portrait.png": report_015.plot_portrait(),
+        "hands.png": report_015.plot_hands(),
         "series.png": report_015.plot_series(),
         "warmup.png": report_015.plot_warmup(),
         "pulse_maps.png": report_015.plot_pulse_maps(6.0),

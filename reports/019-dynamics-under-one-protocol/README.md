@@ -265,31 +265,52 @@ logs. [`make_figures.py`](make_figures.py) reads them there, copies the rest int
 joint path, from its start (circle) to the target (star). The dashed square holds the
 49 offset starts.
 
+![The runs in joint space](results/summary/portrait.png)
+
+**Figure 2.** The runs from every 30° in joint space: from the start posture (dot), the
+first step (dashed), and the rest of the run, colored by time.
+
+![The hand paths](results/summary/hands.png)
+
+**Figure 3.** The hand's paths from every 30°, the first step dashed. The gray circle
+is the arm's reach.
+
 ![The joint angles from six starts](results/summary/series.png)
 
-**Figure 2.** The joint angles over the 60 s of the runs from six starts: the take's
+**Figure 4.** The joint angles over the 60 s of the runs from six starts: the take's
 start (black), three far from it, and two near the target.
 
 | From the 1,296 starts, median (range) | ESN #1 | ESN #2 | Report 015 |
 | --- | --- | --- | --- |
 | End at rest at the target | 1,296 | 1,296 | the same |
 | Arrival | 8.84 s (0.01 to 11.40 s) | 9.85 s (0.08 to 13.53 s) | the same |
+| First step | 84° (up to 248°) | 79° (up to 228°) | the same |
 | Join the take's path (within 5° for good) | 1,296, at 1.30 s (up to 2.69 s) | 1,296, at 2.41 s (up to 9.02 s) | the same |
 | … at a progress along it of | 0.20 (0 to 1) | 0.02 (0 to 1) | the same |
 | The state's move after the warm-up, held to 4 s (of the take's spread) | 0.14 (0.10 to 0.38) | 0.20 (0.14 to 0.47) | the same |
 
 - **The target attracts both ESNs from every start, and holds them.** After 60 s, every
   run still rests within 3 mm of the target: none drifts off once the reach is over
-  (Figure 2).
-- **Everything else is report 015's:** the first step, where and when the runs join the
-  path, the reservoir's convergence onto the take's states, and the arrival's
-  dependence on where the run joins.
+  (Figure 4).
+- **The runs from every 30° are report 015's Figures 2 and 4, to the pixel** (Figures 2
+  and 3): up to 20 s the runs are report 015's, and every one has arrived by 13.5 s.
+  - **The ESN does not start from where it is held.** Its first output jumps a median
+    84° (ESN #1) and 79° (ESN #2) from a start, into a region around the take's path
+    (dashed). In the plane, the hand's first step crosses much of the arm's reach.
+  - **Then the runs join the path and follow it to the target.** Within a second or two
+    they come within 5° of it, from below near its start, from above its second half
+    near its end. ESN #2's runs join later and nearer the path's start than ESN #1's
+    (a median 2.41 s and 0.02 of the way, against 1.30 s and 0.20), so they are still
+    on the path's first half 3 s to 8 s after the start (blue to green), and arrive
+    later.
+- **Everything else is report 015's as well:** the reservoir's convergence onto the
+  take's states, and the arrival's dependence on where the run joins.
 
 ### 3.2 The warm-up
 
 ![Arrival against the warm-up](results/summary/warmup.png)
 
-**Figure 3.** Run with other warm-ups than the trained 1 s: when the hand arrives,
+**Figure 5.** Run with other warm-ups than the trained 1 s: when the hand arrives,
 against the arrival with 1 s. The band is the range over the 49 offset starts. The
 dotted line is a clock from the reset.
 
@@ -310,19 +331,19 @@ dotted line is a clock from the reset.
 
 ![The pulse measures, 6 N](results/summary/pulse_maps.png)
 
-**Figure 4.** The measures of each pulse of 6 N, over its onset (rows) and direction
+**Figure 6.** The measures of each pulse of 6 N, over its onset (rows) and direction
 (columns), for each arm.
 
 ![ESN #1 under pulses](results/summary/pulses_esn1.png)
 
-**Figure 5.** ESN #1's arm against the replay's and the progress replay's, undisturbed
+**Figure 7.** ESN #1's arm against the replay's and the progress replay's, undisturbed
 and under four pulses of 6 N: forward and backward at 4 s, across at 7 s, and across at
 the target at 12 s. Top: the tip force. Then the joint angles, the references dashed,
 the take thick gray; and the joint torques.
 
 ![ESN #2 under pulses](results/summary/pulses_esn2.png)
 
-**Figure 6.** The same for ESN #2.
+**Figure 8.** The same for ESN #2.
 
 | Over the 80 pulses of 6 N, median (range) | ESN #1 | ESN #2 | replay | progress replay |
 | --- | --- | --- | --- | --- |
@@ -338,12 +359,12 @@ At 3 N, the medians are 34, 39, 28, and 27 mm, and back in 1.47, 1.70, 0.24, and
 
 - **The table is report 015's,** and so are its findings:
   - the ESNs go on from where a pulse leaves them, arriving sooner when pushed forward
-    and later when pushed back (Figure 5, the second and third columns);
+    and later when pushed back (Figure 7, the second and third columns);
   - they follow the arm by about half, and come back to the path in seconds, not
     tenths;
   - the peak torque's rise is the push's, alike for every arm;
   - the same six pulsed runs fail, all pulsed at 9 s, just before arriving.
-- **Over time, the ESN's arm is the smooth one** (Figures 5 and 6). Undisturbed, its
+- **Over time, the ESN's arm is the smooth one** (Figures 7 and 8). Undisturbed, its
   torque stays within 0.2 N m; the replays' chatters up to 0.6 N m through the reach.
   After a pulse, the torques of all three arms spike alike. The ESN's arm then moves
   off the take, its reference with it, while both replays' arms snap back.
@@ -352,13 +373,13 @@ At 3 N, the medians are 34, 39, 28, and 27 mm, and back in 1.47, 1.70, 0.24, and
 
 ![The fixed points and their slowest modes](results/summary/fixed_points.png)
 
-**Figure 7.** The fixed points of each ESN fed its own output (star: attracting;
+**Figure 9.** The fixed points of each ESN fed its own output (star: attracting;
 cross: unstable). The ellipses show how each of the six slowest modes moves the
 posture around its fixed point, scaled to 15°.
 
 ![Rates along the run](results/summary/rates.png)
 
-**Figure 8.** Along the ESN's own run from the take's start, over windows of 0.5 to
+**Figure 10.** Along the ESN's own run from the take's start, over windows of 0.5 to
 4 s starting at each time. Top: the largest rate at which a change of the state across
 the run grows (negative: it decays). Bottom: the most a deviation of the output posture
 is scaled by the window's end. The dotted line is when the take arrives.
@@ -390,7 +411,7 @@ is scaled by the window's end. The dotted line is when the take arrives.
 
 ![The screen's measures by leak rate](results/summary/screen.png)
 
-**Figure 9.** The screen's measures by leak rate, of seeds 0 to 9 and of the held-out
+**Figure 11.** The screen's measures by leak rate, of seeds 0 to 9 and of the held-out
 seeds 10 to 19, 420 ESNs each.
 
 | Seeds 0 to 9, per leak rate (420 ESNs each) | 0.01 | 0.015 | 0.02 | 0.03 | 0.04 | 0.05 | 0.07 | 0.1 | 0.15 | 0.2 | 0.3 | 0.5 |
@@ -438,13 +459,13 @@ seeds 10 to 19, 420 ESNs each.
 
 ![The rules' failing shares](results/summary/rules.png)
 
-**Figure 10.** The share failing on the robot among the ESNs each rule flags (filled)
+**Figure 12.** The share failing on the robot among the ESNs each rule flags (filled)
 and among the others (open), by leak rate, with the share among all of seeds 0 to 9
 (gray).
 
 ![Within each leak rate](results/summary/scores.png)
 
-**Figure 11.** Within each leak rate, of both sets: the area under the ROC curve for
+**Figure 13.** Within each leak rate, of both sets: the area under the ROC curve for
 failing of (a), and of an unstable fixed point nearer the path; that of a smaller lead
 for ending away under the pushes; and the rank correlation of the posture's scaling
 with the following.
@@ -495,21 +516,21 @@ The first and fifth rows are report 016's, to the digit.
     and 17% of the passing ones. Even over report 016's grid, it then beats the leak
     rate (0.84 against 0.83).
   - **The wider grid:** the failing share no longer rises with the leak rate. It is
-    0.73 at 0.01, 0.58 to 0.60 at 0.015 to 0.03, and 0.74 to 0.94 above (Figure 10,
+    0.73 at 0.01, 0.58 to 0.60 at 0.015 to 0.03, and 0.74 to 0.94 above (Figure 12,
     gray). So the leak rate tells less (0.67), and (a), which tracks the failing
     within each leak rate, tells more (0.73), even without the offset starts.
 - **(a) tells failing apart at every leak rate,** by 0.27 to 0.55 of the share up to
   0.3 in both sets. At 0.5, among seeds 0 to 9, nearly every ESN fails either way, by
-  0.94 against 0.92 (Figure 10, top).
+  0.94 against 0.92 (Figure 12, top).
 - **(b)'s pattern repeats.** Its area under the ROC curve for ending away is 0.26 to
   0.34 at 0.01 and 0.015, below chance: there, the ESNs that end away lead more. It
-  is 0.66 to 0.81 from 0.03 to 0.1, and falls to 0.54 to 0.58 at 0.5 (Figure 11).
+  is 0.66 to 0.81 from 0.03 to 0.1, and falls to 0.54 to 0.58 at 0.5 (Figure 13).
 - **(c) still flags most ESNs:** 73% of them, and 54% of the passing ones (51% held
   out), ESN #2, #3, and report 007's among them. Up to 0.03, the flagged ESNs fail no
   more often than the others: 0.54 to 0.72 against 0.61 to 0.73.
 - **(d): the posture's scaling ranks the following up to 0.07,** by 0.60 to 0.79 in
   both sets. Its link fades with the leak rate: +0.47 at 0.1, +0.27 to +0.38 at 0.15,
-  and −0.17 to +0.11 from 0.2 (Figure 11). The rate across the run correlates with the
+  and −0.17 to +0.11 from 0.2 (Figure 13). The rate across the run correlates with the
   following −0.51 over the grid, but by −0.18 to +0.21 within each leak rate above
   0.01.
 - **The release arrival tells the block's arrival little:** a rank correlation of
@@ -519,19 +540,19 @@ The first and fifth rows are report 016's, to the digit.
 
 ![Releases](results/summary/release.png)
 
-**Figure 12.** Left: the robot's arrival after a release at an unstable fixed point,
+**Figure 14.** Left: the robot's arrival after a release at an unstable fixed point,
 against the ESN's own after the same hold; never within 60 s is drawn at 62 s. Right:
 the robot's arrival less the ESN's own, where both arrive.
 
 ![Blocks](results/summary/blocks.png)
 
-**Figure 13.** The 1,049 passing ESNs under blocks along the reach. Left: the share
+**Figure 15.** The 1,049 passing ESNs under blocks along the reach. Left: the share
 failing the rule under a block, by onset. Right: the median delay of those arriving, by
 onset. With an unstable fixed point within 30° of the path, 508 ESNs; without, 541.
 
 ![ESN #1 shown](results/summary/shown_esn1.png)
 
-**Figure 14.** ESN #1's arm against the replay's and the progress replay's: undisturbed
+**Figure 16.** ESN #1's arm against the replay's and the progress replay's: undisturbed
 (the search's step 4), the tip held from 5 s to 8 s and from 8 s to 11 s, and released at
 ESN #2's unstable fixed point beside the path after 4 s there. Top: the tip force. Then
 the joint angles, the references dashed, the take thick gray; and the joint torques,
@@ -539,7 +560,7 @@ each column on its own scale.
 
 ![ESN #2 shown](results/summary/shown_esn2.png)
 
-**Figure 15.** The same for ESN #2.
+**Figure 17.** The same for ESN #2.
 
 | Released at 994 unstable fixed points (508 ESNs) | Leak rates 0.01 to 0.1 | Leak rates 0.15 to 0.5 |
 | --- | --- | --- |
@@ -592,13 +613,13 @@ fixed points lie a median 0.58 of the way along the path.
   - Three are in the qualifying settings: (0.015, 1.2, 2, seed 4), (0.03, 1.35, 1,
     seed 5), and (0.03, 1.35, 1.5, seed 2). None of the named ESNs is among them.
 - **Unstable fixed points near the path do not make the blocks fail.**
-  - The ESNs with one fail less often, at either hold and at every onset (Figure 13,
+  - The ESNs with one fail less often, at either hold and at every onset (Figure 15,
     left). Within each leak rate from 0.01 to 0.07 too. From 0.1 up, those with one
     fail more often, 1% to 17% against 0% to 6%, among 1 to 26 ESNs of each kind.
   - What fails is a late block: most failing runs (2,540 of 2,580) arrive and then
     leave the goal or do not hold, most of them under the blocks from 7 s and 8 s.
     So do ESN #1, ESN #2, and the replay under the block from 8 s to 11 s (Figures
-    14 and 15). The progress replay holds there.
+    16 and 17). The progress replay holds there.
 - **The delay grows little near an unstable fixed point, and not at fast leak rates.**
   - Its rank correlation with the distance is −0.09 to −0.23 within each leak rate
     from 0.015 to 0.05, held 1 s, as report 016 found within its range. It is +0.14
@@ -608,7 +629,7 @@ fixed points lie a median 0.58 of the way along the path.
   - The median delay is negative, −0.5 s held 1 s and −0.4 s held 3 s: released, the
     arm reaches the target sooner than the take would from where it was held.
 - **The shown runs of ESN #1, ESN #2, and the replay are report 016's, to the digit**
-  (Figures 14 and 15):
+  (Figures 16 and 17):
   - Under the block from 5 s to 8 s, ESN #1 presses with 1.8 N m and ESN #2 with
     9.7 N m, against the replay's 67 N m. The progress replay waits as well, with
     2.4 N m.
