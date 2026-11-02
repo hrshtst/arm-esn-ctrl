@@ -3,16 +3,19 @@
 
 """Tests for a trained ESN's update, evaluated with numpy anywhere in its state space."""
 
+import itertools
 import tomllib
 
 import numpy as np
 import pytest
 
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
-from arm_esn_ctrl.dynamics import ClosedLoop, local_rates
+from arm_esn_ctrl.disturbances import Push
+from arm_esn_ctrl.dynamics import ClosedLoop, RobotLoop, StateRecorder, local_rates, simulated_forces
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.states import teacher_forced_states
 from arm_esn_ctrl.storage import REPO_ROOT
+from arm_esn_ctrl.tracking import TrackerConfig, track, tracking_gains
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 ESN_CONFIG = EsnConfig(
@@ -27,16 +30,25 @@ ESN_CONFIG = EsnConfig(
     ridge=1e-6,
     seed=0,
 )
+# Joint PD at 20 rad/s and a damping ratio of 0.4, its torque computed every ESN period and held, as the search's.
+TRACKER = TrackerConfig("pd", 20.0, 0.02, damping=0.4, control_period=ESN_CONFIG.dt)
+SIMULATION_DT = 0.002  # s, as reach_tvs.toml's
 
 
 @pytest.fixture(scope="module")
-def demo():
-    """Demonstration 6, sampled every 10 ms."""
+def reach():
+    """Demonstration 6's log."""
     with CONFIG.open("rb") as f:
         config = tomllib.load(f)
     config["demonstrations"]["start_q"] = config["demonstrations"]["start_q"][6:7]
     config["task"]["duration"] = 1.5
-    return resample_joint_angles(simulate_reaches(config)[0], ESN_CONFIG.dt)[1]
+    return simulate_reaches(config)[0]
+
+
+@pytest.fixture(scope="module")
+def demo(reach):
+    """Demonstration 6, sampled every 10 ms."""
+    return resample_joint_angles(reach, ESN_CONFIG.dt)[1]
 
 
 @pytest.fixture(scope="module")
@@ -133,3 +145,113 @@ def test_at_rest_to_the_last_bit_every_change_is_across_the_run(loop, esn, demo)
 
     assert np.all(np.isfinite(rates.across))
     np.testing.assert_allclose(rates.across, rates.exponents, rtol=1e-12)
+
+
+@pytest.fixture(scope="module")
+def arm(reach, demo):
+    """The demonstration's arm, and joint PD's gains for it."""
+    skeleton = reach.build_skeleton()
+    return skeleton, tracking_gains(TRACKER, skeleton, demo[-1])
+
+
+@pytest.fixture(scope="module")
+def robot(loop, arm):
+    return RobotLoop.from_tracker(loop, arm[0], TRACKER, arm[1], SIMULATION_DT)
+
+
+def tracked(esn, robot, arm, start_q, seconds, external_force=None):
+    """A run of the ESN on the robot from rest at ``start_q``: its log, and the system's states at every instant."""
+    skeleton, gains = arm
+    posed = skeleton.clone()
+    posed.q, posed.dq = start_q, np.zeros_like(start_q)
+    recorder = StateRecorder(esn)
+    log = track(
+        posed,
+        recorder,
+        TRACKER,
+        gains,
+        period=ESN_CONFIG.dt,
+        warmup_steps=ESN_CONFIG.warmup_steps,
+        duration=seconds,
+        dt=SIMULATION_DT,
+        external_force=external_force,
+    )
+    return log, robot.run_states(log, recorder, ESN_CONFIG.warmup_steps)
+
+
+def test_the_robot_map_reproduces_the_tracked_arm(esn, robot, arm, demo):
+    log, states = tracked(esn, robot, arm, demo[0], 1.0)
+
+    assert states.shape == (100, robot.dimension)
+    q = log.channel("q").reshape(len(log.times), -1)
+    np.testing.assert_array_equal(states[0, ESN_CONFIG.n_neurons : ESN_CONFIG.n_neurons + 2], demo[0])
+    np.testing.assert_array_equal(states[3, ESN_CONFIG.n_neurons : ESN_CONFIG.n_neurons + 2], q[(25 + 3) * 5])
+    # Over the first period, the reference runs from the start posture; from then on, each state is the last's image.
+    for z, z_next in itertools.pairwise(states[1:]):
+        np.testing.assert_allclose(robot.advance(z), z_next, atol=1e-12)
+
+
+def test_the_robot_map_holds_a_tip_force_as_the_simulation_does(esn, robot, arm, demo):
+    force = np.array([1.5, -0.5])
+    _, states = tracked(esn, robot, arm, demo[0], 0.5, external_force=lambda t, skeleton: force)
+
+    for z, z_next in itertools.pairwise(states[1:]):
+        np.testing.assert_allclose(robot.advance(z, force), z_next, atol=1e-12)
+
+
+def test_a_pulse_is_the_runs_at_every_simulation_step_even_within_a_period(esn, robot, arm, demo):
+    push = Push(np.array([2.0, -1.0]), onset=0.3, duration=0.2)
+    log, states = tracked(esn, robot, arm, demo[0], 0.7, external_force=push)
+    warmup = ESN_CONFIG.warmup_steps * ESN_CONFIG.dt
+
+    forces = simulated_forces(push, warmup, SIMULATION_DT, len(log.times) - 1)
+    np.testing.assert_array_equal(forces, log.channel("ext_force").reshape(len(log.times), -1)[:-1])
+    for k, (z, z_next) in enumerate(itertools.pairwise(states[1:]), start=1):
+        step = (k + ESN_CONFIG.warmup_steps) * robot.substeps
+        np.testing.assert_allclose(robot.advance(z, forces[step : step + robot.substeps]), z_next, atol=1e-12)
+
+
+def test_the_robots_jacobians_are_the_derivatives_of_its_map(esn, robot, arm, demo):
+    _, states = tracked(esn, robot, arm, demo[0], 0.6)
+    z = states[50]
+    rng = np.random.default_rng(0)
+    change = 1e-6 * rng.normal(size=robot.dimension)
+
+    linear = robot.jacobian(z) @ change
+    np.testing.assert_allclose(robot.advance(z + change) - robot.advance(z - change), 2 * linear, atol=1e-12)
+    push = np.array([1e-3, -2e-3])
+    linear = robot.force_jacobian(z) @ push
+    np.testing.assert_allclose(robot.advance(z, push) - robot.advance(z, -push), 2 * linear, atol=1e-12)
+
+
+def test_the_esns_fixed_points_are_the_robots_at_rest(loop, esn, robot, demo):
+    _, states = run_states(esn, demo[0], 3000)
+    fixed, converged = loop.fixed_point(states[-1])
+    assert converged
+
+    z = robot.at_rest(fixed)
+    np.testing.assert_allclose(robot.advance(z), z, atol=1e-12)
+    # The arm adds its own modes: the system has as many eigenvalues as values in its state.
+    assert np.linalg.eigvals(robot.jacobian(z)).shape == (ESN_CONFIG.n_neurons + 4,)
+
+
+def test_the_rates_along_the_robots_run_are_those_of_its_scaled_jacobians(esn, robot, arm, demo):
+    _, states = tracked(esn, robot, arm, demo[0], 0.6)
+    states = states[1:]  # each the image of the one before
+    rates = local_rates(robot, states, window=20, stride=10, n_rates=3)
+
+    phi = np.eye(robot.dimension)
+    for z in states[10:30]:
+        phi = robot.jacobian(z) @ phi
+    scaled = robot.scale[:, np.newaxis] * phi / robot.scale[np.newaxis, :]
+    np.testing.assert_allclose(rates.exponents[1], np.log(np.linalg.svd(scaled, compute_uv=False)[:3]) / 0.2)
+    assert np.all(rates.across[:, 0] <= rates.exponents[:, 0] + 1e-9)
+    assert rates.posture.shape == (len(rates.starts), 2)
+
+
+def test_the_robot_map_is_joint_pds_torque_held_over_the_period(loop, arm):
+    skeleton, gains = arm
+    with pytest.raises(ValueError, match="joint PD"):
+        RobotLoop.from_tracker(loop, skeleton, TrackerConfig("computed_torque", 20.0, 0.02), gains, SIMULATION_DT)
+    with pytest.raises(ValueError, match="joint PD"):
+        RobotLoop.from_tracker(loop, skeleton, TrackerConfig("pd", 20.0, 0.02), gains, SIMULATION_DT)
