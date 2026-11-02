@@ -1,0 +1,39 @@
+# Report 020's step 1: the consistent search's ESN #1 (leak rate 0.03, spectral radius 1.2,
+# input scaling 1.5, seed 8) and ESN #2 (input scaling 1, seed 2), each driving the robot with
+# the search's tracker, from rest at start postures all over both joints' range, every 10 deg,
+# the arm held there for the ESN's 1 s warm-up first, for 60 s: report 019's step 1 on the
+# robot. See README.md.
+#
+#   uv run python experiments/robot_starts.py experiments/manual_demonstration_v2_consistent_robot_loop/robot_starts.toml --workers 30
+
+[[esn]]
+key = "esn1"
+label = "ESN #1"
+model = "results/manual_demonstration_v2_consistent_search/20261024-205825-esn1_lr0.03_sr1.2_is1.5_seed8/esn.toml"
+
+[[esn]]
+key = "esn2"
+label = "ESN #2"
+model = "results/manual_demonstration_v2_consistent_search/20261024-205835-esn2_lr0.03_sr1.2_is1_seed2/esn.toml"
+
+[tracker]
+# The search's tracker: joint PD at omega = 20 rad/s and a damping ratio of 0.4, given
+# the reference's velocity, its torque computed every 10 ms, the ESN's period, and
+# held between.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[grid]
+step_deg = 10.0  # both joints from -180 to 170 deg: 36 x 36 = 1,296 start postures
+
+[evaluation]
+duration = 60.0  # task (s), after the warm-up, as report 019's step 1
+hold = 2.0       # hold window after arrival (s): the hand must stay within the goal radius
+
+[analysis]
+rest_speed_dps = 0.5      # a run is at rest at its end when its joints move slower than this over the last second
+path_threshold_deg = 5.0  # a run joins the take's joint path once within this of it for good
