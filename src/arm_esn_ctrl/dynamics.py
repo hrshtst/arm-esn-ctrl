@@ -213,7 +213,7 @@ class RobotLoop:
 
     loop: ClosedLoop
     arm: Skeleton  # the arm's model; every evaluation overwrites its state
-    kp: NDArray[np.float64]  # joint PD's gains, per joint
+    kp: NDArray[np.float64]  # joint PD's gains, per joint, or square matrices (mass_matrix)
     kd: NDArray[np.float64]
     substeps: int  # simulation steps per period
     reference_velocity: bool = True  # False gives joint PD a zero reference velocity
@@ -301,9 +301,9 @@ class RobotLoop:
         fx = loop.held_jacobian(x, u)
         fq = loop.input_jacobian(x, u) / loop.half_range
         readout = loop.posture_readout
-        gain = self.kd / self.dt if self.reference_velocity else np.zeros(j)
-        torque_x = self.kp[:, np.newaxis] * readout + gain[:, np.newaxis] * (readout @ fx - readout)
-        torque_q = -np.diag(self.kp) + gain[:, np.newaxis] * (readout @ fq)
+        gain = self.kd / self.dt if self.reference_velocity else np.zeros_like(self.kd)
+        torque_x = _times(self.kp, readout) + _times(gain, readout @ fx - readout)
+        torque_q = -(self.kp if self.kp.ndim == 2 else np.diag(self.kp)) + _times(gain, readout @ fq)
         motion = self._motion_jacobian(q, dq, self._torque(x, x_next, q, dq))
         by_state, by_torque = motion[:, : 2 * j], motion[:, 2 * j :]
         top = np.hstack([fx, fq, np.zeros((loop.n_neurons, j))])
@@ -311,7 +311,7 @@ class RobotLoop:
             [
                 by_torque @ torque_x,
                 by_state[:, :j] + by_torque @ torque_q,
-                by_state[:, j:] - by_torque * self.kd[np.newaxis, :],
+                by_state[:, j:] - (by_torque @ self.kd if self.kd.ndim == 2 else by_torque * self.kd[np.newaxis, :]),
             ]
         )
         return np.vstack([top, bottom])
@@ -352,7 +352,7 @@ class RobotLoop:
         """Joint PD's torque at an instant, the reference running from the posture at ``x`` to that at ``x_next``."""
         start, end = self.loop.posture(x), self.loop.posture(x_next)
         velocity = (end - start) / self.dt if self.reference_velocity else np.zeros_like(q)
-        return self.kp * (start - q) + self.kd * (velocity - dq)
+        return _times(self.kp, start - q) + _times(self.kd, velocity - dq)
 
     def _arm_motion(
         self,
@@ -511,3 +511,10 @@ def _without(direction: NDArray[np.float64]) -> NDArray[np.float64]:
         return np.eye(len(direction))
     unit = direction / norm
     return np.eye(len(unit)) - np.outer(unit, unit)
+
+
+def _times(gain: NDArray[np.float64], values: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Joint PD's ``gain``, one per joint or a square matrix, times ``values``: a vector, or rows by joint."""
+    if gain.ndim == 2:
+        return gain @ values
+    return gain * values if values.ndim == 1 else gain[:, np.newaxis] * values

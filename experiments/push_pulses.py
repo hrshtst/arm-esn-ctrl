@@ -148,6 +148,7 @@ def load_context(config: dict[str, Any]) -> Context:
         damping=setting.damping,
         reference_velocity=tracker.get("reference_velocity", True),
         control_period=tracker.get("control_period"),
+        mass_matrix=tracker.get("mass_matrix", False),
     )
     gains = setting.gains(tracker_config, setup.skeleton, gain_posture(setup.demos.values()))
     return Context(esns, setup, simulator, tracker_config, gains, config["progress"], config["evaluation"])

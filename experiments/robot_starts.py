@@ -176,6 +176,7 @@ def load_context(config: dict[str, Any]) -> Context:
         damping=setting.damping,
         reference_velocity=table.get("reference_velocity", True),
         control_period=table.get("control_period"),
+        mass_matrix=table.get("mass_matrix", False),
     )
     take = next(iter(setup.demos.values()))
     return Context(

@@ -14,7 +14,10 @@ zero reference velocity (``reference_velocity = False``): then its derivative te
 damps the arm's own velocity, as in PD control of a fixed posture, rather than the
 velocity error. With a control period (``control_period``), the tracking law's
 torque is computed only at its instants and held between them, as by a controller
-slower than the simulation; the reference is still logged at every step.
+slower than the simulation; the reference is still logged at every step. Joint PD's
+gains scale each joint's by its own inertia, or, with ``mass_matrix``, are the whole
+mass matrix scaled (see :func:`tracking_gains`), for an arm whose joints couple
+strongly.
 
 There are three sources:
 
@@ -71,6 +74,7 @@ class TrackerConfig:
     # How often the tracking law's torque is computed, then held (s): a whole number of simulation steps. None
     # computes it at every simulation step.
     control_period: float | None = None
+    mass_matrix: bool = False  # joint PD's gains: the whole mass matrix scaled, rather than each joint's inertia
 
 
 def gain_posture(demonstrations: Iterable[NDArray[np.float64]]) -> NDArray[np.float64]:
@@ -95,10 +99,20 @@ def tracking_gains(
     the diagonal ``M_ii`` of the mass matrix at ``posture`` (such as the target
     posture): ``kp = M_ii ω²`` and ``kd = 2ζ M_ii ω``. That is only approximate,
     since the inertia changes with the posture and couples the joints.
+
+    With ``config.mass_matrix``, joint PD's gains are instead the whole mass matrix M
+    at ``posture``, scaled: ``Kp = ω² M`` and ``Kd = 2ζω M``, square matrices. At
+    ``posture``, the error then obeys ``ë + 2ζω ė + ω² e = 0`` in every joint, however
+    the joints couple; with each joint's own inertia, a joint that couples strongly
+    to the others feels far less inertia than ``M_ii`` and rings far faster than ω.
+    Computed torque's gains are the same either way.
     """
     if config.omega is None:
         msg = "the tracker has no natural frequency omega; its gains must be given directly"
         raise ValueError(msg)
+    if config.mass_matrix and config.law == "pd":
+        inertia = mass_matrix_at(skeleton, posture)
+        return inertia * config.omega**2, 2 * config.damping * inertia * config.omega
     scale = gain_scale(config.law, skeleton, posture)
     return scale * config.omega**2, 2 * config.damping * scale * config.omega
 
@@ -111,9 +125,16 @@ def error_dynamics(
     The inverse of :func:`tracking_gains`: with ``s`` the joint's scale (1 for
     computed torque, ``M_ii`` at ``posture`` for joint PD), the error obeys
     ``s ë + kd ė + kp e = 0``, so ``ω = sqrt(kp / s)`` and ``ζ = kd / (2 sqrt(kp s))``.
-    A damping ratio below 1 makes the error oscillate as it decays.
+    A damping ratio below 1 makes the error oscillate as it decays. Joint PD's gain
+    matrices (``mass_matrix``) give the error's modes at ``posture`` instead, ω² the
+    eigenvalues of ``M⁻¹ Kp`` and 2ζω those of ``M⁻¹ Kd``, which share their modes when
+    the gains are the mass matrix scaled.
     """
     kp, kd = gains
+    if np.ndim(kp) == 2:
+        inertia = mass_matrix_at(skeleton, posture)
+        omega = np.sqrt(np.sort(np.real(np.linalg.eigvals(np.linalg.solve(inertia, kp)))))
+        return omega, np.sort(np.real(np.linalg.eigvals(np.linalg.solve(inertia, kd)))) / (2 * omega)
     scale = gain_scale(law, skeleton, posture)
     return np.sqrt(kp / scale), kd / (2 * np.sqrt(kp * scale))
 
@@ -123,13 +144,29 @@ def gain_scale(law: str, skeleton: Skeleton, posture: NDArray[np.float64]) -> ND
     if law == "computed_torque":
         return np.ones(skeleton.num_joints)
     if law == "pd":
-        model = skeleton.clone()
-        for link, angle in zip(model.links[1:], posture, strict=True):
-            link.q = float(angle)
-        compute_forward_kinematics(model)
-        return np.diag(compute_mass_matrix(model)).copy()
+        return np.diag(mass_matrix_at(skeleton, posture)).copy()
     msg = f"unknown tracking law {law!r}; choose from {', '.join(LAWS)}"
     raise ValueError(msg)
+
+
+def mass_matrix_at(skeleton: Skeleton, posture: NDArray[np.float64]) -> NDArray[np.float64]:
+    """The arm's mass matrix at ``posture`` (rad)."""
+    model = skeleton.clone()
+    for link, angle in zip(model.links[1:], posture, strict=True):
+        link.q = float(angle)
+    compute_forward_kinematics(model)
+    return compute_mass_matrix(model)
+
+
+class MatrixPD(JointPD):
+    """Joint PD with square gain matrices: ``τ = Kp(q_r - q) + Kd(q̇_r - q̇)`` (see :func:`tracking_gains`)."""
+
+    def control(self, t: float, skeleton: Skeleton) -> NDArray[np.float64]:
+        """The PD torque for the current state."""
+        q_r, dq_r, _ = self.reference.sample(t)
+        error = q_r - skeleton.q
+        self._store(q_r, error)
+        return self.kp @ error + self.kd @ (dq_r - skeleton.dq)
 
 
 class ReferenceSource(Protocol):
@@ -243,7 +280,7 @@ class ReferenceTracker(Controller):
     config : TrackerConfig
         The tracking law and its filter.
     kp, kd : NDArray[np.float64]
-        Per-joint gains of the tracking law (see :func:`tracking_gains`).
+        Per-joint gains of the tracking law, or joint PD's gain matrices (see :func:`tracking_gains`).
     period : float
         Reference period Δ (s); a whole number of simulation steps.
     warmup_steps : int
@@ -263,12 +300,15 @@ class ReferenceTracker(Controller):
         if config.law not in LAWS:
             msg = f"unknown tracking law {config.law!r}; choose from {', '.join(LAWS)}"
             raise ValueError(msg)
+        if np.ndim(kp) == 2 and config.law != "pd":
+            msg = "only joint PD takes gain matrices"
+            raise ValueError(msg)
         self.source = source
         self.config = config
         self.period = period
         self.warmup_steps = warmup_steps
         self.reference = _CurrentReference(np.zeros(len(kp)))
-        self.law = LAWS[config.law](self.reference, kp, kd)
+        self.law = (MatrixPD if np.ndim(kp) == 2 else LAWS[config.law])(self.reference, kp, kd)
         self._filter_gain = period / (config.acceleration_filter + period)
         self._step = 0  # simulation steps since the start of the warm-up
         self._start = np.zeros(len(kp))

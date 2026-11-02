@@ -159,6 +159,7 @@ def init_worker(config: dict[str, Any]) -> None:
         damping=setting.damping,
         reference_velocity=table.get("reference_velocity", True),
         control_period=table.get("control_period"),
+        mass_matrix=table.get("mass_matrix", False),
     )
     gains = setting.gains(tracker, setup.skeleton, gain_posture(setup.demos.values()))
     arrival = arrival_index(endpoint_positions(setup.skeleton, take), setup.target, setup.radius)

@@ -31,7 +31,11 @@ false`` (optional; the default is true), the tracking laws are given a zero
 reference velocity, so that their derivative term damps the arm's own velocity
 rather than the velocity error. With ``control_period`` (optional, in seconds; a
 whole number of simulation steps), their torque is computed only that often and held
-between, as by a controller slower than the simulation. Their runs start with the arm holding its
+between, as by a controller slower than the simulation. With ``mass_matrix = true``
+(optional), joint PD's gains with ``omegas`` are the whole mass matrix at the reaches'
+end, scaled (``Kp = ω² M``, ``Kd = 2ζω M``), rather than each joint's inertia, as for
+an arm whose joints couple strongly (see :func:`arm_esn_ctrl.tracking.tracking_gains`).
+Their runs start with the arm holding its
 start posture for the ESN's warm-up (at negative times), or for ``warmup`` seconds if
 ``[evaluation]`` gives one, and the task starts at t = 0. An optional
 ``[disturbance]`` table, or several ``[[disturbance]]`` tables, push or block all
@@ -226,6 +230,7 @@ def main() -> None:
             damping=setting.damping,
             reference_velocity=tracker.get("reference_velocity", True),
             control_period=tracker.get("control_period"),
+            mass_matrix=tracker.get("mass_matrix", False),
         )
         gains = setting.gains(tracker_config, setup.skeleton, end_posture)
         # The log keeps the natural frequency and damping ratio, or the given gains.
@@ -235,6 +240,7 @@ def main() -> None:
             else {"omega": setting.omega, "damping": setting.damping}
         )
         held = {} if tracker_config.control_period is None else {"control_period": tracker_config.control_period}
+        held |= {"mass_matrix": True} if tracker_config.mass_matrix else {}
         setting_dir = run_dir / setting.name
         setting_dir.mkdir()
         for i, start in enumerate(setup.starts):

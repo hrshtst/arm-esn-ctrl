@@ -281,6 +281,7 @@ def sweep_context(config: dict[str, Any]) -> Context:
             damping=setting.damping,
             reference_velocity=tracker.get("reference_velocity", True),
             control_period=tracker.get("control_period"),
+            mass_matrix=tracker.get("mass_matrix", False),
         )
         trackers[setting.name] = (tracker_config, setting.gains(tracker_config, setup.skeleton, end_posture))
     duration = float(evaluation["duration"])

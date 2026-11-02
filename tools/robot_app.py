@@ -37,7 +37,9 @@ critically damped, by default). Joint PD's gains are set at the posture where th
 reference's demonstrations end, as the experiments set them: the takes the ESN was
 trained on, the replayed take, or the demonstrator's reaches. ``--zero-reference-velocity`` gives the tracking law
 a zero reference velocity, so that its derivative term damps the arm's own velocity
-rather than the velocity error. ``--control-period`` computes the tracker's torque
+rather than the velocity error. ``--mass-matrix`` makes joint PD's gains the whole
+mass matrix there, scaled (``Kp = ω² M``, ``Kd = 2ζω M``), rather than each joint's
+inertia, as for an arm whose joints couple strongly. ``--control-period`` computes the tracker's torque
 only that often and holds it between, as ``control_period`` in
 ``experiments/robot_esn.py``; the arm is still simulated every step.
 
@@ -453,10 +455,15 @@ class RobotApp(QMainWindow):
         if tracker is not None:
             self.gains = tracking_gains(tracker, skeleton, self.gains_at) if gains is None else gains
             kp, kd = self.gains
-            if kp.shape != (skeleton.num_joints,) or kd.shape != (skeleton.num_joints,):
-                msg = f"the tracker needs one kp and one kd per joint ({skeleton.num_joints})"
+            n = skeleton.num_joints
+            if kp.shape != kd.shape or kp.shape not in ((n,), (n, n)):
+                msg = f"the tracker needs one kp and one kd per joint, or two {n} x {n} matrices ({n} joints)"
                 raise ValueError(msg)
-            if np.any(kp <= 0.0) or np.any(kd < 0.0):
+            if kp.ndim == 2:  # joint PD's gain matrices: symmetric, kp positive definite, kd positive semidefinite
+                if np.linalg.eigvalsh(kp).min() <= 0.0 or np.linalg.eigvalsh(kd).min() < 0.0:
+                    msg = "the tracker's kp matrix must be positive definite and its kd matrix not negative"
+                    raise ValueError(msg)
+            elif np.any(kp <= 0.0) or np.any(kd < 0.0):
                 msg = "the tracker's kp must be positive and its kd not negative"
                 raise ValueError(msg)
         # The take, or the given posture's reach, simulated once, is replayed in every run; replays from the start
@@ -724,6 +731,8 @@ class RobotApp(QMainWindow):
                 tracking |= {"omega": self.tracker_config.omega, "damping": self.tracker_config.damping}
             if self.tracker_config.control_period is not None:
                 tracking["control_period"] = self.tracker_config.control_period
+            if self.tracker_config.mass_matrix:
+                tracking["mass_matrix"] = True
             tracking |= {"kp": self.gains[0].tolist(), "kd": self.gains[1].tolist()}
         commit, uncommitted_changes = self._repository
         app = {
@@ -844,10 +853,12 @@ class RobotApp(QMainWindow):
         else:
             assert self.gains is not None
             law = {"computed_torque": "computed torque", "pd": "joint PD"}[self.tracker_config.law]
-            kp = ", ".join(f"{value:.4g}" for value in self.gains[0])
-            kd = ", ".join(f"{value:.4g}" for value in self.gains[1])
+            kp = ", ".join(f"{value:.4g}" for value in self.gains[0].ravel())
+            kd = ", ".join(f"{value:.4g}" for value in self.gains[1].ravel())
             omega = self.tracker_config.omega
             controller = f"{law}, " + ("" if omega is None else f"ω = {omega:g} rad/s, ") + f"kp = {kp}; kd = {kd}"
+            if self.gains[0].ndim == 2:
+                controller = f"{law}, ω = {omega:g} rad/s, kp = ω² M and kd = 2ζω M, M the mass matrix"
             natural, damping = error_dynamics(self.tracker_config.law, self.gains, self.skeleton, self.gains_at)
             controller += (
                 f"\nTracking error: natural frequency {', '.join(f'{value:.3g}' for value in natural)} rad/s,"
@@ -1022,6 +1033,12 @@ def build_parser() -> argparse.ArgumentParser:
         " by default, at every step",
     )
     parser.add_argument(
+        "--mass-matrix",
+        action="store_true",
+        help="joint PD's gains with --omega: the whole mass matrix where the reaches end, scaled, not each joint's"
+        " inertia",
+    )
+    parser.add_argument(
         "--kp", help="the tracker's proportional gain instead of --omega: one value, or one per joint (comma-separated)"
     )
     parser.add_argument(
@@ -1163,6 +1180,7 @@ def main() -> None:
             damping=1.0 if args.damping is None else args.damping,
             reference_velocity=not args.zero_reference_velocity,
             control_period=args.control_period,
+            mass_matrix=args.mass_matrix,
         )
     if args.kp is not None:
         gains = (
