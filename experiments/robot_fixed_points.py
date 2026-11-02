@@ -237,7 +237,7 @@ def linear_pulses(
             assert push is not None
             forces.append(simulated_forces(push, warmup, h, (warmup_steps + begin + steps) * robot.substeps))
         deviation = np.zeros((len(group), robot.dimension))
-        q_path, r_path = [np.zeros((len(group), 2))], [np.zeros((len(group), 2))]
+        q_path, r_path = [np.zeros((len(group), robot.n_joints))], [np.zeros((len(group), robot.n_joints))]
         for k in range(begin, begin + steps):
             z, jacobian = states[k], robot.jacobian(states[k])
             first = (k + warmup_steps) * robot.substeps
