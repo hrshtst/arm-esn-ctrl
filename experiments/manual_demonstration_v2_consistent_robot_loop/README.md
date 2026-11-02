@@ -1,7 +1,8 @@
 # Manual-demonstration consistent robot loop, v2 (Stages 1 and 2)
 
 The ESN and the robot read as one dynamical system: report 019's analyses of the ESNs
-on their own, run again with the arm in the loop. Results: report 020.
+on their own, run again with the arm in the loop. Results:
+[report 020](../../reports/020-the-esn-and-the-robot-as-one-system/README.md).
 
 On the robot, the ESN is fed the arm's measured joint angles, not its own output, and
 the search's tracker, joint PD with its torque computed every 10 ms and held, makes the

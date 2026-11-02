@@ -263,7 +263,7 @@ that run them are shared:
 | [manual_demonstration_v2_consistent_search](experiments/manual_demonstration_v2_consistent_search/README.md) | the main results run again under one protocol fixed before any run: an ESN search over a wider grid with one tracker, every ESN from 49 offset starts, chosen by a rule in code and checked on held-out seeds and, afterwards, on the bias's scale (Stage 2); its README holds the protocol of reports 017 to 019 | [017](reports/017-search-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_trackers](experiments/manual_demonstration_v2_consistent_trackers/README.md) | the consistent search's two ESNs, the replay, and the progress replay with nine trackers, joint PD with and without the reference velocity and computed torque, in every scenario of the search and under the pushes given by hand (Stage 2) | [018](reports/018-trackers-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_dynamics](experiments/manual_demonstration_v2_consistent_dynamics/README.md) | the consistent search's two ESNs read as report 015 read report 011's, and all its 10,080 ESNs screened as report 016 screened report 011's, set against their outcomes with the offset starts counted; the passing ESNs released at their unstable fixed points and blocked along the reach on the robot (Stages 1 and 2) | [019](reports/019-dynamics-under-one-protocol/README.md) |
-| [manual_demonstration_v2_consistent_robot_loop](experiments/manual_demonstration_v2_consistent_robot_loop/README.md) | the ESN and the robot read as one dynamical system: the consistent search's two ESNs on the robot from rest anywhere, their fixed points, rates, and pulses with the arm, and every fixed point of report 019's screens with the arm, against its releases and outcomes (Stages 1 and 2) | 020, to be written |
+| [manual_demonstration_v2_consistent_robot_loop](experiments/manual_demonstration_v2_consistent_robot_loop/README.md) | the ESN and the robot read as one dynamical system: the consistent search's two ESNs on the robot from rest anywhere, their fixed points, rates, and pulses with the arm, and every fixed point of report 019's screens with the arm, against its releases and outcomes (Stages 1 and 2) | [020](reports/020-the-esn-and-the-robot-as-one-system/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -486,6 +486,15 @@ The reports so far:
   unstable fixed point; on the robot, such a release does what the ESN on its own does
   up to a leak rate of 0.1, not above. Of the 29 main claims of reports 011 to 016, 22
   are confirmed, 2 in part, 3 of report 016's changed, and 2 of report 013's not tested.
+- [020 The ESN and the robot as one dynamical system](reports/020-the-esn-and-the-robot-as-one-system/README.md)
+  (Stages 1 and 2): the ESN and the arm read as one map of the reservoir's state and
+  the arm's every 10 ms, whose fixed points are the ESN's own. From rest anywhere, the
+  robot does what the ESN on its own does, but for a kick of up to 1,011 N m from far
+  starts. At the chosen ESNs' leak rate the arm changes no fixed point; from 0.1 up it
+  slows them and turns some attracting ones unstable. Rule (a) taken with the arm
+  predicts failing less well, the fixed points beyond the arm's stops making the
+  difference. Report 019's releases where the arm stayed put were mostly exact rests:
+  nudged by 10⁻⁹°, they leave.
 
 Each report has five parts:
 

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_robot_loop/screen_robot_loop.toml"
+command = "experiments/screen_robot_loop.py experiments/manual_demonstration_v2_consistent_robot_loop/screen_robot_loop.toml --workers 30"
+started = 2026-11-02 13:20:45+09:00
+host = "delbosque"
+commit = "935e2769d5410e0047e6b78eb0ac55c9e4074e64"
+uncommitted_changes = false

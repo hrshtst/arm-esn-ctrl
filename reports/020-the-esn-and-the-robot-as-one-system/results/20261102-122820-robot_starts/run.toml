@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_robot_loop/robot_starts.toml"
+command = "experiments/robot_starts.py experiments/manual_demonstration_v2_consistent_robot_loop/robot_starts.toml --workers 30"
+started = 2026-11-02 12:28:20+09:00
+host = "delbosque"
+commit = "1c58c9f69ab8167e9bc24afdbb2c9b4a988c6cc8"
+uncommitted_changes = false

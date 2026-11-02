@@ -1,0 +1,30 @@
+# Report 020's step 3: every fixed point of report 019's two screens, the arm at rest at it with
+# the search's tracker, read as one system with the ESN; against report 019's releases (step 7)
+# and outcomes (step 6). See README.md.
+#
+#   uv run python experiments/screen_robot_loop.py experiments/manual_demonstration_v2_consistent_robot_loop/screen_robot_loop.toml --workers 30
+
+[runs]
+# Report 019's step 5 screens of seeds 0 to 9 and of seeds 10 to 19, and the step 6 runs that set each against the robot.
+screens = [
+    "results/manual_demonstration_v2_consistent_dynamics/20261027-183607-screen",
+    "results/manual_demonstration_v2_consistent_dynamics/20261028-064044-screen_seeds10to19",
+]
+outcomes = [
+    "results/manual_demonstration_v2_consistent_dynamics/20261028-044632-against_robot",
+    "results/manual_demonstration_v2_consistent_dynamics/20261028-115552-against_robot_seeds10to19",
+]
+# Report 019's step 7: the passing ESNs of seeds 0 to 9 released at their unstable fixed points within 30 deg of the path.
+release = "results/manual_demonstration_v2_consistent_dynamics/20261028-044731-release_robot"
+
+[tracker]
+# The search's tracker, as the releases had it.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[release]
+fast_from = 0.15  # the releases are scored over the leak rates below and from this, where report 019 saw the robot part

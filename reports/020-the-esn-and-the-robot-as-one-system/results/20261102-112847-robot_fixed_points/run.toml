@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_robot_loop/robot_fixed_points.toml"
+command = "experiments/robot_fixed_points.py experiments/manual_demonstration_v2_consistent_robot_loop/robot_fixed_points.toml"
+started = 2026-11-02 11:28:47+09:00
+host = "delbosque"
+commit = "1b6d2f2f4a5160dbb5211582d28b80acc52376df"
+uncommitted_changes = false

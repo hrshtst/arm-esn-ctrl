@@ -1,0 +1,20 @@
+# Report 020's step 2: the consistent search's ESN #1 and ESN #2, each with the arm and the
+# search's tracker, read as one map of the reservoir's state and the arm's: at the fixed points
+# report 019's step 4 found, along the robot's run from the take's start, and under report 019's
+# step 3 pulses, linearized. See README.md.
+#
+#   uv run python experiments/robot_fixed_points.py experiments/manual_demonstration_v2_consistent_robot_loop/robot_fixed_points.toml
+
+[runs]
+# Report 019's step 3 (the ESNs, the tracker, and the pulses) and step 4 (the fixed points).
+pulses = "results/manual_demonstration_v2_consistent_dynamics/20261027-180441-push_pulses"
+fixed_points = "results/manual_demonstration_v2_consistent_dynamics/20261027-183137-fixed_points"
+
+[rates]
+# As report 019's step 4 measured them along the ESN's own run.
+windows = [0.5, 1.0, 2.0, 4.0]  # s: the rates along the robot's run from the take's start, over windows this long
+stride = 25          # steps between the windows' starts (250 ms); each window is a whole number of them
+n_rates = 5          # this many of the largest rates are kept
+
+[linear]
+window = 2.0  # s: each pulse is predicted from its onset this long, the pulses' response window

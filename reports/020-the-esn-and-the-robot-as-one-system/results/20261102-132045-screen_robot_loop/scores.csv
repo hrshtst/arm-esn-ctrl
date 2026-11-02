@@ -1,0 +1,68 @@
+screen,measure,against,leak_rate,statistic,value,n,flagged
+0,flag_a,failing,all,auc,0.8209135473786467,5040,3263
+0,flag_a,failing,0.01,auc,0.6956521739130435,420,207
+0,flag_a,failing,0.015,auc,0.7430141579731744,420,152
+0,flag_a,failing,0.02,auc,0.7582551309353864,420,147
+0,flag_a,failing,0.03,auc,0.7371031746031746,420,147
+0,flag_a,failing,0.04,auc,0.788297589899407,420,214
+0,flag_a,failing,0.05,auc,0.8357729840780688,420,295
+0,flag_a,failing,0.07,auc,0.8568218065825721,420,318
+0,flag_a,failing,0.1,auc,0.8416216216216216,420,320
+0,flag_a,failing,0.15,auc,0.8320403856026467,420,346
+0,flag_a,failing,0.2,auc,0.8171247357293869,420,360
+0,flag_a,failing,0.3,auc,0.7585765940559133,420,376
+0,flag_a,failing,0.5,auc,0.5120070285044904,420,381
+0,flag_a_arm,failing,all,auc,0.7782153553789639,5040,2730
+0,flag_a_arm,failing,0.01,auc,0.6846756949394155,420,193
+0,flag_a_arm,failing,0.015,auc,0.7015648286140089,420,127
+0,flag_a_arm,failing,0.02,auc,0.692319393414617,420,112
+0,flag_a_arm,failing,0.03,auc,0.6607142857142857,420,106
+0,flag_a_arm,failing,0.04,auc,0.7253606301070828,420,171
+0,flag_a_arm,failing,0.05,auc,0.7859527478171546,420,247
+0,flag_a_arm,failing,0.07,auc,0.8170218935769175,420,267
+0,flag_a_arm,failing,0.1,auc,0.8221621621621622,420,272
+0,flag_a_arm,failing,0.15,auc,0.814357423991786,420,306
+0,flag_a_arm,failing,0.2,auc,0.7961005402865868,420,331
+0,flag_a_arm,failing,0.3,auc,0.751477202575183,420,327
+0,flag_a_arm,failing,0.5,auc,0.7209098008590394,420,271
+1,flag_a,failing,all,auc,0.8074892796343143,5040,3283
+1,flag_a,failing,0.01,auc,0.6867446393762183,420,178
+1,flag_a,failing,0.015,auc,0.7322448979591837,420,157
+1,flag_a,failing,0.02,auc,0.7354715349070132,420,137
+1,flag_a,failing,0.03,auc,0.7225274725274725,420,159
+1,flag_a,failing,0.04,auc,0.8017241379310345,420,245
+1,flag_a,failing,0.05,auc,0.83093635250918,420,294
+1,flag_a,failing,0.07,auc,0.7881887933038828,420,316
+1,flag_a,failing,0.1,auc,0.8104932608849058,420,340
+1,flag_a,failing,0.15,auc,0.7724867724867724,420,356
+1,flag_a,failing,0.2,auc,0.75,420,373
+1,flag_a,failing,0.3,auc,0.6977777777777778,420,363
+1,flag_a,failing,0.5,auc,0.7172003123779773,420,365
+1,flag_a_arm,failing,all,auc,0.7678846274902066,5040,2765
+1,flag_a_arm,failing,0.01,auc,0.6779727095516569,420,173
+1,flag_a_arm,failing,0.015,auc,0.6853061224489796,420,134
+1,flag_a_arm,failing,0.02,auc,0.6704491133823496,420,108
+1,flag_a_arm,failing,0.03,auc,0.6412411118293472,420,118
+1,flag_a_arm,failing,0.04,auc,0.7445553539019963,420,203
+1,flag_a_arm,failing,0.05,auc,0.773561811505508,420,249
+1,flag_a_arm,failing,0.07,auc,0.7482562194838409,420,277
+1,flag_a_arm,failing,0.1,auc,0.7735516195046221,420,289
+1,flag_a_arm,failing,0.15,auc,0.7791005291005291,420,311
+1,flag_a_arm,failing,0.2,auc,0.8099747474747475,420,333
+1,flag_a_arm,failing,0.3,auc,0.8351111111111111,420,298
+1,flag_a_arm,failing,0.5,auc,0.804178055447091,420,272
+0,own growth,stay,all,spearman,0.4591567366803431,993,
+0,own growth,stays put,all,auc,0.2540821375556655,993,47
+0,own growth,stay,<0.15,spearman,0.30300809765856546,750,
+0,own growth,stays put,<0.15,auc,0.9926470588235294,750,2
+0,own growth,stay,>=0.15,spearman,-0.053267694701858236,243,
+0,own growth,stays put,>=0.15,auc,0.43793490460157125,243,45
+0,growth with the arm,stay,all,spearman,0.44769492542824907,993,
+0,growth with the arm,stays put,all,auc,0.27250236156718094,993,47
+0,growth with the arm,stay,<0.15,spearman,0.3004908283268083,750,
+0,growth with the arm,stays put,<0.15,auc,0.9933155080213903,750,2
+0,growth with the arm,stay,>=0.15,spearman,-0.13157263220246987,243,
+0,growth with the arm,stays put,>=0.15,auc,0.4777777777777778,243,45
+0,attracting with the arm,stays put,all,count,0,993,0
+0,attracting with the arm,stays put,<0.15,count,0,750,0
+0,attracting with the arm,stays put,>=0.15,count,0,243,0

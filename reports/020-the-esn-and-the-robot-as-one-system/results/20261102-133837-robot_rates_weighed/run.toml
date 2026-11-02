@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_consistent_robot_loop/robot_rates_weighed.toml"
+command = "experiments/robot_rates_weighed.py experiments/manual_demonstration_v2_consistent_robot_loop/robot_rates_weighed.toml --workers 12"
+started = 2026-11-02 13:38:37+09:00
+host = "delbosque"
+commit = "935e2769d5410e0047e6b78eb0ac55c9e4074e64"
+uncommitted_changes = false
