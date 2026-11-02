@@ -1,0 +1,11 @@
+# Report 020's step 4, added after the claims' runs: report 019's releases (step 7) run again from
+# 1e-9 deg off each fixed point, on the robot and on their own. Held 4 s at a fixed point, the
+# reservoir can rest on it to the last bit, and nothing then grows. See README.md.
+#
+#   uv run python experiments/nudge_releases.py experiments/manual_demonstration_v2_consistent_robot_loop/nudge_releases.toml --workers 30
+
+[runs]
+release = "results/manual_demonstration_v2_consistent_dynamics/20261028-044731-release_robot"
+
+[nudge]
+deg = 1e-9  # each joint of the start posture, off the fixed point's (deg)

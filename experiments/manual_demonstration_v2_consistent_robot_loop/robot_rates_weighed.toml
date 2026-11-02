@@ -1,0 +1,15 @@
+# Report 020's step 5, added after the claims' runs: step 2's rates along the robot's run from the
+# take's start, with the arm's joint angles and velocities weighed otherwise. See README.md.
+#
+#   uv run python experiments/robot_rates_weighed.py experiments/manual_demonstration_v2_consistent_robot_loop/robot_rates_weighed.toml --workers 12
+
+[runs]
+pulses = "results/manual_demonstration_v2_consistent_dynamics/20261027-180441-push_pulses"
+
+[rates]
+windows = [2.0, 4.0]  # s, step 2's claimed windows
+stride = 25           # steps between the windows' starts, as step 2's
+
+[weighings]
+# How much more the joint angles and the joint velocities weigh than in step 2 (1 and 1 is step 2's).
+factors = [[1.0, 1.0], [10.0, 1.0], [1.0, 10.0], [10.0, 10.0], [0.1, 0.1], [100.0, 100.0]]

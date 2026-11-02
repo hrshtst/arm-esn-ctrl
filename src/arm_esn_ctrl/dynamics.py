@@ -219,6 +219,7 @@ class RobotLoop:
     reference_velocity: bool = True  # False gives joint PD a zero reference velocity
     lower: NDArray[np.float64] | None = None  # the joint limits (rad), hard stops; None: none
     upper: NDArray[np.float64] | None = None
+    weights: tuple[float, float] = (1.0, 1.0)  # how much more local_rates weighs the joint angles and velocities
 
     @classmethod
     def from_tracker(
@@ -264,9 +265,10 @@ class RobotLoop:
     @cached_property
     def scale(self) -> NDArray[np.float64]:
         """How :func:`local_rates` weighs the state's values: the joint angles as the ESN's input, their velocities
-        by how far they move them in a period."""
+        by how far they move them in a period, each times its ``weights``."""
         n, half_range = self.loop.n_neurons, self.loop.half_range
-        return np.concatenate([np.ones(n), 1.0 / half_range, self.dt / half_range])
+        angles, velocities = self.weights
+        return np.concatenate([np.ones(n), angles / half_range, velocities * self.dt / half_range])
 
     @cached_property
     def posture_readout(self) -> NDArray[np.float64]:

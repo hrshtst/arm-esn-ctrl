@@ -3,6 +3,7 @@
 
 """Tests for a trained ESN's update, evaluated with numpy anywhere in its state space."""
 
+import dataclasses
 import itertools
 import tomllib
 
@@ -247,6 +248,15 @@ def test_the_rates_along_the_robots_run_are_those_of_its_scaled_jacobians(esn, r
     np.testing.assert_allclose(rates.exponents[1], np.log(np.linalg.svd(scaled, compute_uv=False)[:3]) / 0.2)
     assert np.all(rates.across[:, 0] <= rates.exponents[:, 0] + 1e-9)
     assert rates.posture.shape == (len(rates.starts), 2)
+
+
+def test_the_weights_weigh_the_arms_values_and_change_no_eigenvalue(robot):
+    weighed = dataclasses.replace(robot, weights=(10.0, 0.5))
+
+    n = ESN_CONFIG.n_neurons
+    np.testing.assert_array_equal(weighed.scale[:n], robot.scale[:n])
+    np.testing.assert_allclose(weighed.scale[n : n + 2], 10.0 * robot.scale[n : n + 2])
+    np.testing.assert_allclose(weighed.scale[n + 2 :], 0.5 * robot.scale[n + 2 :])
 
 
 def test_the_robot_map_is_joint_pds_torque_held_over_the_period(loop, arm):

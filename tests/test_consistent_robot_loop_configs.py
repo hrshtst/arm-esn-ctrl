@@ -49,3 +49,18 @@ def test_the_screens_with_the_arm_read_report_019s_screens_outcomes_and_releases
     ]
     assert config["runs"]["release"] == f"{STUDY}/20261028-044731-release_robot"
     assert config["tracker"] == release["tracker"]
+
+
+def test_the_nudged_releases_are_report_019s_releases():
+    config = load(ROBOT_LOOP, "nudge_releases")
+
+    assert config["runs"]["release"] == load(ROBOT_LOOP, "screen_robot_loop")["runs"]["release"]
+    assert 0.0 < config["nudge"]["deg"] <= 1e-6
+
+
+def test_the_weighed_rates_are_step_2s_over_its_claimed_windows():
+    config, step2 = load(ROBOT_LOOP, "robot_rates_weighed"), load(ROBOT_LOOP, "robot_fixed_points")
+
+    assert config["runs"]["pulses"] == step2["runs"]["pulses"]
+    assert config["rates"] == {"windows": [2.0, 4.0], "stride": step2["rates"]["stride"]}
+    assert [1.0, 1.0] in config["weighings"]["factors"]

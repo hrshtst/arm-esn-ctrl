@@ -85,7 +85,9 @@ the ESN's own. The screens keep each fixed point's posture, not its state: the s
 the held reservoir's fixed point at the posture from the reset, else as the screen found
 it, by Newton's method on R from the grid's cells around the posture, else from random
 states, refined by Newton's method on the ESN's own map, and kept only if it gives the
-screen's posture and growth rate. Then:
+screen's posture and growth rate. A fixed point beyond the arm's joint stops at ±180°,
+where the ESN on its own can rest, is none of the system's: the arm cannot rest there.
+Then:
 
 - **the releases** of report 019's step 7 (994, at the unstable fixed points within 30°
   of the take's path of the 1,049 passing ESNs): how long the arm stays within 1° of the
@@ -111,6 +113,31 @@ The claims:
 3. rule (a) with the arm has an area under the ROC curve for failing at least that of
    rule (a) on its own, in both seed sets.
 
+## Added after the claims' runs
+
+Steps 4 and 5 were planned after steps 1 to 3 had run and printed their claims. They
+test nothing of the plan above; they check two of its measures.
+
+**Step 4: the releases, nudged.** Run again with a fixed point's posture, report 019's
+releases showed the arm staying put at some, and leaving at others, as the run went: the
+reservoir, held 4 s at a fixed point, can come to rest on it to the last bit, and a
+simulation then adds nothing to grow. [`nudge_releases.py`](../nudge_releases.py) runs
+every release of report 019's step 7 again from 10⁻⁹° off the fixed point in each joint,
+on the robot and on its own.
+
+```bash
+uv run python experiments/nudge_releases.py experiments/manual_demonstration_v2_consistent_robot_loop/nudge_releases.toml --workers 30
+```
+
+**Step 5: the rates, weighed otherwise.** Step 2's rates along the robot's run weigh the
+arm's joint angles and velocities as above. [`robot_rates_weighed.py`](../robot_rates_weighed.py)
+measures them over the 2 s and 4 s windows with the joint angles and the joint
+velocities weighed by 0.1 to 100 times more.
+
+```bash
+uv run python experiments/robot_rates_weighed.py experiments/manual_demonstration_v2_consistent_robot_loop/robot_rates_weighed.toml --workers 12
+```
+
 **The first runs of steps 1 and 3,** at `1b6d2f2`, did not stand. Step 1 ran every run
 and wrote ESN #1's files (`20261102-112847-robot_starts`), then stopped on printing a
 measure of report 019's step 1 it does not take. Step 3 (`20261102-121258-screen_robot_loop`)
@@ -118,7 +145,10 @@ took each state from the reset only, which gave another fixed point for 329 and 
 the screens' fixed points, nearly all at a spectral radius of 1.75, where the held
 reservoir has several fixed points at a posture; it printed its scores with those among
 them. Both ran again with the fix that finds the states as above and prints step 1's
-summary without that measure.
+summary without that measure. Step 3's second run (`20261102-122257-screen_robot_loop`)
+took the 817 and 668 fixed points beyond the arm's stops as the system's, though the arm
+cannot rest there, and printed its scores with them; it ran a third time with them left
+out.
 
 ## What was seen before this plan
 
