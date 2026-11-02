@@ -80,9 +80,12 @@ The pulses' prediction is described, not claimed (see below).
 ## Step 3: every fixed point of the screens with the arm
 
 [`screen_robot_loop.py`](../screen_robot_loop.py): every fixed point of report 019's two
-screens, its state found again (the held reservoir's fixed point at its posture,
-refined by Newton's method), the arm at rest at it: the system's eigenvalues against
-the ESN's own. Then:
+screens, its state found again, the arm at rest at it: the system's eigenvalues against
+the ESN's own. The screens keep each fixed point's posture, not its state: the state is
+the held reservoir's fixed point at the posture from the reset, else as the screen found
+it, by Newton's method on R from the grid's cells around the posture, else from random
+states, refined by Newton's method on the ESN's own map, and kept only if it gives the
+screen's posture and growth rate. Then:
 
 - **the releases** of report 019's step 7 (994, at the unstable fixed points within 30°
   of the take's path of the 1,049 passing ESNs): how long the arm stays within 1° of the
@@ -107,6 +110,15 @@ The claims:
    growth rate on its own (a smaller growth, a longer stay);
 3. rule (a) with the arm has an area under the ROC curve for failing at least that of
    rule (a) on its own, in both seed sets.
+
+**The first runs of steps 1 and 3,** at `1b6d2f2`, did not stand. Step 1 ran every run
+and wrote ESN #1's files (`20261102-112847-robot_starts`), then stopped on printing a
+measure of report 019's step 1 it does not take. Step 3 (`20261102-121258-screen_robot_loop`)
+took each state from the reset only, which gave another fixed point for 329 and 317 of
+the screens' fixed points, nearly all at a spectral radius of 1.75, where the held
+reservoir has several fixed points at a posture; it printed its scores with those among
+them. Both ran again with the fix that finds the states as above and prints step 1's
+summary without that measure.
 
 ## What was seen before this plan
 

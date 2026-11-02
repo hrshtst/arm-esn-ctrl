@@ -297,8 +297,9 @@ def print_summary(rows: list[dict[str, Any]]) -> None:
         f"  {np.isfinite(joined).sum()} join the take's path; median progress when they join"
         f" {np.nanmedian(joined) if np.isfinite(joined).any() else float('nan'):.2f}"
     )
-    change = np.array([row["settling_change"] for row in rows])
-    print(f"  state change after the warm-up, held: median {np.median(change):.3f}, max {change.max():.3f}")
+    if "settling_change" in rows[0]:  # robot_starts.py's runs leave the warm-up to these
+        change = np.array([row["settling_change"] for row in rows])
+        print(f"  state change after the warm-up, held: median {np.median(change):.3f}, max {change.max():.3f}")
 
 
 if __name__ == "__main__":

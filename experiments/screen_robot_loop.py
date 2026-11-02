@@ -12,10 +12,18 @@ The configuration names runs of ``screen_esns.py`` and, for each, the run of
 the screen trained it and drives the arm with one tracker setting (``[tracker]``, as in
 ``robot_esn.py``); the ESN and the arm are read as one map of the reservoir's state and
 the arm's joint angles and velocities (:class:`arm_esn_ctrl.dynamics.RobotLoop`). Each
-fixed point the screen found, the arm at rest at its posture, is one of the system's: its
-state is the held reservoir's fixed point there, refined by Newton's method on the
-ESN's own map, and the eigenvalues of the system's Jacobian there tell whether it
-attracts with the arm, and how fast, against the ESN's own. From them:
+fixed point the screen found, the arm at rest at its posture, is one of the system's, and
+the eigenvalues of the system's Jacobian there tell whether it attracts with the arm, and
+how fast, against the ESN's own. The screen keeps each fixed point's posture, not its
+state, which is found again (``found``): the held reservoir's fixed point at the posture,
+from the reset (``reset``); else, as the screen found it, by Newton's method on R from
+the grid's cells around the posture (``cells``, :func:`arm_esn_ctrl.screening.map_zero`);
+else from random states (``random``); each refined by Newton's method on the ESN's own
+map, and kept only if it gives the screen's posture and the slowest mode's growth rate.
+A held reservoir with several fixed points at a posture, as at large spectral radii,
+can settle on another from the reset. A fixed point not found again (``found`` empty)
+has no eigenvalues with the arm: rule (a) with the arm takes it as on its own, and the
+releases and the changes leave it out. From them:
 
 - **the releases**: at each of the release run's releases, how long the arm stays at the
   fixed point, against the slowest mode's growth rate on its own and with the arm: the
@@ -57,12 +65,15 @@ from screen_against_robot import auc, spearman
 from arm_esn_ctrl.autonomous import Setup, load_setup
 from arm_esn_ctrl.dynamics import ClosedLoop, RobotLoop
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
-from arm_esn_ctrl.screening import held_fixed_points
+from arm_esn_ctrl.screening import _cell_zero, held_fixed_points, map_zero
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import TrackerConfig, gain_posture
 
 SWEPT = ("leak_rate", "spectral_radius", "input_scaling", "seed")
 KEPT = ("q1_deg", "q2_deg", "target_distance_m", "path_distance_deg", "progress", "n_unstable", "growth_per_s")
+POSTURE_TOLERANCE_DEG = 1e-6  # a state found again gives the screen's posture this closely ...
+GROWTH_TOLERANCE = 1e-6  # ... and its slowest mode's growth rate (1/s)
+RANDOM_STARTS = 20  # the random states a fixed point's state is sought from, last
 Key = tuple[float, float, float, int]
 
 
@@ -76,6 +87,7 @@ class Context:
     simulator: dict[str, Any]
     tracker: TrackerConfig
     gains: tuple[NDArray[np.float64], NDArray[np.float64]]
+    grid_step_deg: float  # the screen's grid of R
 
 
 _contexts: dict[str, Context] = {}  # this process's, by screen run, set by init_worker
@@ -155,7 +167,10 @@ def load_context(config: dict[str, Any], screen: str) -> Context:
         control_period=table.get("control_period"),
     )
     gains = setting.gains(tracker, setup.skeleton, gain_posture(setup.demos.values()))
-    return Context(screen_config["esn"], setup, next(iter(setup.demos.values())), simulator, tracker, gains)
+    take = next(iter(setup.demos.values()))
+    return Context(
+        screen_config["esn"], setup, take, simulator, tracker, gains, screen_config["screen"]["grid_step_deg"]
+    )
 
 
 def init_worker(config: dict[str, Any]) -> None:
@@ -184,27 +199,76 @@ def esn_fixed_points(context: Context, key: Key, points: list[dict[str, str]]) -
         enforce_limits=context.simulator.get("enforce_limits", True),
     )
     rows = []
+    nan = float("nan")
     for p in points:
         q = np.radians([float(p["q1_deg"]), float(p["q2_deg"])])
-        held, _ = held_fixed_points(loop, q[np.newaxis])
-        x, converged = loop.fixed_point(held[0])
+        x, found = screen_state(loop, q, float(p["growth_per_s"]), context.grid_step_deg)
+        row = combination | {"fixed_point": int(p["fixed_point"])} | {c: float(p[c]) for c in KEPT}
+        row |= {"from_grid": p["from_grid"] == "True", "found": found}
+        if not found:
+            rows.append(row | {"residual": nan, "system_n_unstable": nan, "system_growth_per_s": nan})
+            continue
         z = robot.at_rest(x)
-        own = np.abs(np.linalg.eigvals(loop.jacobian(x)))
         system = np.abs(np.linalg.eigvals(robot.jacobian(z)))
         rows.append(
-            combination
-            | {"fixed_point": int(p["fixed_point"])}
-            | {c: float(p[c]) for c in KEPT}
+            row
             | {
-                "converged": converged,
-                "posture_gap_deg": float(np.degrees(np.abs(loop.posture(x) - q).max())),
-                "own_growth_per_s": float(np.log(own.max()) / loop.dt),
                 "residual": float(np.abs(robot.advance(z) - z).max()),
                 "system_n_unstable": int(np.count_nonzero(system > 1.0)),
                 "system_growth_per_s": float(np.log(system.max()) / loop.dt),
             }
         )
     return rows
+
+
+def screen_state(
+    loop: ClosedLoop, q: NDArray[np.float64], growth: float, step_deg: float
+) -> tuple[NDArray[np.float64], str]:
+    """The state of the screen's fixed point at the posture ``q`` (rad) with the slowest mode's ``growth`` rate.
+
+    Returns the state and how it was found (see the module), or the first state tried
+    and an empty string if none gives the screen's posture and growth rate.
+    """
+
+    def matches(x: NDArray[np.float64], converged: bool) -> bool:
+        if not converged or np.degrees(np.abs(loop.posture(x) - q).max()) > POSTURE_TOLERANCE_DEG:
+            return False
+        own = np.log(np.abs(np.linalg.eigvals(loop.jacobian(x))).max()) / loop.dt
+        return bool(abs(own - growth) <= GROWTH_TOLERANCE)
+
+    held, _ = held_fixed_points(loop, q[np.newaxis])
+    first, converged = loop.fixed_point(held[0])
+    if matches(first, converged):
+        return first, "reset"
+    # As the screen found it: Newton's method on R from the cells of its grid around q, where R changes sign.
+    grid = np.radians(np.arange(-180.0, 180.0 + 1e-9, step_deg))
+    i, j = (int(np.clip(np.searchsorted(grid, angle) - 1, 0, len(grid) - 2)) for angle in q)
+    rows, cols = range(max(i - 1, 0), min(i + 3, len(grid))), range(max(j - 1, 0), min(j + 3, len(grid)))
+    corners_q = np.array([[grid[a], grid[b]] for a in rows for b in cols])
+    corners_x, _ = held_fixed_points(loop, corners_q)
+    residual = (loop.posture(corners_x) - corners_q).reshape(len(rows), len(cols), -1)
+    corners_x = corners_x.reshape(len(rows), len(cols), -1)
+    for a in range(len(rows) - 1):
+        for b in range(len(cols) - 1):
+            r = residual[a : a + 2, b : b + 2].reshape(4, -1)
+            if not all(r[:, k].min() <= 0.0 <= r[:, k].max() for k in range(r.shape[1])):
+                continue
+            q1, q2 = grid[rows[a] : rows[a] + 2], grid[cols[b] : cols[b] + 2]
+            nearest = np.unravel_index(int(np.argmin(np.linalg.norm(r, axis=1))), (2, 2))
+            width = np.array([q1[1] - q1[0], q2[1] - q2[0]])
+            low, high = np.array([q1[0], q2[0]]) - width, np.array([q1[1], q2[1]]) + width
+            x = map_zero(loop, _cell_zero(q1, q2, r), corners_x[a + nearest[0], b + nearest[1]], low, high)
+            if x is not None:
+                x, converged = loop.fixed_point(x)
+                if matches(x, converged):
+                    return x, "cells"
+    rng = np.random.default_rng(0)
+    for _ in range(RANDOM_STARTS):
+        held, _ = held_fixed_points(loop, q[np.newaxis], rng.uniform(-1.0, 1.0, (1, loop.n_neurons)))
+        x, converged = loop.fixed_point(held[0])
+        if matches(x, converged):
+            return x, "random"
+    return first, ""
 
 
 def flags(fixed: list[dict[str, Any]], outcomes: list[dict[str, str]], radius: float) -> list[dict[str, Any]]:
@@ -217,13 +281,15 @@ def flags(fixed: list[dict[str, Any]], outcomes: list[dict[str, str]], radius: f
         points = by_esn.get(esn_key(r), [])
         off = [p for p in points if p["target_distance_m"] > radius]
         own = any(p["n_unstable"] == 0 for p in off)
+        # A fixed point not found again is taken as on its own.
+        with_arm = any((p["system_n_unstable"] if p["found"] else p["n_unstable"]) == 0 for p in off)
         if own != (r["flag_a"] == "True"):
             msg = f"rule (a) on its own differs from the outcomes' run for {esn_key(r)}"
             raise RuntimeError(msg)
         rows.append(
             {c: float(r[c]) for c in SWEPT[:3]}
             | {"seed": int(float(r["seed"])), "passes": r["passes"] == "True"}
-            | {"flag_a": own, "flag_a_arm": any(p["system_n_unstable"] == 0 for p in off)}
+            | {"flag_a": own, "flag_a_arm": with_arm}
         )
     return rows
 
@@ -248,13 +314,14 @@ def stability_changes(fixed: list[dict[str, Any]], n: int) -> list[dict[str, Any
     """Within each leak rate, the fixed points whose stability the arm changes, and the growth rate with it."""
     rows = []
     for lr in sorted({p["leak_rate"] for p in fixed}):
-        points = [p for p in fixed if p["leak_rate"] == lr]
+        points = [p for p in fixed if p["leak_rate"] == lr and p["found"]]
         own = np.array([p["growth_per_s"] for p in points])
         system = np.array([p["system_growth_per_s"] for p in points])
         own_unstable = np.array([p["n_unstable"] > 0 for p in points])
         system_unstable = np.array([p["system_n_unstable"] > 0 for p in points])
         rows.append(
             {"screen": n, "leak_rate": lr, "fixed_points": len(points)}
+            | {"not_found": sum(p["leak_rate"] == lr and not p["found"] for p in fixed)}
             | {
                 "unstable": int(own_unstable.sum()),
                 "unstable_to_attracting": int((own_unstable & ~system_unstable).sum()),
@@ -287,8 +354,9 @@ def release_scores(releases: list[dict[str, Any]], fast_from: float) -> list[dic
     lr = np.array([r["leak_rate"] for r in releases])
     stays = np.array([r["stays_s"] for r in releases])
     stays_put = np.isinf(stays)
-    groups = [("all", np.ones(len(releases), dtype=bool)), (f"<{fast_from:g}", lr < fast_from)]
-    groups.append((f">={fast_from:g}", lr >= fast_from))
+    found = np.isfinite([r["system_growth_per_s"] for r in releases])  # both growth rates over the same releases
+    groups = [("all", found), (f"<{fast_from:g}", found & (lr < fast_from))]
+    groups.append((f">={fast_from:g}", found & (lr >= fast_from)))
     scores = []
     for measure, column in (("own growth", "growth_per_s"), ("growth with the arm", "system_growth_per_s")):
         growth = np.array([r[column] for r in releases])
@@ -314,14 +382,12 @@ def release_scores(releases: list[dict[str, Any]], fast_from: float) -> list[dic
 
 
 def print_checks(rows: list[dict[str, Any]]) -> None:
-    """Print how well the states found reproduce the screen's fixed points."""
-    unconverged = sum(not r["converged"] for r in rows)
-    gap = max(r["posture_gap_deg"] for r in rows)
-    growth = max(abs(r["own_growth_per_s"] - r["growth_per_s"]) for r in rows)
-    residual = max(r["residual"] for r in rows)
+    """Print how the screen's fixed points were found again, and the system's residual there."""
+    ways = {way: sum(r["found"] == way for r in rows) for way in ("reset", "cells", "random", "")}
+    residual = max(r["residual"] for r in rows if r["found"])
     print(
-        f"  {unconverged} not converged; the postures within {gap:.1g} deg of the screen's, the growth rates on"
-        f" its own within {growth:.1g} /s; the system's residual at most {residual:.1g}"
+        f"  found from the reset {ways['reset']}, from the cells {ways['cells']}, from random states"
+        f" {ways['random']}, not found {ways['']}; the system's residual at most {residual:.1g}"
     )
 
 
