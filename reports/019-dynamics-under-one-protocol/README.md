@@ -68,7 +68,9 @@ The findings:
   - At 0.15 to 0.5, which report 016 did not try, it does not. Where both arrive, the
     rank correlation is 0.95 and only 30% are within 0.25 s. At 40 of 244 releases
     only one of them arrives. At 45, the arm stays within 1° of the fixed point for
-    the whole 60 s.
+    the whole 60 s. [Report 020](../020-the-esn-and-the-robot-as-one-system/README.md)
+    finds 41 of those to rest on the fixed point to the last bit: nudged by 10⁻⁹°, they
+    leave.
 - **Of the 29 main claims of reports 011 to 016:**
   - 22 are confirmed and 2 confirmed in part;
   - 3 are changed, all report 016's;
@@ -305,6 +307,8 @@ start (black), three far from it, and two near the target.
     later.
 - **Everything else is report 015's as well:** the reservoir's convergence onto the
   take's states, and the arrival's dependence on where the run joins.
+- **On the robot,** from the same starts, the runs look the same but for the first
+  second: [report 020](../020-the-esn-and-the-robot-as-one-system/README.md), Section 3.1.
 
 ### 3.2 The warm-up
 
@@ -599,7 +603,9 @@ fixed points lie a median 0.58 of the way along the path.
   At 0.15 to 0.5 the two part:
   - at 40 of 244 releases only one of them arrives;
   - the arm stays at the fixed point for the whole 60 s at 45, where report 016 saw
-    it stay at 4 of 810;
+    it stay at 4 of 810. Report 020 finds 41 of them to be exact rests: held 4 s at a
+    fast leak rate, the reservoir settles on the fixed point to the last bit, and
+    nothing in the simulation grows; nudged by 10⁻⁹°, they leave;
   - where both arrive, the robot is a median 0.42 s later, and 4.2 s or more at the
     90th percentile.
 - **The offset starts already catch most of the ESNs that never arrive from there.**
