@@ -125,7 +125,8 @@ def main() -> None:
         )
         states = robot.run_states(log, recorder, warmup)
         nominal = int(np.flatnonzero((runs["arm"] == key) & ~np.isfinite(runs["onset"]))[0])
-        q_run = states[:, loop.n_neurons : loop.n_neurons + 2]
+        angles = slice(loop.n_neurons, loop.n_neurons + robot.n_joints)  # the joint angles in the system's state
+        q_run = states[:, angles]
         gap = float(np.abs(q_run - runs["q"][nominal, : len(q_run)]).max())
         mismatch = max(float(np.abs(robot.advance(z) - z_next).max()) for z, z_next in itertools.pairwise(states[1:]))
         if gap > 1e-6 or mismatch > 1e-9:
@@ -145,7 +146,7 @@ def main() -> None:
             r = local_rates(robot, along, round(seconds / loop.dt), rates["stride"], rates["n_rates"])
             arrays |= {
                 f"starts_s_{seconds:g}": (r.starts + 1) * loop.dt,
-                f"progress_{seconds:g}": path_progress(along[r.starts, loop.n_neurons : loop.n_neurons + 2], take),
+                f"progress_{seconds:g}": path_progress(along[r.starts, angles], take),
                 f"exponents_{seconds:g}": r.exponents,
                 f"across_{seconds:g}": r.across,
                 f"posture_{seconds:g}": r.posture,
@@ -247,7 +248,7 @@ def linear_pulses(
                     scale = 1e-6 / np.abs(push).max()
                     drive = (robot.advance(z, scale * push) - robot.advance(z, -scale * push)) / (2 * scale)
                 deviation[g] = jacobian @ deviation[g] + drive
-            q_path.append(deviation[:, n : n + 2].copy())
+            q_path.append(deviation[:, n : n + robot.n_joints].copy())
             r_path.append(deviation[:, :n] @ readout.T)
         q_pred, r_pred = np.stack(q_path, axis=1), np.stack(r_path, axis=1)
         span = slice(begin, begin + steps + 1)
