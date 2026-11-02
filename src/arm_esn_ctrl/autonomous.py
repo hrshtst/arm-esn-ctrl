@@ -40,6 +40,7 @@ from arm_esn_ctrl.metrics import (
     path_distance,
     path_rmse,
 )
+from arm_esn_ctrl.postures import joint_limits_deg
 from arm_esn_ctrl.storage import resolve_run_path
 from arm_esn_ctrl.tracking import nearest_demonstration
 
@@ -64,6 +65,8 @@ _ON_TRAINING_PATH = float(np.radians(0.25))
 # The jitter is the deviation from a moving average over this long (s); it is measured from this
 # long after the start, past a first step that jumps.
 _JITTER_WINDOW = 0.05
+# An offset start beyond a joint limit by more than this is left out (deg): the take may start at a limit.
+_LIMIT_TOLERANCE_DEG = 1e-6
 
 
 @dataclass(frozen=True)
@@ -167,7 +170,7 @@ def load_setup(config: dict[str, Any]) -> Setup:
     demos = {name: resample_joint_angles(log, dt)[1] for name, log in logs.items()}
     skeleton = next(iter(logs.values())).build_skeleton()
 
-    starts = start_postures(evaluation, demos)
+    starts = start_postures(evaluation, demos, joint_limits_deg(skeleton))
     demonstrator_logs: list[StateLog] = []
     q_refs = hand_refs = None
     if "controller" in demo_config:
@@ -195,35 +198,47 @@ def load_setup(config: dict[str, Any]) -> Setup:
     )
 
 
-def start_postures(evaluation: dict[str, Any], demos: dict[str, NDArray[np.float64]]) -> list[Start]:
+def start_postures(
+    evaluation: dict[str, Any],
+    demos: dict[str, NDArray[np.float64]],
+    limits: tuple[NDArray[np.float64], NDArray[np.float64]] | None = None,
+) -> list[Start]:
     """The start postures of the autonomous runs.
 
     First, each demonstration's start plus every offset in ``start_offsets_deg``
     and in the ``start_grid`` table (a zero offset is the demonstrated start
-    itself). The grid offsets each joint from ``-span_deg`` to ``span_deg`` in steps
-    of ``step_deg``, in every combination. Then the extra start postures in the
-    ``extra_starts`` table, which maps a group name to a list of joint angles in
-    degrees, such as ``between = [[40.5, 71.4], ...]``.
+    itself). An offset gives one angle per joint, or one for every joint, such as
+    ``[0.0]``. The grid offsets each joint from ``-span_deg`` to ``span_deg`` in steps
+    of ``step_deg``, in every combination. With the arm's joint ``limits``, the lower
+    and the upper (deg), the offset starts beyond them are left out: the arm cannot
+    start there. Then the extra start postures in the ``extra_starts`` table, which
+    maps a group name to a list of joint angles in degrees, such as ``between =
+    [[40.5, 71.4], ...]``.
     """
     unknown = sorted(set(evaluation) - EVALUATION_KEYS)
     if unknown:
         msg = f"unknown keys in [evaluation]: {', '.join(unknown)}"
         raise ValueError(msg)
+    n_joints = len(next(iter(demos.values()))[0])
     offsets = [tuple(offset) for offset in evaluation.get("start_offsets_deg", [])]
+    if any(len(offset) not in (1, n_joints) for offset in offsets):
+        msg = f"[evaluation] start_offsets_deg: give each offset one angle per joint ({n_joints}), or one for all"
+        raise ValueError(msg)
+    offsets = [offset * n_joints if len(offset) == 1 else offset for offset in offsets]
     if "start_grid" in evaluation:
         grid = evaluation["start_grid"]
         span, step = grid["span_deg"], grid["step_deg"]
         values = [round(value, 9) for value in np.arange(-span, span + step / 2, step)]
-        n_joints = len(next(iter(demos.values()))[0])
         offsets += list(itertools.product(values, repeat=n_joints))
     offsets = list(dict.fromkeys(offsets))  # each offset once, in the order given
     starts = []
     for name, q in demos.items():
         for offset in offsets:
-            if any(offset):
-                starts.append(Start(f"{name} {offset[0]:+g},{offset[1]:+g} deg", q[0] + np.radians(offset), "offset"))
-            else:
-                starts.append(Start(name, q[0] + np.radians(offset), "demonstrated"))
+            start = q[0] + np.radians(offset)
+            if not any(offset):
+                starts.append(Start(name, start, "demonstrated"))
+            elif limits is None or within(np.degrees(start), limits):
+                starts.append(Start(f"{name} {','.join(f'{value:+g}' for value in offset)} deg", start, "offset"))
     for group, postures in evaluation.get("extra_starts", {}).items():
         if group in ("demonstrated", "offset"):
             msg = f"[evaluation.extra_starts] cannot use the reserved group name {group!r}"
@@ -233,6 +248,12 @@ def start_postures(evaluation: dict[str, Any], demos: dict[str, NDArray[np.float
         msg = "[evaluation] lists no start postures: give start_offsets_deg, [evaluation.start_grid], or extra_starts"
         raise ValueError(msg)
     return starts
+
+
+def within(q_deg: NDArray[np.float64], limits: tuple[NDArray[np.float64], NDArray[np.float64]]) -> bool:
+    """Whether the joint angles ``q_deg`` lie within the joint ``limits`` (deg), give or take 1e-6 deg."""
+    lower, upper = limits
+    return bool(np.all(q_deg >= lower - _LIMIT_TOLERANCE_DEG) and np.all(q_deg <= upper + _LIMIT_TOLERANCE_DEG))
 
 
 def demonstrator_config(demo_config: dict[str, Any], starts: list[Start], duration: float) -> dict[str, Any]:

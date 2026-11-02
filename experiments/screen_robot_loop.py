@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import multiprocessing
 import os
 import tomllib
@@ -67,12 +68,13 @@ from screen_against_robot import auc, spearman
 from arm_esn_ctrl.autonomous import Setup, load_setup
 from arm_esn_ctrl.dynamics import ClosedLoop, RobotLoop
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
-from arm_esn_ctrl.screening import _cell_zero, held_fixed_points, map_zero
+from arm_esn_ctrl.postures import joint_columns, joint_values, map_grid
+from arm_esn_ctrl.screening import PostureMap, cell_zeros, held_fixed_points
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import TrackerConfig, gain_posture
 
 SWEPT = ("leak_rate", "spectral_radius", "input_scaling", "seed")
-KEPT = ("q1_deg", "q2_deg", "target_distance_m", "path_distance_deg", "progress", "n_unstable", "growth_per_s")
+KEPT = ("target_distance_m", "path_distance_deg", "progress", "n_unstable", "growth_per_s")  # and the posture
 POSTURE_TOLERANCE_DEG = 1e-6  # a state found again gives the screen's posture this closely ...
 GROWTH_TOLERANCE = 1e-6  # ... and its slowest mode's growth rate (1/s)
 RANDOM_STARTS = 20  # the random states a fixed point's state is sought from, last
@@ -89,7 +91,7 @@ class Context:
     simulator: dict[str, Any]
     tracker: TrackerConfig
     gains: tuple[NDArray[np.float64], NDArray[np.float64]]
-    grid_step_deg: float  # the screen's grid of R
+    grids_deg: list[NDArray[np.float64]]  # the screen's grid of R, each joint's angles
 
 
 _contexts: dict[str, Context] = {}  # this process's, by screen run, set by init_worker
@@ -150,7 +152,7 @@ def load_context(config: dict[str, Any], screen: str) -> Context:
         {
             "demonstrations": screen_config["demonstrations"],
             "esn": {"dt": screen_config["esn"]["dt"]},
-            "evaluation": {"duration": 0.0, "hold": 0.0, "start_offsets_deg": [[0.0, 0.0]]},
+            "evaluation": {"duration": 0.0, "hold": 0.0, "start_offsets_deg": [[0.0]]},
         }
     )
     with (resolve_run_path(screen_config["demonstrations"]["run"]) / "config.toml").open("rb") as f:
@@ -170,9 +172,8 @@ def load_context(config: dict[str, Any], screen: str) -> Context:
     )
     gains = setting.gains(tracker, setup.skeleton, gain_posture(setup.demos.values()))
     take = next(iter(setup.demos.values()))
-    return Context(
-        screen_config["esn"], setup, take, simulator, tracker, gains, screen_config["screen"]["grid_step_deg"]
-    )
+    grids = map_grid(setup.skeleton, screen_config["screen"]["grid_step_deg"])
+    return Context(screen_config["esn"], setup, take, simulator, tracker, gains, grids)
 
 
 def init_worker(config: dict[str, Any]) -> None:
@@ -203,9 +204,10 @@ def esn_fixed_points(context: Context, key: Key, points: list[dict[str, str]]) -
     rows = []
     nan = float("nan")
     for p in points:
-        q = np.radians([float(p["q1_deg"]), float(p["q2_deg"])])
-        x, found = screen_state(loop, q, float(p["growth_per_s"]), context.grid_step_deg)
-        row = combination | {"fixed_point": int(p["fixed_point"])} | {c: float(p[c]) for c in KEPT}
+        posture = joint_columns("q{j}_deg", joint_values(p, "q{j}_deg"))
+        q = np.radians(joint_values(p, "q{j}_deg"))
+        x, found = screen_state(loop, q, float(p["growth_per_s"]), context.grids_deg)
+        row = combination | {"fixed_point": int(p["fixed_point"])} | posture | {c: float(p[c]) for c in KEPT}
         within = bool(np.all(q >= robot.lower) and np.all(q <= robot.upper)) if robot.lower is not None else True
         row |= {"from_grid": p["from_grid"] == "True", "found": found, "within_stops": within}
         if not found or not within:
@@ -225,12 +227,13 @@ def esn_fixed_points(context: Context, key: Key, points: list[dict[str, str]]) -
 
 
 def screen_state(
-    loop: ClosedLoop, q: NDArray[np.float64], growth: float, step_deg: float
+    loop: ClosedLoop, q: NDArray[np.float64], growth: float, grids_deg: list[NDArray[np.float64]]
 ) -> tuple[NDArray[np.float64], str]:
     """The state of the screen's fixed point at the posture ``q`` (rad) with the slowest mode's ``growth`` rate.
 
-    Returns the state and how it was found (see the module), or the first state tried
-    and an empty string if none gives the screen's posture and growth rate.
+    ``grids_deg`` is the screen's grid of R, each joint's angles. Returns the state and
+    how it was found (see the module), or the first state tried and an empty string if
+    none gives the screen's posture and growth rate.
     """
 
     def matches(x: NDArray[np.float64], converged: bool) -> bool:
@@ -244,27 +247,20 @@ def screen_state(
     if matches(first, converged):
         return first, "reset"
     # As the screen found it: Newton's method on R from the cells of its grid around q, where R changes sign.
-    grid = np.radians(np.arange(-180.0, 180.0 + 1e-9, step_deg))
-    i, j = (int(np.clip(np.searchsorted(grid, angle) - 1, 0, len(grid) - 2)) for angle in q)
-    rows, cols = range(max(i - 1, 0), min(i + 3, len(grid))), range(max(j - 1, 0), min(j + 3, len(grid)))
-    corners_q = np.array([[grid[a], grid[b]] for a in rows for b in cols])
-    corners_x, _ = held_fixed_points(loop, corners_q)
-    residual = (loop.posture(corners_x) - corners_q).reshape(len(rows), len(cols), -1)
-    corners_x = corners_x.reshape(len(rows), len(cols), -1)
-    for a in range(len(rows) - 1):
-        for b in range(len(cols) - 1):
-            r = residual[a : a + 2, b : b + 2].reshape(4, -1)
-            if not all(r[:, k].min() <= 0.0 <= r[:, k].max() for k in range(r.shape[1])):
-                continue
-            q1, q2 = grid[rows[a] : rows[a] + 2], grid[cols[b] : cols[b] + 2]
-            nearest = np.unravel_index(int(np.argmin(np.linalg.norm(r, axis=1))), (2, 2))
-            width = np.array([q1[1] - q1[0], q2[1] - q2[0]])
-            low, high = np.array([q1[0], q2[0]]) - width, np.array([q1[1], q2[1]]) + width
-            x = map_zero(loop, _cell_zero(q1, q2, r), corners_x[a + nearest[0], b + nearest[1]], low, high)
-            if x is not None:
-                x, converged = loop.fixed_point(x)
-                if matches(x, converged):
-                    return x, "cells"
+    local = []
+    for grid, angle in zip(grids_deg, q, strict=True):
+        i = int(np.clip(np.searchsorted(np.radians(grid), angle) - 1, 0, len(grid) - 2))
+        local.append(grid[max(i - 1, 0) : min(i + 3, len(grid))])
+    corners_q = np.array(list(itertools.product(*(np.radians(g) for g in local))))
+    corners_x, converged_x = held_fixed_points(loop, corners_q)
+    shape = tuple(len(g) for g in local)
+    residual = (loop.posture(corners_x) - corners_q).reshape(*shape, -1)
+    cells = PostureMap(tuple(local), corners_x.reshape(*shape, -1), residual, converged_x.reshape(shape))
+    for x in cell_zeros(loop, cells):
+        if x is not None:
+            x, converged = loop.fixed_point(x)
+            if matches(x, converged):
+                return x, "cells"
     rng = np.random.default_rng(0)
     for _ in range(RANDOM_STARTS):
         held, _ = held_fixed_points(loop, q[np.newaxis], rng.uniform(-1.0, 1.0, (1, loop.n_neurons)))
@@ -342,13 +338,14 @@ def stability_changes(fixed: list[dict[str, Any]], n: int) -> list[dict[str, Any
 
 def with_growth(releases: list[dict[str, str]], fixed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The release rows, each with the growth rate and unstable modes with the arm at its fixed point."""
-    at = {(esn_key(p), p["q1_deg"], p["q2_deg"]): p for p in fixed}
+    at = {(esn_key(p), tuple(joint_values(p, "q{j}_deg"))): p for p in fixed}
     rows = []
     for r in releases:
-        p = at[(esn_key(r), float(r["q1_deg"]), float(r["q2_deg"]))]
+        p = at[(esn_key(r), tuple(joint_values(r, "q{j}_deg")))]
         rows.append(
             {c: (int(float(r[c])) if c == "seed" else float(r[c])) for c in SWEPT}
-            | {c: float(r[c]) for c in ("q1_deg", "q2_deg", "path_distance_deg", "growth_per_s", "stays_s")}
+            | joint_columns("q{j}_deg", joint_values(r, "q{j}_deg"))
+            | {c: float(r[c]) for c in ("path_distance_deg", "growth_per_s", "stays_s")}
             | {c: float(r[c]) for c in ("arrival_s", "own_arrival_s")}
             | {"system_growth_per_s": p["system_growth_per_s"], "system_n_unstable": p["system_n_unstable"]}
         )

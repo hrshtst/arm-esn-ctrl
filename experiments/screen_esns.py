@@ -12,8 +12,8 @@ demonstrations, as ``experiments/sweep_robot_esn.py`` trains it, and screened fe
 own output (see :mod:`arm_esn_ctrl.screening` and :mod:`arm_esn_ctrl.dynamics`), as
 the ``[screen]`` table sets:
 
-- **The fixed points:** the zeros of R(q) over a grid of both joints' whole range,
-  every ``grid_step_deg``, each refined by Newton's method on the ESN's update, and
+- **The fixed points:** the zeros of R(q) over a grid of every joint's range, from its
+  lower limit to its upper one every ``grid_step_deg``, each refined by Newton's method on the ESN's update, and
   those that the runs from rest below come to rest at and the grid misses. For
   each: its posture, the hand's distance from the target, its distance from the
   take's joint path and how far along the path it lies, and its eigenvalues: the
@@ -26,8 +26,10 @@ the ``[screen]`` table sets:
   robot; its median and smallest over the grid's postures within ``band_deg`` of the
   take's joint path, up to ``max_progress`` along it.
 - **From rest anywhere:** the ESN on its own for ``duration`` from rest at a
-  coarser grid, every ``start_step_deg``, and at ``ring_deg`` around the take's end
-  posture in 8 directions, each start posture held for the ESN's warm-up first:
+  coarser grid, every ``start_step_deg`` (:func:`arm_esn_ctrl.postures.start_grid`),
+  and at ``ring_deg`` around the take's end posture (:func:`ring_directions`: 8
+  directions for two joints, 24 for four), each start posture held for the ESN's
+  warm-up first:
   how many arrive within the goal radius and end there, and the latest arrival.
 - **Held at an unstable fixed point:** the ESN on its own from rest there, held
   for ``release_hold`` from the reset, then released: when it arrives, within
@@ -44,8 +46,10 @@ The run directory receives:
 - ``screen.csv``: one row per ESN: its swept hyperparameters and its measures;
 - ``fixed_points.csv``: one row per fixed point of each ESN, and whether the grid
   found it;
-- ``maps.npz``: the swept values of each ESN, the grid, and each ESN's R over it
-  and where the held reservoir's Newton's method converged.
+- ``maps.npz``: the swept values of each ESN, the grid (``grid_deg``, each joint's
+  angles if they are the same for every joint, else ``grid_deg_q1``, ``grid_deg_q2``,
+  ...), and each ESN's R over it and where the held reservoir's Newton's method
+  converged.
 """
 
 from __future__ import annotations
@@ -69,6 +73,7 @@ from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.dynamics import ClosedLoop, local_rates
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import arrival_index, distances_to_path, path_progress, resample_by_length
+from arm_esn_ctrl.postures import joint_columns, joint_values, map_grid, start_grid
 from arm_esn_ctrl.screening import (
     autonomous_runs,
     find_fixed_points,
@@ -79,8 +84,7 @@ from arm_esn_ctrl.screening import (
 )
 from arm_esn_ctrl.storage import start_run
 
-JOINT_RANGE_DEG = 180.0  # the arm's joints turn from -180 to 180 deg
-RING_DIRECTIONS = 8  # the start postures around the take's end posture, at each ring_deg
+RING_DIRECTIONS = 8  # for two joints, the start postures around the take's end posture, at each ring_deg
 HAND_EVERY = 5  # the runs' hands are measured every this many steps
 
 
@@ -104,6 +108,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config, run_dir = start_run(args.config)
+    context = load_context(config)
     sweep: dict[str, list[Any]] = config["sweep"]
     combinations = [dict(zip(sweep, values, strict=True)) for values in itertools.product(*sweep.values())]
     print(f"{len(combinations)} ESNs over {', '.join(f'{k} ({len(v)})' for k, v in sweep.items())}")
@@ -133,21 +138,20 @@ def main() -> None:
             writer = csv.DictWriter(f, fieldnames=list(table[0]))
             writer.writeheader()
             writer.writerows(table)
-    np.savez_compressed(
-        run_dir / "maps.npz",
-        swept=np.array(list(sweep)),
-        values=np.array([[row[name] for name in sweep] for row in rows], dtype=np.float64),
-        grid_deg=grid(config["screen"]["grid_step_deg"]),
-        residual=np.array(maps),
-        converged=np.array(converged),
-    )
+    arrays: dict[str, Any] = {
+        "swept": np.array(list(sweep)),
+        "values": np.array([[row[name] for name in sweep] for row in rows], dtype=np.float64),
+        **grid_arrays(map_grid(context.setup.skeleton, config["screen"]["grid_step_deg"])),
+        "residual": np.array(maps),
+        "converged": np.array(converged),
+    }
+    np.savez_compressed(run_dir / "maps.npz", **arrays)
     print(f"\nWrote the results to {run_dir}")
 
 
-def init_worker(config: dict[str, Any]) -> None:
-    """Load this process's context: the take, as the robot sweeps load it."""
-    global _context
-    evaluation = {"duration": config["screen"]["duration"], "hold": 0.0, "start_offsets_deg": [[0.0, 0.0]]}
+def load_context(config: dict[str, Any]) -> Context:
+    """The context of every ESN's screening: the take, as the robot sweeps load it."""
+    evaluation = {"duration": config["screen"]["duration"], "hold": 0.0, "start_offsets_deg": [[0.0]]}
     setup = load_setup(
         {"demonstrations": config["demonstrations"], "esn": {"dt": config["esn"]["dt"]}, "evaluation": evaluation}
     )
@@ -155,7 +159,13 @@ def init_worker(config: dict[str, Any]) -> None:
         msg = "the ESNs are screened against one take: give one demonstration"
         raise ValueError(msg)
     take = next(iter(setup.demos.values()))
-    _context = Context(config, setup, take, resample_by_length(take, np.radians(PATH_SPACING_DEG)))
+    return Context(config, setup, take, resample_by_length(take, np.radians(PATH_SPACING_DEG)))
+
+
+def init_worker(config: dict[str, Any]) -> None:
+    """Load this process's context."""
+    global _context
+    _context = load_context(config)
 
 
 def screen_job(combination: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]], Any, Any]:
@@ -177,19 +187,16 @@ def screen(
     end_q = context.take[-1]
 
     # From rest anywhere, and around the take's end posture.
-    coarse = np.radians(np.arange(-JOINT_RANGE_DEG, JOINT_RANGE_DEG, table["start_step_deg"]))
-    starts = np.array(list(itertools.product(coarse, coarse)))
-    angles = 2 * np.pi * np.arange(RING_DIRECTIONS) / RING_DIRECTIONS
-    ring = np.array(
-        [end_q + np.radians(r) * np.array([np.cos(a), np.sin(a)]) for r in table["ring_deg"] for a in angles]
-    )
+    coarse = [np.radians(values) for values in start_grid(setup.skeleton, table["start_step_deg"])]
+    starts = np.array(list(itertools.product(*coarse)))
+    ring = np.array([end_q + np.radians(r) * d for r in table["ring_deg"] for d in ring_directions(len(end_q))])
     n_steps = round(table["duration"] / dt)
     grid_q, grid_x = autonomous_runs(loop, starts, esn.config.warmup_steps, n_steps)
     ring_q, ring_x = autonomous_runs(loop, ring, esn.config.warmup_steps, n_steps)
     own_q, own_x = autonomous_runs(loop, context.take[:1], esn.config.warmup_steps, n_steps)
 
     # The fixed points, from the zeros of R, and where those runs come to rest.
-    pmap = posture_map(loop, grid(table["grid_step_deg"]))
+    pmap = posture_map(loop, map_grid(setup.skeleton, table["grid_step_deg"]))
     found = find_fixed_points(loop, pmap)
     at_rest = fixed_points_at_rest(
         loop, np.concatenate([grid_q, ring_q, own_q]), np.concatenate([grid_x, ring_x, own_x]), found.states
@@ -202,9 +209,9 @@ def screen(
     target = min(at_target, key=lambda f: f["end_posture_distance_deg"], default=None)
 
     # Whether the held reservoir has one fixed point at each posture: from random states as well.
-    stride = table["check_stride"]
-    q_check = pmap.postures().reshape(len(pmap.grid_deg), len(pmap.grid_deg), -1)[::stride, ::stride].reshape(-1, 2)
-    x_reset = pmap.held[::stride, ::stride].reshape(len(q_check), -1)
+    every = (slice(None, None, table["check_stride"]),) * len(pmap.grids_deg)
+    q_check = pmap.postures().reshape(*pmap.converged.shape, -1)[every].reshape(-1, len(pmap.grids_deg))
+    x_reset = pmap.held[every].reshape(len(q_check), -1)
     rng = np.random.default_rng(0)
     x_random, random_converged = held_fixed_points(loop, q_check, rng.uniform(-1.0, 1.0, x_reset.shape))
     held_multiple = int((np.abs(x_random - x_reset).max(axis=1) > 1e-8)[random_converged].sum())
@@ -221,7 +228,7 @@ def screen(
     # Held at each unstable fixed point, then released.
     release = np.nan
     if unstable:
-        q_unstable = np.radians([[f["q1_deg"], f["q2_deg"]] for f in unstable])
+        q_unstable = np.radians([joint_values(f, "q{j}_deg") for f in unstable])
         runs, _ = autonomous_runs(
             loop, q_unstable, round(table["release_hold"] / dt), round(table["release_duration"] / dt)
         )
@@ -256,8 +263,8 @@ def screen(
         "release_arrival_s": release,
         "lead_median_deg": float(np.median(lead[near])),
         "lead_min_deg": float(lead[least]),
-        "lead_min_q1_deg": float(np.degrees(q_grid[least, 0])),
-        "lead_min_q2_deg": float(np.degrees(q_grid[least, 1])),
+    }
+    row |= joint_columns("lead_min_q{j}_deg", np.degrees(q_grid[least])) | {
         "starts": len(starts),
         "starts_arrived": int(np.isfinite(grid_runs["arrival"]).sum()),
         "starts_at_target": int(grid_runs["at_target"].sum()),
@@ -282,9 +289,7 @@ def describe(context: Context, loop: ClosedLoop, x: NDArray[np.float64]) -> dict
     eigenvalues = spectrum(loop, x)
     modulus = np.abs(eigenvalues)
     slowest = eigenvalues[0]  # the slowest mode to decay, or the fastest to grow
-    return {
-        "q1_deg": float(np.degrees(q[0])),
-        "q2_deg": float(np.degrees(q[1])),
+    return joint_columns("q{j}_deg", np.degrees(q)) | {
         "target_distance_m": float(np.linalg.norm(endpoint_positions(setup.skeleton, q[np.newaxis])[0] - setup.target)),
         "end_posture_distance_deg": float(np.degrees(np.linalg.norm(q - context.take[-1]))),
         "path_distance_deg": float(np.degrees(distances_to_path(q[np.newaxis], context.path)[0])),
@@ -310,9 +315,26 @@ def run_outcomes(setup: Setup, q: NDArray[np.float64], dt: float) -> dict[str, N
     return {"arrival": arrival, "at_target": at_target}
 
 
-def grid(step_deg: float) -> NDArray[np.float64]:
-    """The grid of each joint's whole range, every ``step_deg``, both ends included."""
-    return np.arange(-JOINT_RANGE_DEG, JOINT_RANGE_DEG + 1e-9, step_deg)
+def ring_directions(n_joints: int) -> NDArray[np.float64]:
+    """The directions in joint space of the start postures around the take's end posture, unit vectors.
+
+    For two joints, :data:`RING_DIRECTIONS` equally spaced in their plane; for more, along
+    each joint and along every diagonal, the joints all moved by the same angle (24 for
+    four joints). For two, these are the same eight.
+    """
+    if n_joints == 2:
+        angles = 2 * np.pi * np.arange(RING_DIRECTIONS) / RING_DIRECTIONS
+        return np.array([[np.cos(a), np.sin(a)] for a in angles])
+    axes = [sign * row for row in np.eye(n_joints) for sign in (1.0, -1.0)]
+    diagonals = [np.array(signs) / np.sqrt(n_joints) for signs in itertools.product((1.0, -1.0), repeat=n_joints)]
+    return np.array(axes + diagonals)
+
+
+def grid_arrays(grids: list[NDArray[np.float64]]) -> dict[str, NDArray[np.float64]]:
+    """The grid of R for ``maps.npz``: one array if every joint has the same angles, else one per joint."""
+    if all(np.array_equal(g, grids[0]) for g in grids):
+        return {"grid_deg": grids[0]}
+    return {f"grid_deg_q{j}": g for j, g in enumerate(grids, start=1)}
 
 
 if __name__ == "__main__":

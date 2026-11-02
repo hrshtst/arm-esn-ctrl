@@ -45,6 +45,7 @@ from matplotlib.figure import Figure
 
 from arm_esn_ctrl.autonomous import Reference, Run, Setup, load_setup, run_autonomously, run_metrics
 from arm_esn_ctrl.esn import ReachingEsn
+from arm_esn_ctrl.postures import joint_columns
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import nearest_demonstration
 
@@ -96,14 +97,16 @@ def run_row(warmup: float, i: int, run: Run, setup: Setup) -> dict[str, Any]:
     offset = np.degrees(run.start.q - demonstrated)
     reference = setup.reference
     keys = ("success", "arrival_time_s", reference.arrival_delay, "first_step_m", reference.path_distance)
-    return {
-        "warmup_s": warmup,
-        "start": i,
-        "origin": run.start.origin,
-        "group": run.start.group,
-        "offset_q1_deg": round(float(offset[0]), 6),
-        "offset_q2_deg": round(float(offset[1]), 6),
-    } | {key: metrics[key] for key in (*keys, reference.course)}
+    return (
+        {
+            "warmup_s": warmup,
+            "start": i,
+            "origin": run.start.origin,
+            "group": run.start.group,
+        }
+        | joint_columns("offset_q{j}_deg", [round(float(value), 6) for value in offset])
+        | {key: metrics[key] for key in (*keys, reference.course)}
+    )
 
 
 def by_warmup(rows: list[dict[str, Any]], warmup: float, demonstrated: bool) -> list[dict[str, Any]]:

@@ -70,10 +70,12 @@ start posture, and the run directory receives:
 - ``torques.png``: the arms' joint torques over time from the first start posture;
 - ``joints_offset_<dq1>_<dq2>.png`` and ``torques_offset_<dq1>_<dq2>.png``, such as
   ``joints_offset_+15_+15.png``: the same from each start posture offset by
-  ``[dq1, dq2]`` degrees that an optional ``[plots]`` table lists in ``offsets_deg``;
+  ``[dq1, dq2]`` degrees (one offset per joint) that an optional ``[plots]`` table
+  lists in ``offsets_deg``;
 - ``grid.png``, with an ``[evaluation.start_grid]``: maps over the start offsets
   of the outcome, the path distance, the training path ratio, the peak reference
-  speed, the peak torque, and the tracking error, for each tracker setting.
+  speed, the peak torque, and the tracking error, for each tracker setting (with
+  more than two joints, as nested grids: see :class:`arm_esn_ctrl.drawing.OffsetMap`).
 
 Replay a run with ``uv run python third_party/skelarm/tools/player.py <file>``.
 """
@@ -106,7 +108,7 @@ from arm_esn_ctrl.disturbances import (
     make_disturbance,
     recorded_evaluation,
 )
-from arm_esn_ctrl.drawing import draw_postures, spread_along_path
+from arm_esn_ctrl.drawing import OffsetMap, draw_postures, spread_along_path
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import (
     distances_to_path,
@@ -296,7 +298,7 @@ def main() -> None:
     plot_torques(run_dir, setup, settings, spans, title).savefig(run_dir / "torques.png", dpi=150)
     for offset in config.get("plots", {}).get("offsets_deg", []):
         index = offset_start(setup, offset)
-        name = f"offset_{offset[0]:+g}_{offset[1]:+g}"
+        name = "offset_" + "_".join(f"{value:+g}" for value in offset)
         plot_joints(run_dir, setup, settings, spans, title, index).savefig(run_dir / f"joints_{name}.png", dpi=150)
         plot_torques(run_dir, setup, settings, spans, title, index).savefig(run_dir / f"torques_{name}.png", dpi=150)
     if "start_grid" in evaluation:
@@ -853,7 +855,7 @@ def demonstrated_motion(setup: Setup, start: int = 0) -> tuple[NDArray[np.float6
 
 def offset_start(setup: Setup, offset: Sequence[float]) -> int:
     """The index of the first start posture offset by ``offset`` (deg) from a demonstrated start, such as (15, 15)."""
-    suffix = f" {offset[0]:+g},{offset[1]:+g} deg"
+    suffix = f" {','.join(f'{value:+g}' for value in offset)} deg"
     for i, start in enumerate(setup.starts):
         if start.origin.endswith(suffix):
             return i
@@ -1016,10 +1018,8 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting],
     for i, start in enumerate(setup.starts):
         demonstrated = setup.demos[nearest_demonstration(start.q, setup.demos)][0]
         offsets[i] = tuple(np.round(np.degrees(start.q - demonstrated), 6))
-    xs = np.unique([offset[0] for offset in offsets.values()])
-    ys = np.unique([offset[1] for offset in offsets.values()])
-    step_x, step_y = xs[1] - xs[0], ys[1] - ys[0]
-    extent = (xs[0] - step_x / 2, xs[-1] + step_x / 2, ys[0] - step_y / 2, ys[-1] + step_y / 2)
+    layout = OffsetMap.of(list(offsets.values()))
+    extent, (xlabel, ylabel) = layout.extent, layout.labels()
     panels = [(setting, arm) for setting in settings for arm in TRACKED if any(r["arm"] == arm for r in rows)]
     maps = grid_maps(setup.reference)
     columns = 1 + len(maps)
@@ -1028,8 +1028,7 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting],
     axes = fig.subplots(len(panels), columns, squeeze=False)
 
     def grid_of(group: list[dict[str, Any]], key: str, factor: float) -> NDArray[np.float64]:
-        cell = {offsets[r["start"]][:2]: float(r[key]) * factor for r in group}
-        return np.array([[cell.get((x, y), np.nan) for x in xs] for y in ys])
+        return layout.grid({offsets[r["start"]]: float(r[key]) * factor for r in group})
 
     groups = [
         [r for r in rows if {key: r[key] for key in s.columns} == s.columns and r["arm"] == arm] for s, arm in panels
@@ -1044,7 +1043,7 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting],
             vmin=-0.5,
             vmax=2.5,
         )
-        ax_row[0].set_ylabel(f"{setting.label}\n{ARM_LABELS[arm]}\njoint 2 offset (deg)", color=TEXT_COLOR, fontsize=8)
+        ax_row[0].set_ylabel(f"{setting.label}\n{ARM_LABELS[arm]}\n{ylabel}", color=TEXT_COLOR, fontsize=8)
         ax_row[0].set_title("Outcome", color=TEXT_COLOR, fontsize=9)
     handles = [Patch(color=color, label=text) for color, text in zip(OUTCOME_COLORS, OUTCOMES, strict=True)]
     axes[0, 0].legend(handles=handles, loc="upper left", fontsize=7, framealpha=0.8)
@@ -1066,10 +1065,11 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, settings: list[Setting],
             ScalarMappable(norm=norm, cmap="Blues"), ax=axes[:, column].tolist(), location="bottom", extend=extend
         )
     for ax in axes.flat:
-        ax.plot(0.0, 0.0, marker="+", markersize=10, color="#0b0b0b", markeredgewidth=1.5)
+        ax.plot(*layout.zero, marker="+", markersize=10, color="#0b0b0b", markeredgewidth=1.5)
         ax.tick_params(labelsize=7)
+        layout.decorate(ax, fontsize=6)
     for ax in axes[-1]:
-        ax.set_xlabel("joint 1 offset (deg)", color=TEXT_COLOR, fontsize=8)
+        ax.set_xlabel(xlabel, color=TEXT_COLOR, fontsize=8)
     return fig
 
 

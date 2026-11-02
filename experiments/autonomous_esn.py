@@ -59,8 +59,10 @@ from arm_esn_ctrl.autonomous import (
     run_metrics,
 )
 from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log
+from arm_esn_ctrl.drawing import OffsetMap
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed
+from arm_esn_ctrl.postures import joint_columns, joint_values
 from arm_esn_ctrl.storage import start_run
 
 ESN_COLOR = "#2a78d6"
@@ -102,12 +104,8 @@ def main() -> None:
         if setup.demonstrator_logs:
             setup.demonstrator_logs[i].save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
         rows.append(
-            {
-                "start": i,
-                "origin": run.start.origin,
-                "start_q1_deg": float(np.degrees(run.start.q[0])),
-                "start_q2_deg": float(np.degrees(run.start.q[1])),
-            }
+            {"start": i, "origin": run.start.origin}
+            | joint_columns("start_q{j}_deg", np.degrees(run.start.q))
             | run_metrics(run, setup)
         )
 
@@ -183,10 +181,16 @@ def plot_runs(
     demonstration, which are highlighted underneath the runs. Filled markers show
     where a training demonstration starts; hollow ones, start postures it does not.
     """
-    fig = Figure(figsize=(10, 8.5), facecolor=SURFACE_COLOR, layout="constrained")
+    n_joints = runs[0].q.shape[1]
+    rows = 1 + (n_joints + 1) // 2  # the hand paths and speeds, then two joints a row
+    fig = Figure(figsize=(10, 4.25 * rows), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
-    ax_hand, ax_speed, ax_q1, ax_q2 = fig.subplots(2, 2).flat
-    for ax in (ax_hand, ax_speed, ax_q1, ax_q2):
+    axes = fig.subplots(rows, 2)
+    ax_hand, ax_speed = axes[0]
+    joint_axes = list(axes[1:].flat)[:n_joints]
+    for ax in list(axes[1:].flat)[n_joints:]:
+        ax.set_visible(False)
+    for ax in (ax_hand, ax_speed, *joint_axes):
         ax.set_facecolor(SURFACE_COLOR)
         ax.grid(color=GRID_COLOR, linewidth=0.8)
         ax.tick_params(colors=TEXT_COLOR, labelcolor=TEXT_COLOR)
@@ -202,7 +206,7 @@ def plot_runs(
         label = "training demonstrations" if i == 0 else None
         ax_hand.plot(hand_train[:, 0], hand_train[:, 1], label=label, **training_line)
         ax_speed.plot(t_train, hand_speed(t_train, hand_train), **training_line)
-        for ax, j in ((ax_q1, 0), (ax_q2, 1)):
+        for j, ax in enumerate(joint_axes):
             ax.plot(t_train, np.degrees(q_train[:, j]), **training_line)
     for i, run in enumerate(runs):
         esn_label = "ESN, run autonomously from each start" if i == 0 else None
@@ -211,13 +215,13 @@ def plot_runs(
             ax_hand.plot(run.hand_ref[:, 0], run.hand_ref[:, 1], label=ref_label, **ref_line)
             t_ref = times[: len(run.hand_ref)]
             ax_speed.plot(t_ref, hand_speed(t_ref, run.hand_ref), **ref_line)
-            for ax, j in ((ax_q1, 0), (ax_q2, 1)):
+            for j, ax in enumerate(joint_axes):
                 ax.plot(times[: len(run.q_ref)], np.degrees(run.q_ref[:, j]), **ref_line)
         ax_hand.plot(run.hand[:, 0], run.hand[:, 1], label=esn_label, **esn_line)
         face = ESN_COLOR if run.start.demonstrated else SURFACE_COLOR
         ax_hand.plot(*run.hand[0], marker="o", markersize=6, color=ESN_COLOR, markerfacecolor=face)
         ax_speed.plot(times, hand_speed(times, run.hand), **esn_line)
-        for ax, j in ((ax_q1, 0), (ax_q2, 1)):
+        for j, ax in enumerate(joint_axes):
             ax.plot(times, np.degrees(run.q[:, j]), **esn_line)
 
     ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
@@ -240,45 +244,32 @@ def plot_runs(
             color=TEXT_COLOR,
             fontsize=8,
         )
-    ax_q1.set(title="Joint 1", xlabel="time (s)", ylabel="angle (deg)")
-    ax_q2.set(title="Joint 2", xlabel="time (s)", ylabel="angle (deg)")
+    for j, ax in enumerate(joint_axes):
+        ax.set(title=f"Joint {j + 1}", xlabel="time (s)", ylabel="angle (deg)")
     return fig
 
 
 def plot_grid(rows: list[dict[str, Any]], setup: Setup, title: str) -> Figure:
     """Map the outcome and the main metrics over the grid of start offsets around the first demonstration.
 
-    Each cell is one start posture, placed by its offset in each joint; the cross
-    marks the demonstrated start. A blank cell has no value: a training path ratio
+    Each cell is one start posture, placed by its offset in each joint (with more
+    than two joints, as nested grids: see :class:`arm_esn_ctrl.drawing.OffsetMap`);
+    the cross marks the demonstrated start. A blank cell has no value: a training path ratio
     for a start along the demonstrated path, or a hold error for a run that never
     arrives. The last panel shows where the start postures put
     the hand, colored by outcome, with the training demonstration's hand path.
     """
     name, demo = next(iter(setup.demos.items()))
     grid = [r for r in rows if r["origin"] == name or r["origin"].startswith(f"{name} ")]
-    offsets = np.array([[r["start_q1_deg"], r["start_q2_deg"]] for r in grid]) - np.degrees(demo[0])
+    offsets = np.array([joint_values(r, "start_q{j}_deg") for r in grid]) - np.degrees(demo[0])
     offsets = np.round(offsets, 6)
-    xs, ys = np.unique(offsets[:, 0]), np.unique(offsets[:, 1])
-    cell = {(x, y): r for (x, y), r in zip(map(tuple, offsets), grid, strict=True)}
+    layout = OffsetMap.of(offsets)
+    cell = {tuple(offset): r for offset, r in zip(offsets, grid, strict=True)}
 
     def values(key: str, factor: float = 1.0) -> NDArray[np.float64]:
-        return np.array([[factor * float(cell[(x, y)][key]) if (x, y) in cell else np.nan for x in xs] for y in ys])
+        return layout.grid({offset: factor * float(r[key]) for offset, r in cell.items()})
 
-    outcome = np.array(
-        [
-            [
-                np.nan
-                if (x, y) not in cell
-                else 0.0
-                if cell[(x, y)]["success"]
-                else 1.0
-                if cell[(x, y)]["arrived"]
-                else 2.0
-                for x in xs
-            ]
-            for y in ys
-        ]
-    )
+    outcome = layout.grid({offset: 0.0 if r["success"] else 1.0 if r["arrived"] else 2.0 for offset, r in cell.items()})
     reference = setup.reference
     where = "demonstrator's reach\nfrom each start" if reference.name == "demonstrator" else "taught motion"
     maps = [
@@ -290,12 +281,7 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, title: str) -> Figure:
     fig = Figure(figsize=(15, 9.5), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(f"{title}: start offsets around {name}", color="#0b0b0b")
     axes = list(fig.subplots(2, 3).flat)
-    extent = (
-        xs[0] - (xs[1] - xs[0]) / 2,
-        xs[-1] + (xs[1] - xs[0]) / 2,
-        ys[0] - (ys[1] - ys[0]) / 2,
-        ys[-1] + (ys[1] - ys[0]) / 2,
-    )
+    extent, (xlabel, ylabel) = layout.extent, layout.labels()
     panels = [("Outcome", outcome, None), *maps]
     for ax, (label, data, log) in zip(axes, panels, strict=False):
         if log is None:
@@ -316,16 +302,17 @@ def plot_grid(rows: list[dict[str, Any]], setup: Setup, title: str) -> Figure:
                 norm = Normalize(vmin=0.0, vmax=_MAX_RATIO_SHOWN)
             image = ax.imshow(data, origin="lower", extent=extent, cmap="Blues", norm=norm)
             fig.colorbar(image, ax=ax, shrink=0.85, extend="neither" if log else "max")
-        ax.plot(0.0, 0.0, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
+        ax.plot(*layout.zero, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
         ax.set_title(label, color=TEXT_COLOR, fontsize=10)
-        ax.set_xlabel("joint 1 offset (deg)", color=TEXT_COLOR)
-        ax.set_ylabel("joint 2 offset (deg)", color=TEXT_COLOR)
+        ax.set_xlabel(xlabel, color=TEXT_COLOR)
+        ax.set_ylabel(ylabel, color=TEXT_COLOR)
+        layout.decorate(ax)
     ax = axes[5]
     ax.set_facecolor(SURFACE_COLOR)
     ax.grid(color=GRID_COLOR, linewidth=0.8)
     hand_demo = endpoint_positions(setup.skeleton, demo)
     ax.plot(hand_demo[:, 0], hand_demo[:, 1], color=TRAINING_COLOR, linewidth=4, label="training demonstration")
-    starts = endpoint_positions(setup.skeleton, np.radians([[r["start_q1_deg"], r["start_q2_deg"]] for r in grid]))
+    starts = endpoint_positions(setup.skeleton, np.radians([joint_values(r, "start_q{j}_deg") for r in grid]))
     colors = [OUTCOME_COLORS[0 if r["success"] else 1 if r["arrived"] else 2] for r in grid]
     ax.scatter(starts[:, 0], starts[:, 1], c=colors, s=18, zorder=3)
     ax.plot(*setup.target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)

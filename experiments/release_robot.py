@@ -59,6 +59,7 @@ from arm_esn_ctrl.disturbances import disturbance_spans, make_disturbance
 from arm_esn_ctrl.dynamics import ClosedLoop
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import arrival_index, path_progress
+from arm_esn_ctrl.postures import joint_columns, joint_values
 from arm_esn_ctrl.screening import autonomous_runs, held_fixed_points
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import EsnSource, TrackerConfig, gain_posture, task_joint_angles, track
@@ -190,7 +191,8 @@ def esn_runs(
     esn.fit([context.take])
     loop = ClosedLoop.from_esn(esn)
     dt = esn.config.dt
-    q_unstable = np.radians([[float(p["q1_deg"]), float(p["q2_deg"])] for p in unstable]).reshape(-1, 2)
+    n_joints = len(context.take[0])
+    q_unstable = np.radians([joint_values(p, "q{j}_deg") for p in unstable]).reshape(-1, n_joints)
 
     table = config["release"]
     hold, n_steps = round(table["hold"] / dt), round(table["duration"] / dt)
@@ -204,7 +206,8 @@ def esn_runs(
         moved = np.flatnonzero(np.degrees(np.abs(q - q0)).max(axis=1) > table["stay_deg"])
         releases.append(
             combination
-            | {c: float(p[c]) for c in ("q1_deg", "q2_deg", "path_distance_deg", "progress", "growth_per_s")}
+            | joint_columns("q{j}_deg", joint_values(p, "q{j}_deg"))
+            | {c: float(p[c]) for c in ("path_distance_deg", "progress", "growth_per_s")}
             | {
                 "arrival_s": float(robot["arrival"][0]),
                 "stays_s": float(moved[0] * dt) if len(moved) else np.inf,
@@ -255,8 +258,9 @@ def esn_runs(
                         and metrics["hold_observed_s"] >= setup.hold
                         and metrics["final_distance_m"] <= setup.radius
                     ),
-                    "held_q1_deg": float(np.degrees(held[0])),
-                    "held_q2_deg": float(np.degrees(held[1])),
+                }
+                | joint_columns("held_q{j}_deg", np.degrees(held))
+                | {
                     "held_progress": progress,
                     "lead_deg": float(np.degrees(np.linalg.norm(loop.posture(x[0]) - held))),
                     "nearest_unstable_deg": float(np.degrees(np.linalg.norm(q_unstable - held, axis=1)).min())

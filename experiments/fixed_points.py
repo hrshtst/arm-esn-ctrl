@@ -69,6 +69,7 @@ from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.dynamics import ClosedLoop, local_rates
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import path_progress
+from arm_esn_ctrl.postures import format_angles, joint_columns, joint_values
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 
 
@@ -95,7 +96,7 @@ def main() -> None:
             {
                 "demonstrations": demonstrations,
                 "esn": {"dt": esn.config.dt},
-                "evaluation": {"duration": 1.0, "hold": 0.0, "start_offsets_deg": [[0.0, 0.0]]},
+                "evaluation": {"duration": 1.0, "hold": 0.0, "start_offsets_deg": [[0.0]]},
             }
         )
         loop = ClosedLoop.from_esn(esn)
@@ -119,10 +120,9 @@ def main() -> None:
             q = loop.posture(x)
             slowest = eigenvalues[0]
             rows.append(
-                {
-                    "fixed_point": j,
-                    "q1_deg": float(np.degrees(q[0])),
-                    "q2_deg": float(np.degrees(q[1])),
+                {"fixed_point": j}
+                | joint_columns("q{j}_deg", np.degrees(q))
+                | {
                     "target_distance_m": float(
                         np.linalg.norm(endpoint_positions(setup.skeleton, q[np.newaxis])[0] - setup.target)
                     ),
@@ -149,7 +149,8 @@ def main() -> None:
         write_csv(
             run_dir / f"starts_{key}.csv",
             [
-                {"start": i, "q1_deg": float(q[0]), "q2_deg": float(q[1])}
+                {"start": i}
+                | joint_columns("q{j}_deg", q)
                 | {"start_fixed_point": reached["start"][i], "final_fixed_point": reached["final"][i]}
                 | held[i]
                 for i, q in enumerate(runs["start_q_deg"])
@@ -238,7 +239,7 @@ def print_fixed_points(rows: list[dict[str, Any]], n_starts: int) -> None:
     for row in rows:
         kind = "attracting" if row["n_unstable"] == 0 else f"{row['n_unstable']} unstable modes"
         print(
-            f"  fixed point {row['fixed_point']} at ({row['q1_deg']:.2f}, {row['q2_deg']:.2f}) deg,"
+            f"  fixed point {row['fixed_point']} at {format_angles(joint_values(row, 'q{j}_deg'))} deg,"
             f" {1000 * row['target_distance_m']:.1f} mm from the target: {kind}, max |λ| {row['max_modulus']:.5f},"
             f" slowest {row['time_constant_s']:.2f} s; from {row['from_starts']} of {n_starts} starts and"
             f" {row['from_ends']} ends"

@@ -38,6 +38,7 @@ from screen_esns import run_outcomes
 
 from arm_esn_ctrl.dynamics import ClosedLoop
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
+from arm_esn_ctrl.postures import joint_values
 from arm_esn_ctrl.screening import autonomous_runs
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 
@@ -105,7 +106,7 @@ def esn_job(job: tuple[Key, list[dict[str, str]]]) -> list[dict[str, Any]]:
     hold, n_steps = round(table["hold"] / dt), round(table["duration"] / dt)
     rows = []
     for release in releases:
-        q0 = np.radians([float(release["q1_deg"]), float(release["q2_deg"])])
+        q0 = np.radians(joint_values(release, "q{j}_deg"))
         start = q0 + np.radians(_nudge)
         q = release_robot.robot_run(context, esn, start, hold, table["duration"], None)
         robot = run_outcomes(context.setup, q[np.newaxis], dt)

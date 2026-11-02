@@ -12,13 +12,14 @@ of
 
     R(q) = posture(x_h(q)) - q,
 
-a map of the joint angles alone, which a grid over both joints' range covers. R(q)
+a map of the joint angles alone, which a grid over every joint's range covers. R(q)
 is also how far the ESN's output leads a posture held at q once its reservoir has
 settled there: on the robot, how far its reference leads an arm held still at q.
 
 - :func:`held_fixed_points`: x_h at many postures at once;
 - :func:`posture_map`: x_h and R over a grid of postures;
-- :func:`find_fixed_points`: the zeros of R, each refined by Newton's method on G;
+- :func:`find_fixed_points`: the zeros of R, each refined by Newton's method on G,
+  from the grid's cells where R changes sign (:func:`cell_zeros`);
 - :func:`fixed_points_at_rest`: the fixed points where runs come to rest, which
   the grid misses where R is nearly flat;
 - :func:`autonomous_runs`: the ESN's runs on its own from many start postures at
@@ -27,13 +28,16 @@ settled there: on the robot, how far its reference leads an arm held still at q.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from collections.abc import Iterator, Sequence
+
+    from numpy.typing import ArrayLike, NDArray
 
     from arm_esn_ctrl.dynamics import ClosedLoop
 
@@ -68,32 +72,30 @@ def held_fixed_points(
 
 @dataclass(frozen=True)
 class PostureMap:
-    """The held reservoir's fixed point and the step R(q) of the ESN from rest, over a grid of postures."""
+    """The held reservoir's fixed point and the step R(q) of the ESN from rest, over a grid of postures.
 
-    grid_deg: NDArray[np.float64]  # (m,): the grid's joint angles, the same for each joint (deg)
-    held: NDArray[np.float64]  # (m, m, n): x_h at each posture; the entry (i, j) is at (grid[i], grid[j])
-    residual: NDArray[np.float64]  # (m, m, n_joints): R(q) (rad)
-    converged: NDArray[np.bool_]  # (m, m): whether Newton's method converged at each posture
+    The grid takes every combination of each joint's angles; with ``m_k`` angles for the
+    joint ``k``, its entry ``(i_1, ..., i_n)`` is at ``(grids_deg[0][i_1], ...)``.
+    """
+
+    grids_deg: tuple[NDArray[np.float64], ...]  # each joint's angles (deg)
+    held: NDArray[np.float64]  # (m_1, ..., m_n_joints, n): x_h at each posture
+    residual: NDArray[np.float64]  # (m_1, ..., m_n_joints, n_joints): R(q) (rad)
+    converged: NDArray[np.bool_]  # (m_1, ..., m_n_joints): whether Newton's method converged at each posture
 
     def postures(self) -> NDArray[np.float64]:
         """The grid's postures (rad), one row per posture, in the order of ``held`` flattened."""
-        q1, q2 = np.meshgrid(np.radians(self.grid_deg), np.radians(self.grid_deg), indexing="ij")
-        return np.column_stack([q1.ravel(), q2.ravel()])
+        return _grid_postures([np.radians(g) for g in self.grids_deg])
 
 
-def posture_map(loop: ClosedLoop, grid_deg: NDArray[np.float64]) -> PostureMap:
-    """x_h and R over the grid of both joints at the angles ``grid_deg`` (a two-joint arm)."""
-    m = len(grid_deg)
-    q1, q2 = np.meshgrid(np.radians(grid_deg), np.radians(grid_deg), indexing="ij")
-    q = np.column_stack([q1.ravel(), q2.ravel()])
+def posture_map(loop: ClosedLoop, grids_deg: Sequence[ArrayLike]) -> PostureMap:
+    """x_h and R over the grid of every combination of each joint's angles ``grids_deg`` (deg), one array per joint."""
+    grids = tuple(np.asarray(g, dtype=np.float64) for g in grids_deg)
+    shape = tuple(len(g) for g in grids)
+    q = _grid_postures([np.radians(g) for g in grids])
     held, converged = held_fixed_points(loop, q)
     residual = loop.posture(held) - q
-    return PostureMap(
-        np.asarray(grid_deg, dtype=np.float64),
-        held.reshape(m, m, -1),
-        residual.reshape(m, m, -1),
-        converged.reshape(m, m),
-    )
+    return PostureMap(grids, held.reshape(*shape, -1), residual.reshape(*shape, -1), converged.reshape(shape))
 
 
 @dataclass(frozen=True)
@@ -101,44 +103,58 @@ class FixedPoints:
     """The fixed points of G found from a posture map, and what the search tried."""
 
     states: list[NDArray[np.float64]]  # each fixed point's state, in the order found
-    candidates: int  # the grid cells over whose corners both components of R change sign
+    candidates: int  # the grid cells over whose corners every component of R changes sign
     empty: int  # the candidates near which Newton's method on R found no zero
 
 
 def find_fixed_points(loop: ClosedLoop, posture_map: PostureMap, distinct: float = 1e-8) -> FixedPoints:
-    """The fixed points of G: the zeros of R near the cells of ``posture_map`` where both its components change sign.
+    """The fixed points of G: the zeros of R near the cells of ``posture_map`` where all its components change sign.
 
-    From the zero of the plane fitted to R at each such cell's corners, Newton's
-    method on R (:func:`map_zero`) finds the zero, if it stays within a cell's width
-    of the cell; the held reservoir's fixed point there is a fixed point of G, and
-    Newton's method on G checks it. Fixed points whose states differ by no more than
-    ``distinct`` in every entry are one.
+    At each such cell, :func:`cell_zeros` finds the zero of R by Newton's method; the
+    held reservoir's fixed point there is a fixed point of G, and Newton's method on G
+    checks it. Fixed points whose states differ by no more than ``distinct`` in every
+    entry are one.
     """
-    r = posture_map.residual
-    grid = np.radians(posture_map.grid_deg)
     states: list[NDArray[np.float64]] = []
     candidates = empty = 0
-    for i in range(len(grid) - 1):
-        for j in range(len(grid) - 1):
-            corners = r[i : i + 2, j : j + 2].reshape(4, -1)
-            if not all(corners[:, k].min() <= 0.0 <= corners[:, k].max() for k in range(corners.shape[1])):
-                continue
-            candidates += 1
-            q1, q2 = grid[i : i + 2], grid[j : j + 2]
-            nearest = np.unravel_index(int(np.argmin(np.linalg.norm(corners, axis=1))), (2, 2))
-            width = np.array([q1[1] - q1[0], q2[1] - q2[0]])
-            low, high = np.array([q1[0], q2[0]]) - width, np.array([q1[1], q2[1]]) + width
-            x = map_zero(loop, _cell_zero(q1, q2, corners), posture_map.held[i + nearest[0], j + nearest[1]], low, high)
-            if x is None:
-                empty += 1
-                continue
-            x, converged = loop.fixed_point(x)
-            if not converged:
-                empty += 1
-                continue
-            if all(np.abs(x - found).max() > distinct for found in states):
-                states.append(x)
+    for x in cell_zeros(loop, posture_map):
+        candidates += 1
+        if x is None:
+            empty += 1
+            continue
+        x, converged = loop.fixed_point(x)
+        if not converged:
+            empty += 1
+            continue
+        if all(np.abs(x - found).max() > distinct for found in states):
+            states.append(x)
     return FixedPoints(states, candidates, empty)
+
+
+def cell_zeros(loop: ClosedLoop, posture_map: PostureMap) -> Iterator[NDArray[np.float64] | None]:
+    """At each cell of ``posture_map`` over whose corners every component of R changes sign: R's zero, or None.
+
+    A cell spans two neighboring angles of each joint; the cells come in the order of the
+    grid. From the zero of the plane fitted to R at the cell's corners, and the held
+    reservoir's fixed point at the corner where R is smallest, Newton's method on R
+    (:func:`map_zero`) finds the zero if it stays within a cell's width of the cell, and
+    gives the held reservoir's fixed point there; None if it does not.
+    """
+    r = posture_map.residual
+    grids = [np.radians(g) for g in posture_map.grids_deg]
+    n_joints = len(grids)
+    cells = tuple(len(g) - 1 for g in grids)
+    shifted = [r[tuple(slice(c, c + m) for c, m in zip(corner, cells, strict=True))] for corner in _corners(n_joints)]
+    lowest, highest = np.minimum.reduce(shifted), np.maximum.reduce(shifted)
+    for cell in np.argwhere(np.all((lowest <= 0.0) & (highest >= 0.0), axis=-1)):
+        corners = r[tuple(slice(i, i + 2) for i in cell)].reshape(2**n_joints, -1)
+        pairs = [g[i : i + 2] for g, i in zip(grids, cell, strict=True)]
+        nearest = np.unravel_index(int(np.argmin(np.linalg.norm(corners, axis=1))), (2,) * n_joints)
+        width = np.array([pair[1] - pair[0] for pair in pairs])
+        low = np.array([pair[0] for pair in pairs]) - width
+        high = np.array([pair[1] for pair in pairs]) + width
+        x = posture_map.held[tuple(int(i) + int(k) for i, k in zip(cell, nearest, strict=True))]
+        yield map_zero(loop, _cell_zero(pairs, corners), x, low, high)
 
 
 def map_zero(
@@ -263,13 +279,28 @@ def _held_newton(
     return x, converged & np.all(np.isfinite(x), axis=1)
 
 
-def _cell_zero(q1: NDArray[np.float64], q2: NDArray[np.float64], corners: NDArray[np.float64]) -> NDArray[np.float64]:
-    """The zero of the plane fitted to R at a cell's four corners, kept inside the cell."""
-    points = np.array([[a, b] for a in q1 for b in q2])  # the corners in the order of ``corners``
-    design = np.column_stack([np.ones(4), points - points.mean(axis=0)])
+def _cell_zero(pairs: Sequence[NDArray[np.float64]], corners: NDArray[np.float64]) -> NDArray[np.float64]:
+    """The zero of the plane fitted to R at a cell's corners, kept inside the cell.
+
+    ``pairs`` holds each joint's two angles of the cell, and ``corners`` R at every
+    combination of them, the last joint's changing fastest.
+    """
+    points = np.array(list(itertools.product(*pairs)))  # the corners in the order of ``corners``
+    design = np.column_stack([np.ones(len(points)), points - points.mean(axis=0)])
     coefficients, *_ = np.linalg.lstsq(design, corners, rcond=None)  # R ~ c0 + (q - mean) C
     try:
         zero = points.mean(axis=0) + np.linalg.solve(coefficients[1:].T, -coefficients[0])
     except np.linalg.LinAlgError:
         zero = points.mean(axis=0)
-    return np.clip(zero, [q1[0], q2[0]], [q1[1], q2[1]])
+    return np.clip(zero, [pair[0] for pair in pairs], [pair[1] for pair in pairs])
+
+
+def _corners(n_joints: int) -> list[tuple[int, ...]]:
+    """A cell's corners, each as the offset of its index from the cell's lowest: every combination of 0 and 1."""
+    return list(itertools.product((0, 1), repeat=n_joints))
+
+
+def _grid_postures(grids: Sequence[NDArray[np.float64]]) -> NDArray[np.float64]:
+    """Every combination of each joint's angles, one row per posture, the last joint's changing fastest."""
+    mesh = np.meshgrid(*grids, indexing="ij")
+    return np.column_stack([m.ravel() for m in mesh])

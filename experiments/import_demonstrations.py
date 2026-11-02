@@ -52,6 +52,7 @@ from skelarm import Skeleton, StateLog, Task
 
 from arm_esn_ctrl.demonstrations import check_take, endpoint_positions, smooth_take
 from arm_esn_ctrl.metrics import hand_speed, hold_metrics, jitter, onset_index, reach_metrics
+from arm_esn_ctrl.postures import joint_columns
 from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, start_run
 
 TAKE_COLOR = "#2a78d6"
@@ -62,6 +63,8 @@ JITTER_WINDOW = 5  # samples of the moving average the jitter is measured from, 
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
+# The line style of each joint's angle, and its name in the panel's title.
+JOINT_STYLES = [("-", "solid"), ("--", "dashed"), (":", "dotted"), ("-.", "dash-dot")]
 
 
 def main() -> None:
@@ -140,7 +143,7 @@ def demo_metrics(
     target = task.require_target()
     onset = onset_index(hand)
     return (
-        {"start_q1_deg": start_deg[0], "start_q2_deg": start_deg[1]}
+        joint_columns("start_q{j}_deg", start_deg)
         | reach_metrics(times, hand, target)
         | {
             "onset_time_s": float("nan") if onset is None else float(times[onset]),
@@ -216,7 +219,7 @@ def plot_take(
         color, width, label = DEMO_STYLES[name]
         q = np.degrees(joint_angles(log))
         ax_hand.plot(hand[:, 0], hand[:, 1], color=color, linewidth=width, label=label)
-        for j, linestyle in ((0, "-"), (1, "--")):
+        for j, (linestyle, _) in zip(range(q.shape[1]), JOINT_STYLES, strict=False):
             ax_joint.plot(times, q[:, j], color=color, linestyle=linestyle, linewidth=width)
         ax_speed.plot(times, hand_speed(times, hand), color=color, linewidth=width)
     start = hands["demo_00"][0]
@@ -232,7 +235,9 @@ def plot_take(
         )
     ax_hand.set(title="Hand path (circle: start; cross: target)", xlabel="x (m)", ylabel="y (m)", aspect="equal")
     ax_hand.legend(frameon=False, labelcolor=TEXT_COLOR)
-    ax_joint.set(title="Joint angles (solid: joint 1; dashed: joint 2)", xlabel="time (s)", ylabel="angle (deg)")
+    n_joints = joint_angles(demos["demo_00"]).shape[1]
+    styles = ", ".join(name for _, name in JOINT_STYLES[:n_joints])
+    ax_joint.set(title=f"Joint angles (joints 1 to {n_joints}: {styles})", xlabel="time (s)", ylabel="angle (deg)")
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)")
     for ax in (ax_joint, ax_speed):
         for key in ("onset_time_s", "arrival_time_s"):

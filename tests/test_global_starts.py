@@ -8,6 +8,7 @@ import tomllib
 
 import numpy as np
 import pytest
+from skelarm import Skeleton
 
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
@@ -18,6 +19,9 @@ sys.path.insert(0, str(REPO_ROOT / "experiments"))
 from global_starts import closed_loop_run, grid_postures, held_steps, nearest_states, outcome
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
+TWO_LINK_ARM = REPO_ROOT / "experiments/demonstrations/reach_manual_v2.toml"  # joints from -180 to 180 deg
+FOUR_DOF_ARM = REPO_ROOT / "third_party/skelarm/examples/reach_four_dof_robot.toml"
+WHOLE_RANGE = (np.full(2, -180.0), np.full(2, 180.0))
 ESN_CONFIG = EsnConfig(
     dt=0.01,
     warmup=0.25,
@@ -45,11 +49,22 @@ def esn():
 
 
 def test_the_grid_covers_both_joints_whole_range_the_first_fastest():
-    grid = grid_postures(90.0)
+    grid = grid_postures(Skeleton.from_toml(TWO_LINK_ARM), 90.0)
 
     np.testing.assert_array_equal(grid[:5], [[-180, -180], [-90, -180], [0, -180], [90, -180], [-180, -90]])
     assert len(grid) == 16
-    assert grid.max() == 90.0
+    assert grid.max() == 90.0  # 180 deg is -180 deg's posture
+
+
+def test_the_grid_covers_each_joints_limits_both_ends_the_first_fastest():
+    # The four-link arm's limits: [-20, 30], [0, 120], [0, 150], [-20, 90] deg.
+    grid = grid_postures(Skeleton.from_toml(FOUR_DOF_ARM), 10.0)
+
+    assert len(grid) == 6 * 13 * 16 * 12
+    np.testing.assert_array_equal(grid[:2], [[-20, 0, 0, -20], [-10, 0, 0, -20]])
+    np.testing.assert_array_equal(grid[6], [-20, 10, 0, -20])
+    np.testing.assert_array_equal(grid.min(axis=0), [-20, 0, 0, -20])
+    np.testing.assert_array_equal(grid.max(axis=0), [30, 120, 150, 90])
 
 
 def test_the_run_is_the_generated_one_and_its_states_follow_each_input(esn):
@@ -78,7 +93,13 @@ def test_a_run_ends_at_the_target_at_rest_elsewhere_moving_or_out_of_range():
     at_target = np.tile(target, (300, 1))
     creeping = np.column_stack([np.radians(np.linspace(0.0, 3.0, 300)), np.zeros(300)])  # 1 deg/s
 
-    assert outcome(still, at_target, target, 0.02, dt, 0.5) == "target"
-    assert outcome(still, at_target + 0.1, target, 0.02, dt, 0.5) == "rest elsewhere"
-    assert outcome(creeping, at_target, target, 0.02, dt, 0.5) == "moving"
-    assert outcome(still + np.radians(181.0), at_target, target, 0.02, dt, 0.5) == "out of range"
+    assert outcome(still, at_target, target, 0.02, dt, 0.5, WHOLE_RANGE) == "target"
+    assert outcome(still, at_target + 0.1, target, 0.02, dt, 0.5, WHOLE_RANGE) == "rest elsewhere"
+    assert outcome(creeping, at_target, target, 0.02, dt, 0.5, WHOLE_RANGE) == "moving"
+    assert outcome(still + np.radians(181.0), at_target, target, 0.02, dt, 0.5, WHOLE_RANGE) == "out of range"
+    assert outcome(still - np.radians(181.0), at_target, target, 0.02, dt, 0.5, WHOLE_RANGE) == "out of range"
+    # Each joint against its own limits.
+    narrow = (np.array([-20.0, 0.0]), np.array([30.0, 120.0]))
+    assert outcome(still + np.radians([0.0, 60.0]), at_target, target, 0.02, dt, 0.5, narrow) == "target"
+    assert outcome(still + np.radians([31.0, 60.0]), at_target, target, 0.02, dt, 0.5, narrow) == "out of range"
+    assert outcome(still - np.radians([0.0, 1.0]), at_target, target, 0.02, dt, 0.5, narrow) == "out of range"

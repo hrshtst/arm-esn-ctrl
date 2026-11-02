@@ -8,8 +8,8 @@
 
 ``global_starts.py``'s runs, on the robot: each ESN of the ``[[esn]]`` tables (``key``,
 ``label``, and ``model``) drives the arm's reference with one tracker setting
-(``[tracker]``, as in ``robot_esn.py``), from rest at every posture of a grid over both
-joints' whole range, every ``step_deg`` (``[grid]``). Through the ESN's warm-up, the
+(``[tracker]``, as in ``robot_esn.py``), from rest at every posture of
+``global_starts.py``'s grid over every joint's range, every ``step_deg`` (``[grid]``). Through the ESN's warm-up, the
 tracker holds the arm at its start posture and the ESN is fed it, so that the reservoir
 starts the task as it does on its own; then the ESN is fed the arm's measured joint
 angles for ``duration`` seconds (``[evaluation]``). The ESNs must have been trained on
@@ -18,7 +18,7 @@ ESN's own runs:
 
 - **the target**: whether the hand arrives within the goal radius and holds there for
   ``hold`` seconds, and where the run ends: ``target``, ``rest elsewhere``, or
-  ``moving`` (the arm's joints stop at ±180 deg, so a run is never out of range;
+  ``moving`` (the arm's joints stop at their limits, so a run is never out of range;
   ``limit_s`` is how long a joint rests against a stop instead);
 - **the take's path**: when the arm joins it for good, within ``path_threshold_deg``
   (``[analysis]``), and at what progress along it;
@@ -49,7 +49,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from global_starts import JOINT_LIMIT_DEG, PATH_SPACING_DEG, final_speed_dps, grid_postures, outcome, print_summary
+from global_starts import (
+    PATH_SPACING_DEG,
+    final_speed_dps,
+    grid_postures,
+    outcome,
+    print_summary,
+    take_skeleton,
+)
 from numpy.typing import NDArray
 from robot_esn import posed, tracker_settings
 
@@ -57,10 +64,11 @@ from arm_esn_ctrl.autonomous import Setup, load_setup
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path, hold_metrics, join_index, path_progress, resample_by_length
+from arm_esn_ctrl.postures import joint_columns, joint_limits_deg, joint_values
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import EsnSource, TrackerConfig, gain_posture, task_joint_angles, track
 
-AT_LIMIT_DEG = 1e-9  # a joint this close to ±180 deg rests against a stop
+AT_LIMIT_DEG = 1e-9  # a joint this close to one of its limits rests against a stop
 
 
 @dataclass(frozen=True)
@@ -120,12 +128,12 @@ def main() -> None:
         np.savez_compressed(
             run_dir / f"runs_{key}.npz",
             times=dt * np.arange(round(context.duration / dt) + 1),
-            start_q_deg=np.array([[row["q1_deg"], row["q2_deg"]] for row in rows]),
+            start_q_deg=np.array([joint_values(row, "q{j}_deg") for row in rows]),
             **arrays,
         )
         print(f"{table['label']} ({table['model']}) on the robot:")
         print_summary(rows)
-        torque = np.array([max(row["peak_tau1_nm"], row["peak_tau2_nm"]) for row in rows])
+        torque = np.array([joint_values(row, "peak_tau{j}_nm").max() for row in rows])
         limit = np.array([row["limit_s"] for row in rows])
         print(
             f"  largest joint torque median {np.median(torque):.1f} N m (max {torque.max():.1f});"
@@ -136,9 +144,7 @@ def main() -> None:
 
 def load_context(config: dict[str, Any]) -> Context:
     """The ESNs, the take and the start postures, and the tracker."""
-    grid = grid_postures(config["grid"]["step_deg"])
     evaluation = {"duration": config["evaluation"]["duration"], "hold": config["evaluation"]["hold"]}
-    evaluation["extra_starts"] = {"grid": grid.tolist()}
     esns, trained_on = {}, None
     for table in config["esn"]:
         esn_path = resolve_run_path(table["model"])
@@ -151,6 +157,7 @@ def load_context(config: dict[str, Any]) -> Context:
         trained_on = demonstrations
     assert trained_on is not None
     dt = next(iter(esns.values())).config.dt
+    evaluation["extra_starts"] = {"grid": grid_postures(take_skeleton(trained_on), config["grid"]["step_deg"]).tolist()}
     setup = load_setup({"demonstrations": trained_on, "esn": {"dt": dt}, "evaluation": evaluation})
     if len(setup.demos) != 1:
         msg = "the runs are compared with one take: the ESNs must be trained on one demonstration"
@@ -220,30 +227,31 @@ def run_start(context: Context, key: str, i: int) -> tuple[dict[str, Any], dict[
     progress = path_progress(q, context.path)
     joined = join_index(distance, context.analysis["path_threshold_deg"])
     hold = hold_metrics(setup.times, hand, setup.target, setup.radius, setup.hold)
-    at_limit = np.any(np.degrees(np.abs(q[1:])) >= JOINT_LIMIT_DEG - AT_LIMIT_DEG, axis=1)
+    lower, upper = limits = joint_limits_deg(setup.skeleton)
+    angles = np.degrees(q[1:])
+    at_limit = np.any((angles <= lower + AT_LIMIT_DEG) | (angles >= upper - AT_LIMIT_DEG), axis=1)
     peak_torque = np.abs(torque).max(axis=0)
     row = (
-        {
-            "start": i,
-            "q1_deg": round(float(np.degrees(start[0])), 6),
-            "q2_deg": round(float(np.degrees(start[1])), 6),
+        {"start": i}
+        | joint_columns("q{j}_deg", [round(float(angle), 6) for angle in np.degrees(start)])
+        | {
             "start_target_distance_m": float(np.linalg.norm(hand[0] - setup.target)),
             "start_path_distance_deg": float(distance[0]),
             "start_progress": float(progress[0]),
-            "outcome": outcome(q, hand, setup.target, setup.radius, dt, context.analysis["rest_speed_dps"]),
+            "outcome": outcome(q, hand, setup.target, setup.radius, dt, context.analysis["rest_speed_dps"], limits),
         }
         | {name: hold[name] for name in ("arrived", "arrival_time_s", "success")}
+        | joint_columns("final_q{j}_deg", np.degrees(q[-1]))
         | {
-            "final_q1_deg": float(np.degrees(q[-1, 0])),
-            "final_q2_deg": float(np.degrees(q[-1, 1])),
             "final_distance_m": float(np.linalg.norm(hand[-1] - setup.target)),
             "final_speed_dps": final_speed_dps(q, dt),
             "max_path_distance_deg": float(distance.max()),
             "join_time_s": float("nan") if joined is None else float(setup.times[joined]),
             "join_progress": float("nan") if joined is None else float(progress[joined]),
             "first_step_deg": float(np.degrees(np.linalg.norm(reference[1] - reference[0]))),
-            "peak_tau1_nm": float(peak_torque[0]),
-            "peak_tau2_nm": float(peak_torque[1]),
+        }
+        | joint_columns("peak_tau{j}_nm", peak_torque)
+        | {
             "peak_speed_dps": float(speed.max()),
             "limit_s": float(np.count_nonzero(at_limit) * dt),
         }

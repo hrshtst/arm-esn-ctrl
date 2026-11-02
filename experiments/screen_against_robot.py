@@ -82,7 +82,7 @@ def main() -> None:
         {
             "demonstrations": screen_config["demonstrations"],
             "esn": {"dt": screen_config["esn"]["dt"]},
-            "evaluation": {"duration": 0.0, "hold": 0.0, "start_offsets_deg": [[0.0, 0.0]]},
+            "evaluation": {"duration": 0.0, "hold": 0.0, "start_offsets_deg": [[0.0]]},
         }
     )
     radius = setup.radius

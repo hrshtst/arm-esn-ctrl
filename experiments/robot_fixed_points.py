@@ -63,6 +63,7 @@ from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.disturbances import make_disturbance
 from arm_esn_ctrl.dynamics import ClosedLoop, RobotLoop, StateRecorder, local_rates, simulated_forces
 from arm_esn_ctrl.metrics import path_progress
+from arm_esn_ctrl.postures import format_angles, joint_columns, joint_values
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 from arm_esn_ctrl.tracking import track
 
@@ -102,7 +103,7 @@ def main() -> None:
         np.savez_compressed(run_dir / f"spectra_{key}.npz", **spectra)
         for row in rows:
             print(
-                f"  fixed point {row['fixed_point']} at ({row['q1_deg']:.2f}, {row['q2_deg']:.2f}) deg: growth"
+                f"  fixed point {row['fixed_point']} at {format_angles(joint_values(row, 'q{j}_deg'))} deg: growth"
                 f" {row['growth_per_s']:+.3f} /s on its own, {row['system_growth_per_s']:+.3f} /s with the arm;"
                 f" unstable modes {row['n_unstable']} and {row['system_n_unstable']}; residual {row['residual']:.1e}"
             )
@@ -178,12 +179,11 @@ def fixed_points(robot: RobotLoop, spectra: dict[str, NDArray[Any]]) -> tuple[li
         x = spectra[f"state_{j}"]
         z = robot.at_rest(x)
         q = loop.posture(x)
-        row: dict[str, Any] = {
-            "fixed_point": j,
-            "q1_deg": float(np.degrees(q[0])),
-            "q2_deg": float(np.degrees(q[1])),
-            "residual": float(np.abs(robot.advance(z) - z).max()),
-        }
+        row: dict[str, Any] = (
+            {"fixed_point": j}
+            | joint_columns("q{j}_deg", np.degrees(q))
+            | {"residual": float(np.abs(robot.advance(z) - z).max())}
+        )
         for prefix, jacobian in (("", loop.jacobian(x)), ("system_", robot.jacobian(z))):
             eigenvalues = np.linalg.eigvals(jacobian)
             eigenvalues = eigenvalues[np.argsort(-np.abs(eigenvalues))]

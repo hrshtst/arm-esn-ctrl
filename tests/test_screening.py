@@ -88,7 +88,7 @@ def test_the_runs_on_its_own_are_the_esns(loop, esn, demo):
 
 def test_the_fixed_points_are_the_zeros_of_the_posture_map(loop, esn, demo):
     grid = np.degrees(np.linspace(demo.min() - 0.5, demo.max() + 0.5, 15))
-    found = find_fixed_points(loop, posture_map(loop, grid))
+    found = find_fixed_points(loop, posture_map(loop, [grid, grid]))
 
     assert found.candidates >= len(found.states) >= 1
     for x in found.states:
@@ -118,8 +118,10 @@ def test_a_fixed_point_is_the_held_reservoirs_at_its_own_posture(loop, esn, demo
 
     assert converged.all()
     np.testing.assert_allclose(held[0], rest, atol=1e-10)
-    pmap = posture_map(loop, np.degrees(loop.posture(rest)[0]) + np.array([-1.0, 0.0, 1.0]))
+    around = np.degrees(loop.posture(rest)) + np.array([[-1.0], [0.0], [1.0]])
+    pmap = posture_map(loop, around.T)
     assert pmap.residual.shape == (3, 3, 2)
+    np.testing.assert_allclose(pmap.residual[1, 1], 0.0, atol=1e-10)  # at the fixed point's own posture
 
 
 def test_the_spectrum_is_sorted_by_modulus(loop, esn, demo):

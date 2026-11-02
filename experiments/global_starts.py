@@ -8,9 +8,10 @@
 Each ESN of the ``[[esn]]`` tables (``key``, ``label``, and ``model``, an
 ``esn.toml`` of a run, relative to the storage root) is run autonomously, as by
 :meth:`arm_esn_ctrl.esn.ReachingEsn.generate`, from every posture of a grid over
-both joints' whole range: from -180 deg to 180 deg in steps of ``step_deg``
-(``[grid]``), each start posture held for the ESN's warm-up first. The ESNs must
-have been trained on the same take, which every run is compared with:
+every joint's range, from its lower limit to its upper one in steps of ``step_deg``
+(``[grid]``, see :func:`arm_esn_ctrl.postures.start_grid`; for the two-link arm,
+-180 deg to 170 deg), each start posture held for the ESN's warm-up first. The ESNs
+must have been trained on the same take, which every run is compared with:
 
 - **the target**: whether the hand arrives within the goal radius and holds there
   (:func:`arm_esn_ctrl.metrics.hold_metrics`, over ``hold`` seconds), and where
@@ -18,7 +19,7 @@ have been trained on the same take, which every run is compared with:
   target** when it ends within the goal radius and at rest (slower than
   ``rest_speed_dps``, over the last second), **at rest elsewhere** when it ends at
   rest outside it, **moving** otherwise, and **out of range** when a joint ever
-  passes ±180 deg, a joint limit of the arm;
+  passes one of the arm's joint limits (±180 deg for the two-link arm);
 - **the take's path**, in joint space: the distance of the joint angles from the
   take's joint path, and how far along that path the nearest point lies (the
   progress, from 0 at its start to 1 at its end). A run **joins** the path when its
@@ -60,15 +61,16 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+from skelarm import Skeleton, StateLog
 
 from arm_esn_ctrl.autonomous import Setup, load_setup
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path, hold_metrics, join_index, path_progress, resample_by_length
+from arm_esn_ctrl.postures import joint_columns, joint_limits_deg, joint_values, start_grid
 from arm_esn_ctrl.states import principal_components, teacher_forced_states
 from arm_esn_ctrl.storage import resolve_run_path, start_run
 
-JOINT_LIMIT_DEG = 180.0  # the arm's joints turn from -180 to 180 deg
 PATH_SPACING_DEG = 0.25  # the take's joint path is resampled this finely before measuring against it
 FIRST_DIRECTION = 0.2  # a run's first direction is its mean velocity over this long from the start (s)
 
@@ -80,9 +82,7 @@ def main() -> None:
 
     config, run_dir = start_run(args.config)
     step = config["grid"]["step_deg"]
-    grid = grid_postures(step)
     evaluation = {"duration": config["evaluation"]["duration"], "hold": config["evaluation"]["hold"]}
-    evaluation["extra_starts"] = {"grid": grid.tolist()}
     analysis, settling = config["analysis"], config["settling"]
     trained_on = None
     for table in config["esn"]:
@@ -94,6 +94,7 @@ def main() -> None:
             msg = f"the ESNs must be trained on the same take: {table['key']} was trained on {demonstrations}"
             raise ValueError(msg)
         trained_on = demonstrations
+        evaluation["extra_starts"] = {"grid": grid_postures(take_skeleton(demonstrations), step).tolist()}
         setup = load_setup({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
         if len(setup.demos) != 1:
             msg = "the runs are compared with one take: the ESNs must be trained on one demonstration"
@@ -119,11 +120,21 @@ def main() -> None:
     print(f"\nWrote the results to {run_dir}")
 
 
-def grid_postures(step_deg: float) -> NDArray[np.float64]:
-    """The start postures (deg): both joints from -180 deg to 180 deg in steps of ``step_deg``, the first fastest."""
-    values = np.arange(-JOINT_LIMIT_DEG, JOINT_LIMIT_DEG - step_deg / 2, step_deg)
-    q2, q1 = np.meshgrid(values, values, indexing="ij")
-    return np.column_stack([q1.ravel(), q2.ravel()])
+def take_skeleton(demonstrations: dict[str, Any]) -> Skeleton:
+    """The arm of the take that ``demonstrations`` (an ESN run's table) names, as its log records it."""
+    log = StateLog.load(resolve_run_path(demonstrations["run"]) / demonstrations["train"][0])
+    return log.build_skeleton()
+
+
+def grid_postures(skeleton: Skeleton, step_deg: float) -> NDArray[np.float64]:
+    """The start postures (deg): every joint over its range in steps of ``step_deg``, the first joint fastest.
+
+    See :func:`arm_esn_ctrl.postures.start_grid`: for the two-link arm, both joints from
+    -180 deg to 170 deg.
+    """
+    values = start_grid(skeleton, step_deg)
+    mesh = np.meshgrid(*values[::-1], indexing="ij")  # the last joint along the first axis, the slowest
+    return np.column_stack([m.ravel() for m in mesh[::-1]])
 
 
 def closed_loop_run(
@@ -173,13 +184,16 @@ def outcome(
     radius: float,
     dt: float,
     rest: float,
+    limits: tuple[NDArray[np.float64], NDArray[np.float64]],
 ) -> str:
     """Where a run ends: ``target``, ``rest elsewhere``, ``moving``, or ``out of range`` (see the module).
 
     ``q`` and ``hand`` are sampled every ``dt`` seconds; the run is at rest at its
-    end when its joints move slower than ``rest`` (deg/s) over the last second.
+    end when its joints move slower than ``rest`` (deg/s) over the last second. It is
+    out of range if a joint ever passes its ``limits``, the lower and the upper (deg).
     """
-    if np.degrees(np.abs(q).max()) > JOINT_LIMIT_DEG:
+    angles = np.degrees(q)
+    if np.any(angles < limits[0]) or np.any(angles > limits[1]):
         return "out of range"
     if final_speed_dps(q, dt) >= rest:
         return "moving"
@@ -206,6 +220,7 @@ def run_esn(
     n_steps = len(setup.times) - 1
     hold_steps = round(settling["hold"] / dt)
     first = round(FIRST_DIRECTION / dt)
+    limits = joint_limits_deg(setup.skeleton)
     print(f"  spread of the take's states {spread:.3f}; first components {np.round(components.explained[:3], 3)}")
 
     rows, q_runs, distance_runs, progress_runs = [], [], [], []
@@ -224,26 +239,25 @@ def run_esn(
         hold = hold_metrics(setup.times, hand, setup.target, setup.radius, setup.hold)
         direction = np.degrees(q[first] - q[0]) / (first * dt)
         rows.append(
-            {
-                "start": i,
-                "q1_deg": round(float(np.degrees(start.q[0])), 6),
-                "q2_deg": round(float(np.degrees(start.q[1])), 6),
+            {"start": i}
+            | joint_columns("q{j}_deg", [round(float(angle), 6) for angle in np.degrees(start.q)])
+            | {
                 "start_target_distance_m": float(np.linalg.norm(hand[0] - setup.target)),
                 "start_path_distance_deg": float(distance[0]),
                 "start_progress": float(progress[0]),
-                "outcome": outcome(q, hand, setup.target, setup.radius, dt, analysis["rest_speed_dps"]),
+                "outcome": outcome(q, hand, setup.target, setup.radius, dt, analysis["rest_speed_dps"], limits),
             }
             | {key: hold[key] for key in ("arrived", "arrival_time_s", "success")}
+            | joint_columns("final_q{j}_deg", np.degrees(q[-1]))
             | {
-                "final_q1_deg": float(np.degrees(q[-1, 0])),
-                "final_q2_deg": float(np.degrees(q[-1, 1])),
                 "final_distance_m": float(np.linalg.norm(hand[-1] - setup.target)),
                 "final_speed_dps": final_speed_dps(q, dt),
                 "max_path_distance_deg": float(distance.max()),
                 "join_time_s": float("nan") if joined is None else float(setup.times[joined]),
                 "join_progress": float("nan") if joined is None else float(progress[joined]),
-                "first_dq1_dps": float(direction[0]),
-                "first_dq2_dps": float(direction[1]),
+            }
+            | joint_columns("first_dq{j}_dps", direction)
+            | {
                 "first_step_deg": float(np.degrees(np.linalg.norm(q[1] - q[0]))),
                 "start_state_distance": float(nearest[0] / spread),
                 "start_phase_s": float(phase[0] * dt),
@@ -265,7 +279,7 @@ def run_esn(
         "times": setup.times,
         "state_times": setup.times[::stride],
         "held_times": dt * (np.arange(1, hold_steps) - warmup),  # when each step ends, on the task clock
-        "start_q_deg": np.array([[row["q1_deg"], row["q2_deg"]] for row in rows]),
+        "start_q_deg": np.array([joint_values(row, "q{j}_deg") for row in rows]),
         "q": np.array(q_runs),
         "path_distance_deg": np.array(distance_runs),
         "progress": np.array(progress_runs),
