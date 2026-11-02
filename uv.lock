@@ -1003,7 +1003,7 @@ wheels = [
 
 [[package]]
 name = "rclib"
-version = "0.2.0"
+version = "0.3.0"
 source = { directory = "third_party/rclib" }
 dependencies = [
     { name = "numpy" },
