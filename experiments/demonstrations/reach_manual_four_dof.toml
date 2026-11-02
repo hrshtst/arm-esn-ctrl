@@ -1,0 +1,100 @@
+# A reaching demonstration taught by hand on skelarm's four-link arm: recorded with skelarm's
+# trajectory recorder, then imported into a demonstration run. As reach_manual_v2.toml (reports
+# 005 to 020), with the arm, start posture, and target of skelarm's
+# examples/reach_four_dof_robot.toml: its [skeleton], [initial], [task], and [simulator] tables
+# are copied here unchanged (tests/test_four_dof_configs.py keeps them equal), and its
+# [controller] is left out, since a human teaches the take.
+#
+# 1. Record one take, into the storage root's data/ (what cannot be regenerated).
+#    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
+#    names; the recorder does not create the directory:
+#
+#   mkdir -p "$STORAGE/data/reach_manual_four_dof"
+#   uv run python third_party/skelarm/tools/trajectory_recorder.py \
+#       experiments/demonstrations/reach_manual_four_dof.toml --mode ik --sample-rate 100 \
+#       --duration 0 --show-tip-trail \
+#       --output "$STORAGE/data/reach_manual_four_dof/reach_manual_four_dof.sklog.npz"
+#
+#    Maximize the window: its pixels are the steps the tip moves in. The arm starts
+#    at [initial], and the ring is the [task] target. Space starts the take. Grab the
+#    tip within the dashed circle around it, move it to the cross at the center of
+#    the ring at a natural pace, let go, and keep still for at least 3 s. The
+#    recorder's inverse kinematics moves the four joints, each stopping at its
+#    limits. S saves the take; R discards an attempt before saving it; Q closes. The
+#    file is written once and never overwritten, so only one take is saved.
+#
+# 2. Import it into a demonstration run, which checks and measures it, as recorded
+#    (demo_00) and filtered (demo_00_filtered):
+#
+#   uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_four_dof.toml
+#
+# The [skeleton], [initial], and [task] tables follow skelarm's scenario format, so
+# the recorder reads this file. There is no [controller]: no demonstrator can be
+# simulated for a human, so the experiments measure their runs against the taught
+# motion and the target only. [simulator] holds the robot's simulation settings.
+
+[recording]
+# The take taught by hand, relative to the storage root. It is imported unchanged:
+# the human's pause before moving stays in.
+take = "data/reach_manual_four_dof/reach_manual_four_dof.sklog.npz"
+# What the import checks (experiments/import_demonstrations.py), as for reach_manual_v2.toml:
+start_tolerance_deg = 0.01  # the take begins at start_q within this, in every joint
+hold = 2.0                  # after arriving within the target tolerance, the hand stays this long (s)
+max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, not a reach
+
+# The filter of demo_00_filtered, as reach_manual_v2.toml's: a first-order low-pass at
+# 2 Hz, run forward and backward (skelarm.smooth), which removes the steps of the
+# cursor's whole pixels and never takes a joint beyond where it went.
+[recording.filter]
+kind = "lowpass"
+cutoff_hz = 2.0
+
+[demonstrations]
+# The start posture: joint angles in degrees, [initial] q. Joint 1 starts at its lower limit.
+start_q = [
+  [-20.0, 10.0, 60.0, 50.0],
+]
+
+# From here on, skelarm's examples/reach_four_dof_robot.toml.
+[skeleton]
+base_length = 0.05
+
+[[skeleton.link]]
+length = 0.1
+mass = 0.5
+inertia = 0.005
+com = [0.05, 0.0]
+limits = [-20.0, 30.0]
+
+[[skeleton.link]]
+length = 0.25
+mass = 1.0
+inertia = 0.01
+com = [0.1, 0.0]
+limits = [0.0, 120.0]
+
+[[skeleton.link]]
+length = 0.25
+mass = 1.0
+inertia = 0.007
+com = [0.1, 0.0]
+limits = [0.0, 150.0]
+
+[[skeleton.link]]
+length = 0.15
+mass = 0.5
+inertia = 0.003
+com = [0.05, 0.0]
+limits = [-20.0, 90.0]
+
+[initial]
+q = [-20.0, 10.0, 60.0, 50.0]  # degrees
+
+[task]
+type = "reaching"
+target = { pos = [0.0, 0.4], tolerance = 0.02 }  # endpoint goal (m), 2 cm success
+duration = 5.0  # skelarm's run length for this task (s); the recorder does not use it
+schedule = "minimum_jerk"
+
+[simulator]
+dt = 0.002  # the robot's control and integration step (s); its joint limits are hard stops
