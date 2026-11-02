@@ -7,6 +7,7 @@ import itertools
 
 import numpy as np
 import pytest
+from matplotlib.figure import Figure
 from skelarm import JointPD, Skeleton
 
 from arm_esn_ctrl.autonomous import start_postures
@@ -97,6 +98,12 @@ def test_an_offset_map_nests_joints_3_and_4_around_joints_1_and_2():
     grid = layout.grid({tuple(offset): float(i) for i, offset in enumerate(offsets)})
     assert grid.shape == (6, 6)
     assert np.isfinite(grid).all()
+    ax = Figure().subplots()
+    layout.decorate(ax)
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["+0", "+15"] * 3  # joint 1, in each block of joint 3
+    top, right = ax.child_axes  # the blocks: joint 3's offsets on the top, joint 4's on the right
+    assert [t.get_text() for t in top.get_xticklabels()] == ["-15", "+0", "+15"]
+    assert right.get_ylabel() == "joint 4 offset (deg)"
     two = OffsetMap.of(np.array([[-5.0, 0.0], [5.0, 0.0], [0.0, 5.0]]))
     assert not two.nested
     assert two.extent == (-7.5, 7.5, -2.5, 7.5)

@@ -320,8 +320,8 @@ def summarize(releases: list[dict[str, Any]], blocks: list[dict[str, Any]], conf
     gap = robot[both] - own[both]
     print(f"\nReleased at {len(releases)} unstable fixed points; never arriving: robot {np.isinf(robot).sum()},")
     print(f"  own {np.isinf(own).sum()}; later than {late} s: robot {(robot > late).sum()}, own {(own > late).sum()}.")
-    print(f"  Both arrive at {both.sum()}: the robot's arrival less the ESN's own, median {np.median(gap):+.2f} s,")
-    print(f"  10th to 90th percentiles {np.percentile(gap, 10):+.2f} to {np.percentile(gap, 90):+.2f} s;")
+    print(f"  Both arrive at {both.sum()}: the robot's arrival less the ESN's own, median (10th, 90th percentiles)")
+    print(f"  {spread(gap)};")
     print(f"  rank correlation {rank_correlation(robot, own):+.2f}")
 
     column = {c: np.array([b[c] for b in blocks]) for c in ("leak_rate", "near_path_unstable", "hold_s", "passes")}
@@ -332,10 +332,7 @@ def summarize(releases: list[dict[str, Any]], blocks: list[dict[str, Any]], conf
         for label, group in (("an unstable fixed point near the path", near), ("none near the path", ~near)):
             s = (hold == h) & group
             d = delay[s & np.isfinite(delay)]
-            print(
-                f"  {h:g} s, {label}: {s.sum()}, {(~passes[s]).mean():.3f};"
-                f" {np.median(d):+.2f} s ({np.percentile(d, 10):+.2f}, {np.percentile(d, 90):+.2f})"
-            )
+            print(f"  {h:g} s, {label}: {s.sum()}, {(~passes[s]).mean():.3f}; {spread(d)}")
     print("The delay's rank correlations (never arriving last) with the distance to the nearest unstable fixed point,")
     print("and with the lead at the held posture:")
     for h in np.unique(hold):
@@ -346,6 +343,13 @@ def summarize(releases: list[dict[str, Any]], blocks: list[dict[str, Any]], conf
                 f"    {'all' if v is None else f'{v:g}'}:"
                 f" {rank_correlation(delay[s], nearest[s]):+.2f}, {rank_correlation(delay[s], lead[s]):+.2f}"
             )
+
+
+def spread(values: NDArray[np.float64]) -> str:
+    """The median of ``values`` (s) and their 10th and 90th percentiles, or "none" without any."""
+    if not len(values):
+        return "none"
+    return f"{np.median(values):+.2f} s ({np.percentile(values, 10):+.2f}, {np.percentile(values, 90):+.2f})"
 
 
 def rank_correlation(x: NDArray[np.float64], y: NDArray[np.float64]) -> float:

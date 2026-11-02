@@ -134,11 +134,13 @@ class OffsetMap:
         return data
 
     def decorate(self, ax: Axes, fontsize: float = 7.0) -> None:
-        """Label a nested map's cells by the fastest joint's offset, and divide its blocks; nothing with two joints."""
+        """Label a nested map's cells by the fastest joint's offset and its blocks by the next's, on the top and
+        the right, and divide the blocks; nothing with two joints."""
         if not self.nested:
             return
         for axis in (0, 1):
-            fastest = self.values[self._joints(axis)[0]]
+            joints = self._joints(axis)
+            fastest = self.values[joints[0]]
             size = self._size(axis)
             ticks, labels = np.arange(size), [f"{fastest[i % len(fastest)]:+g}" for i in range(size)]
             if axis == 0:
@@ -148,6 +150,20 @@ class OffsetMap:
             for edge in np.arange(len(fastest), size, len(fastest)) - 0.5:
                 line = ax.axvline if axis == 0 else ax.axhline
                 line(edge, color="white", linewidth=1.5)
+            if len(joints) > 1:
+                outer = self.values[joints[1]]
+                blocks = size // len(fastest)
+                centers = len(fastest) * np.arange(blocks) + (len(fastest) - 1) / 2
+                names = [f"{outer[b % len(outer)]:+g}" for b in range(blocks)]
+                label = f"joint {joints[1] + 1} offset (deg)"
+                if axis == 0:
+                    top = ax.secondary_xaxis("top")
+                    top.set_xticks(centers, names, fontsize=fontsize)
+                    top.set_xlabel(label, fontsize=fontsize)
+                else:
+                    right = ax.secondary_yaxis("right")
+                    right.set_yticks(centers, names, fontsize=fontsize)
+                    right.set_ylabel(label, fontsize=fontsize)
 
     def _joints(self, axis: int) -> list[int]:
         return list(range(axis, len(self.values), 2))
