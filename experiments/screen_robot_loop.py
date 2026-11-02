@@ -23,7 +23,9 @@ map, and kept only if it gives the screen's posture and the slowest mode's growt
 A held reservoir with several fixed points at a posture, as at large spectral radii,
 can settle on another from the reset. A fixed point not found again (``found`` empty)
 has no eigenvalues with the arm: rule (a) with the arm takes it as on its own, and the
-releases and the changes leave it out. From them:
+releases and the changes leave it out. A fixed point beyond the arm's joint stops (not
+``within_stops``), where the ESN on its own can rest, is none of the system's: the arm
+cannot rest there, and rule (a) with the arm and the changes leave it out. From them:
 
 - **the releases**: at each of the release run's releases, how long the arm stays at the
   fixed point, against the slowest mode's growth rate on its own and with the arm: the
@@ -204,8 +206,9 @@ def esn_fixed_points(context: Context, key: Key, points: list[dict[str, str]]) -
         q = np.radians([float(p["q1_deg"]), float(p["q2_deg"])])
         x, found = screen_state(loop, q, float(p["growth_per_s"]), context.grid_step_deg)
         row = combination | {"fixed_point": int(p["fixed_point"])} | {c: float(p[c]) for c in KEPT}
-        row |= {"from_grid": p["from_grid"] == "True", "found": found}
-        if not found:
+        within = bool(np.all(q >= robot.lower) and np.all(q <= robot.upper)) if robot.lower is not None else True
+        row |= {"from_grid": p["from_grid"] == "True", "found": found, "within_stops": within}
+        if not found or not within:
             rows.append(row | {"residual": nan, "system_n_unstable": nan, "system_growth_per_s": nan})
             continue
         z = robot.at_rest(x)
@@ -281,8 +284,10 @@ def flags(fixed: list[dict[str, Any]], outcomes: list[dict[str, str]], radius: f
         points = by_esn.get(esn_key(r), [])
         off = [p for p in points if p["target_distance_m"] > radius]
         own = any(p["n_unstable"] == 0 for p in off)
-        # A fixed point not found again is taken as on its own.
-        with_arm = any((p["system_n_unstable"] if p["found"] else p["n_unstable"]) == 0 for p in off)
+        # A fixed point not found again is taken as on its own; one beyond the stops is none of the system's.
+        with_arm = any(
+            (p["system_n_unstable"] if p["found"] else p["n_unstable"]) == 0 for p in off if p["within_stops"]
+        )
         if own != (r["flag_a"] == "True"):
             msg = f"rule (a) on its own differs from the outcomes' run for {esn_key(r)}"
             raise RuntimeError(msg)
@@ -314,7 +319,7 @@ def stability_changes(fixed: list[dict[str, Any]], n: int) -> list[dict[str, Any
     """Within each leak rate, the fixed points whose stability the arm changes, and the growth rate with it."""
     rows = []
     for lr in sorted({p["leak_rate"] for p in fixed}):
-        points = [p for p in fixed if p["leak_rate"] == lr and p["found"]]
+        points = [p for p in fixed if p["leak_rate"] == lr and p["found"] and p["within_stops"]]
         own = np.array([p["growth_per_s"] for p in points])
         system = np.array([p["system_growth_per_s"] for p in points])
         own_unstable = np.array([p["n_unstable"] > 0 for p in points])
@@ -322,6 +327,7 @@ def stability_changes(fixed: list[dict[str, Any]], n: int) -> list[dict[str, Any
         rows.append(
             {"screen": n, "leak_rate": lr, "fixed_points": len(points)}
             | {"not_found": sum(p["leak_rate"] == lr and not p["found"] for p in fixed)}
+            | {"beyond_stops": sum(p["leak_rate"] == lr and not p["within_stops"] for p in fixed)}
             | {
                 "unstable": int(own_unstable.sum()),
                 "unstable_to_attracting": int((own_unstable & ~system_unstable).sum()),
@@ -384,10 +390,12 @@ def release_scores(releases: list[dict[str, Any]], fast_from: float) -> list[dic
 def print_checks(rows: list[dict[str, Any]]) -> None:
     """Print how the screen's fixed points were found again, and the system's residual there."""
     ways = {way: sum(r["found"] == way for r in rows) for way in ("reset", "cells", "random", "")}
-    residual = max(r["residual"] for r in rows if r["found"])
+    residual = max(r["residual"] for r in rows if r["found"] and r["within_stops"])
+    beyond = sum(not r["within_stops"] for r in rows)
     print(
         f"  found from the reset {ways['reset']}, from the cells {ways['cells']}, from random states"
-        f" {ways['random']}, not found {ways['']}; the system's residual at most {residual:.1g}"
+        f" {ways['random']}, not found {ways['']}; {beyond} beyond the arm's stops; the system's residual at"
+        f" most {residual:.1g} at the others"
     )
 
 
