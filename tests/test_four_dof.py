@@ -1,14 +1,15 @@
 # Copyright (C) 2026 Hiroshi Atsuta <atsuta@ieee.org>
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""The experiments on skelarm's four-link arm: its start offsets, its tracker, and its ESN as a dynamical system."""
+"""The experiments on skelarm's four-link arm: its start offsets, tracker, stops, and ESN as a dynamical system."""
 
 import itertools
 
 import numpy as np
 import pytest
 from matplotlib.figure import Figure
-from skelarm import JointPD, Skeleton
+from skelarm import JointPD, Skeleton, compute_mass_matrix
+from skelarm.dynamics import StopModel
 
 from arm_esn_ctrl.autonomous import start_postures
 from arm_esn_ctrl.drawing import OffsetMap
@@ -49,6 +50,7 @@ ESN_CONFIG = EsnConfig(
 # own inertia (v2's), and with the whole mass matrix (the four-link arm's).
 PER_JOINT = TrackerConfig("pd", 20.0, 0.02, damping=0.4, control_period=DT)
 MASS_MATRIX = TrackerConfig("pd", 20.0, 0.02, damping=0.4, control_period=DT, mass_matrix=True)
+STOPS: StopModel = "locked"  # the arm's [simulator] stops
 
 
 @pytest.fixture(scope="module")
@@ -135,25 +137,58 @@ def test_matrix_pd_with_diagonal_gains_is_joint_pd(skeleton):
     np.testing.assert_allclose(matrix, JointPD(Reference(), kp, kd).control(0.0, arm))
 
 
-def replay(skeleton, config, reach):
-    """The arm replaying ``reach`` by time with the tracker ``config``: its joint angles every 10 ms."""
+def replay(skeleton, config, reach, stops: StopModel = STOPS):
+    """The arm replaying ``reach`` from the start by time with the tracker ``config``: its log."""
     posed = skeleton.clone()
-    posed.q = reach[0]
-    gains = tracking_gains(config, skeleton, reach[-1])
-    log = track(posed, ReplaySource(reach), config, gains, period=DT, warmup_steps=25, duration=3.5, dt=SIMULATION_DT)
-    return task_joint_angles(log, DT, 3.5)
+    posed.q = START
+    gains = tracking_gains(config, skeleton, END)
+    return track(
+        posed,
+        ReplaySource(reach),
+        config,
+        gains,
+        period=DT,
+        warmup_steps=25,
+        duration=3.5,
+        dt=SIMULATION_DT,
+        stops=stops,
+    )
 
 
 def test_with_each_joints_own_inertia_the_held_torque_throws_the_arm_off(skeleton, reach):
-    q = replay(skeleton, PER_JOINT, reach)
+    q = task_joint_angles(replay(skeleton, PER_JOINT, reach), DT, 3.5)
 
     assert np.degrees(np.abs(q - reach).max()) > 20.0
 
 
 def test_with_the_mass_matrix_the_arm_follows_the_reach(skeleton, reach):
-    q = replay(skeleton, MASS_MATRIX, reach)
+    q = task_joint_angles(replay(skeleton, MASS_MATRIX, reach), DT, 3.5)
 
     assert np.degrees(np.abs(q - reach).max()) < 1.0
+
+
+def energy_from_the_stops(skeleton, log):
+    """The kinetic energy the arm gained over a run, less the motors' work on it (J): what the stops gave it."""
+    q, dq, tau = (log.channel(name).reshape(len(log.times), -1) for name in ("q", "dq", "tau"))
+    arm = skeleton.clone()
+
+    def energy(k):
+        arm.set_state(q=q[k], dq=dq[k])
+        return 0.5 * dq[k] @ compute_mass_matrix(arm) @ dq[k]
+
+    return energy(len(q) - 1) - energy(0) - float(np.sum(tau[:-1] * np.diff(q, axis=0)))
+
+
+def test_a_joint_pressed_into_its_stop_gains_the_arm_energy_unless_the_stop_locks_it(skeleton, reach):
+    pressed = reach.copy()
+    pressed[:, 0] = np.radians(-25.0)  # joint 1 asked to stay 5 deg below its stop, where it starts
+    projected = replay(skeleton, MASS_MATRIX, pressed, stops="projected")
+    locked = replay(skeleton, MASS_MATRIX, pressed, stops="locked")
+
+    for log in (projected, locked):
+        assert np.mean(log.channel("q")[:, 0] == np.radians(-20.0)) > 0.9  # joint 1 at its stop, nearly throughout
+    assert energy_from_the_stops(skeleton, projected) > 1.0  # the motors take out what the stop puts in
+    assert energy_from_the_stops(skeleton, locked) < 0.01  # it does no work, and its impacts take some out
 
 
 @pytest.fixture(scope="module")
@@ -168,9 +203,10 @@ def loop(esn):
     return ClosedLoop.from_esn(esn)
 
 
-def test_the_robot_map_with_gain_matrices_reproduces_the_tracked_arm(esn, loop, skeleton, reach):
+@pytest.mark.parametrize("stops", ["projected", "locked"])
+def test_the_robot_map_with_gain_matrices_reproduces_the_tracked_arm(esn, loop, skeleton, reach, stops):
     gains = tracking_gains(MASS_MATRIX, skeleton, reach[-1])
-    robot = RobotLoop.from_tracker(loop, skeleton, MASS_MATRIX, gains, SIMULATION_DT)
+    robot = RobotLoop.from_tracker(loop, skeleton, MASS_MATRIX, gains, SIMULATION_DT, stops=stops)
     posed = skeleton.clone()
     posed.q = reach[0]
     recorder = StateRecorder(esn)
@@ -183,11 +219,13 @@ def test_the_robot_map_with_gain_matrices_reproduces_the_tracked_arm(esn, loop, 
         warmup_steps=ESN_CONFIG.warmup_steps,
         duration=1.5,
         dt=SIMULATION_DT,
+        stops=stops,
     )
     states = robot.run_states(log, recorder, ESN_CONFIG.warmup_steps)
 
     assert robot.n_joints == 4
     assert states.shape == (150, ESN_CONFIG.n_neurons + 8)
+    assert np.sum(log.channel("q")[log.times >= 0, 0] == START[0]) > 5  # the ESN first holds joint 1 on its stop
     for z, z_next in itertools.pairwise(states[1:]):
         np.testing.assert_allclose(robot.advance(z), z_next, atol=1e-12)
     z = states[60]

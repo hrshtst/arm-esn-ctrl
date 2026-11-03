@@ -335,6 +335,7 @@ def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[di
                 duration=context.duration,
                 dt=simulator["dt"],
                 enforce_limits=simulator.get("enforce_limits", True),
+                stops=simulator.get("stops", "projected"),
                 external_force=make_disturbance(
                     disturbance,
                     endpoint_positions(setup.skeleton, start.q[np.newaxis])[0],

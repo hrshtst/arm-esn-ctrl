@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Hiroshi Atsuta <atsuta@ieee.org>
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""The four-link arm's configurations take skelarm's examples/reach_four_dof_robot.toml unchanged."""
+"""The four-link arm's configurations take skelarm's examples/reach_four_dof_robot.toml, with locked stops."""
 
 import tomllib
 
@@ -24,8 +24,9 @@ def load(path):
 def test_the_demonstration_takes_the_examples_arm_start_task_and_simulator():
     example, config = load(EXAMPLE), load(DEMONSTRATION)
 
-    for table in ("skeleton", "initial", "task", "simulator"):
+    for table in ("skeleton", "initial", "task"):
         assert config[table] == example[table], table
+    assert config["simulator"] == example["simulator"] | {"stops": "locked"}
     assert "controller" not in config  # taught by hand: no demonstrator
     assert config["demonstrations"]["start_q"] == [example["initial"]["q"]]
 

@@ -89,6 +89,7 @@ def weighed_job(job: tuple[str, tuple[float, float]]) -> list[dict[str, Any]]:
         context.gains,
         context.simulator["dt"],
         enforce_limits=context.simulator.get("enforce_limits", True),
+        stops=context.simulator.get("stops", "projected"),
     )
     robot = dataclasses.replace(robot, weights=weights)
     recorder = StateRecorder(esn)
@@ -102,6 +103,7 @@ def weighed_job(job: tuple[str, tuple[float, float]]) -> list[dict[str, Any]]:
         duration=len(take) * loop.dt,
         dt=context.simulator["dt"],
         enforce_limits=context.simulator.get("enforce_limits", True),
+        stops=context.simulator.get("stops", "projected"),
     )
     along = robot.run_states(log, recorder, esn.config.warmup_steps)[1 : len(take)]  # as robot_fixed_points.py
     rates = _config["rates"]

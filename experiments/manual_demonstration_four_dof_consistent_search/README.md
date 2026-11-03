@@ -16,9 +16,10 @@ written once the take is imported, from the values this README fixes.
 `reach_four_dof_robot.toml`, copied into
 [`reach_manual_four_dof.toml`](../demonstrations/reach_manual_four_dof.toml): four links
 (0.1, 0.25, 0.25, and 0.15 m, 3 kg in all) on a 0.05 m base, joint limits of −20 to
-30°, 0 to 120°, 0 to 150°, and −20 to 90°, hard stops in the simulation; the start
-posture (−20, 10, 60, 50)°, joint 1 at its lower limit, the hand 0.54 m from the
-target at (0, 0.4) m, with a goal radius of 20 mm; simulated every 2 ms. One take taught
+30°, 0 to 120°, 0 to 150°, and −20 to 90°, locked hard stops in the simulation
+(below); the start posture (−20, 10, 60, 50)°, joint 1 at its lower limit, the hand
+0.54 m from the target at (0, 0.4) m, with a goal radius of 20 mm; simulated every
+2 ms. One take taught
 by hand with skelarm's trajectory recorder, untrimmed, filtered at 2 Hz as v2's
 (`demo_00_filtered`); the ESNs are trained on it and the replays replay it.
 
@@ -38,6 +39,19 @@ inertia than their own M_ii, ring far faster than ω, and break report 013's bou
 the held torque; even the replay of the take is thrown 100° off and onto the stops.
 With the whole matrix, at the final posture every mode of the error has ω and ζ, the
 diagonal of the gains is v2's, and the replay follows the take within a degree.
+
+**The stops.** The joints' hard stops lock a joint pressed into them
+(`[simulator] stops = "locked"`, skelarm's locked stops): the stop holds the joint by its
+reaction, which does no work, the other joints move as if it were welded, and a joint
+that reaches its stop stops as in a plastic impact. v2's stops, skelarm's default, are a
+projection: they zero the stopped joint's velocity but let the other joints accelerate
+as if it were free. v2's joints stop only at ±180°; on this arm, whose joints 1
+and 2 are nearly redundant and whose joint 1 starts at its stop, the projection feeds
+the arm energy the motors never gave it whenever a reference presses a joint into its
+stop, as an ESN's does when its output dips below joint 1's limit. With joint 1's
+reference held 5° below its stop through a reach (`tests/test_four_dof.py`), the
+projected stop gives the arm 2.7 J, which the tracker takes out again; the locked one
+gives it none. Part 4's map of the ESN and the robot steps the arm with the same stops.
 
 **The scenarios.** Undisturbed from the take's start; the block (a spring of 20,000 N/m
 and a damper of 100 N s/m holding the tip for 1 s); three pushes of 0.5 s at the tip

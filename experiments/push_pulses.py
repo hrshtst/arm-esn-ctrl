@@ -199,6 +199,7 @@ def run_arm(context: Context, arm: str, pulse: Pulse | None) -> tuple[dict[str, 
         duration=duration,
         dt=context.simulator["dt"],
         enforce_limits=context.simulator.get("enforce_limits", True),
+        stops=context.simulator.get("stops", "projected"),
         external_force=make_disturbance(disturbance, start_hand, setup.target, dt=context.simulator["dt"]),
     )
     evaluation = context.evaluation

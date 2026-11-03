@@ -56,6 +56,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
     from skelarm import Skeleton, StateLog
+    from skelarm.dynamics import StopModel
 
     from arm_esn_ctrl.esn import ReachingEsn
     from arm_esn_ctrl.tracking import TrackerConfig
@@ -206,9 +207,9 @@ class RobotLoop:
     torque computed at each reference instant and held for the period, given the
     reference's velocity or not; the arm is simulated as skelarm's
     ``simulate_controlled`` simulates it, by ``substeps`` steps of semi-implicit Euler,
-    its joints stopped at their limits. A tip force (N) can act over a period, as a
-    pulse pushes the arm: held, or one force per simulation step
-    (:func:`simulated_forces` gives a run's).
+    its joints stopped at their limits by skelarm's model of the stops (``stops``). A
+    tip force (N) can act over a period, as a pulse pushes the arm: held, or one force
+    per simulation step (:func:`simulated_forces` gives a run's).
     """
 
     loop: ClosedLoop
@@ -219,6 +220,7 @@ class RobotLoop:
     reference_velocity: bool = True  # False gives joint PD a zero reference velocity
     lower: NDArray[np.float64] | None = None  # the joint limits (rad), hard stops; None: none
     upper: NDArray[np.float64] | None = None
+    stops: StopModel = "projected"  # skelarm's model of the hard stops, "projected" or "locked"
     weights: tuple[float, float] = (1.0, 1.0)  # how much more local_rates weighs the joint angles and velocities
 
     @classmethod
@@ -231,6 +233,7 @@ class RobotLoop:
         dt: float,
         *,
         enforce_limits: bool = True,
+        stops: StopModel = "projected",
     ) -> RobotLoop:
         """The ESN of ``loop`` driving ``skeleton`` by the tracker ``config`` and ``gains``, simulated every ``dt``."""
         held = config.control_period is not None and np.isclose(config.control_period, loop.dt)
@@ -246,7 +249,7 @@ class RobotLoop:
         if enforce_limits:
             lower = np.array([link.prop.qmin for link in arm.links[1:]], dtype=np.float64)
             upper = np.array([link.prop.qmax for link in arm.links[1:]], dtype=np.float64)
-        return cls(loop, arm, gains[0], gains[1], substeps, config.reference_velocity, lower, upper)
+        return cls(loop, arm, gains[0], gains[1], substeps, config.reference_velocity, lower, upper, stops)
 
     @property
     def n_joints(self) -> int:
@@ -369,7 +372,7 @@ class RobotLoop:
         forces = None if force is None else np.broadcast_to(force, (self.substeps, 2))
         for i in range(self.substeps):
             applied = torque if forces is None else torque + compute_jacobian(self.arm).T @ forces[i]
-            integrate_with_limits(self.arm, applied, h, self.lower, self.upper)
+            integrate_with_limits(self.arm, applied, h, self.lower, self.upper, stops=self.stops)
         return self.arm.q.copy(), self.arm.dq.copy()
 
     def _motion_jacobian(

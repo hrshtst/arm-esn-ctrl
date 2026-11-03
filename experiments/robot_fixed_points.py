@@ -95,6 +95,7 @@ def main() -> None:
             context.gains,
             context.simulator["dt"],
             enforce_limits=context.simulator.get("enforce_limits", True),
+            stops=context.simulator.get("stops", "projected"),
         )
         print(f"{table['label']} and the arm: {robot.dimension} values in the state")
 
@@ -122,6 +123,7 @@ def main() -> None:
             duration=duration,
             dt=context.simulator["dt"],
             enforce_limits=context.simulator.get("enforce_limits", True),
+            stops=context.simulator.get("stops", "projected"),
         )
         states = robot.run_states(log, recorder, warmup)
         nominal = int(np.flatnonzero((runs["arm"] == key) & ~np.isfinite(runs["onset"]))[0])

@@ -217,6 +217,7 @@ def run_start(context: Context, key: str, i: int) -> tuple[dict[str, Any], dict[
         duration=duration,
         dt=context.simulator["dt"],
         enforce_limits=context.simulator.get("enforce_limits", True),
+        stops=context.simulator.get("stops", "projected"),
     )
     q = task_joint_angles(log, dt, duration)
     reference = task_joint_angles(log, dt, duration, channel="q_ref")

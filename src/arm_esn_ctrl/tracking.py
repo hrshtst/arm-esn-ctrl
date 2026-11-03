@@ -55,6 +55,7 @@ from skelarm import (
     compute_mass_matrix,
     simulate_controlled,
 )
+from skelarm.dynamics import StopModel
 
 from arm_esn_ctrl.esn import ReachingEsn
 
@@ -390,6 +391,7 @@ def track(
     duration: float,
     dt: float,
     enforce_limits: bool = True,
+    stops: StopModel = "projected",
     extra: dict[str, Any] | None = None,
     external_force: Callable[[float, Skeleton], NDArray[np.float64]] | None = None,
 ) -> StateLog:
@@ -399,7 +401,9 @@ def track(
     Besides skelarm's ``q``, ``dq``, and ``tau``, it records the reference ``q_ref``
     and the tracking error ``error`` at every simulation step of ``dt`` seconds.
     An ``external_force`` at the tip (see :mod:`arm_esn_ctrl.disturbances`) is
-    called with the time on the task clock and recorded as ``ext_force``.
+    called with the time on the task clock and recorded as ``ext_force``. ``stops``
+    is skelarm's model of the joints' hard stops, ``"projected"`` or ``"locked"``
+    (``[simulator] stops``).
     """
     tracker = ReferenceTracker(source, config, *gains, period=period, warmup_steps=warmup_steps)
     warmup = warmup_steps * period
@@ -410,6 +414,7 @@ def track(
         duration=warmup + duration,
         dt=dt,
         enforce_limits=enforce_limits,
+        stops=stops,
         extra=extra,
         external_force=force,
     )

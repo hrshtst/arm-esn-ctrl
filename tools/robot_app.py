@@ -118,6 +118,7 @@ from skelarm import (
     scenario_from_config,
 )
 from skelarm.canvas import TrailOverlay, draw_arrow
+from skelarm.dynamics import StopModel
 from skelarm.simulator import SimulatorCanvas
 
 from arm_esn_ctrl.demonstrations import (
@@ -432,6 +433,7 @@ class RobotApp(QMainWindow):
             msg = f"the control period {control_period} s must be a whole number of simulation steps of {self.dt} s"
             raise ValueError(msg)
         self.enforce_limits = bool(config["simulator"].get("enforce_limits", True))
+        self.stops: StopModel = config["simulator"].get("stops", "projected")  # skelarm's model of the hard stops
         # The recorded forces, replayed on the task clock: each simulation step gets the mean recorded force over it,
         # which is the recorded sample itself when the log has this step.
         self.forces = forces
@@ -707,7 +709,7 @@ class RobotApp(QMainWindow):
             run.record(self.dt, self.skeleton.q.copy(), np.array([tip.xe, tip.ye]), torque, force)
             applied = torque + compute_jacobian(self.skeleton).T @ force
             if self.enforce_limits:
-                integrate_with_limits(self.skeleton, applied, self.dt, self._lower, self._upper)
+                integrate_with_limits(self.skeleton, applied, self.dt, self._lower, self._upper, stops=self.stops)
             else:
                 integrate_with_limits(self.skeleton, applied, self.dt)
             run.sim_time += self.dt
@@ -739,6 +741,7 @@ class RobotApp(QMainWindow):
             "mode": self.mode,
             "dt": self.dt,
             "enforce_limits": self.enforce_limits,
+            "stops": self.stops,
             "stiffness": self.stiffness,
             "start_q_deg": np.degrees(self.skeleton.q).tolist(),
             "commit": commit,

@@ -262,6 +262,7 @@ def main() -> None:
                     duration=evaluation["duration"],
                     dt=demo_config["simulator"]["dt"],
                     enforce_limits=demo_config["simulator"].get("enforce_limits", True),
+                    stops=demo_config["simulator"].get("stops", "projected"),
                     extra={
                         "playback": {"task": setup.task},
                         "tracking": {

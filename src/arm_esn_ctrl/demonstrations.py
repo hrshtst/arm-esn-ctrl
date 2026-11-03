@@ -78,6 +78,7 @@ def simulate_disturbed_reach(
         duration=duration,
         dt=scenario.simulator.dt,
         enforce_limits=scenario.simulator.enforce_limits,
+        stops=scenario.simulator.stops,
         extra={"playback": {"task": config["task"]}},
         external_force=external_force,
     )

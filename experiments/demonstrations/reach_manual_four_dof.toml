@@ -2,8 +2,8 @@
 # trajectory recorder, then imported into a demonstration run. As reach_manual_v2.toml (reports
 # 005 to 020), with the arm, start posture, and target of skelarm's
 # examples/reach_four_dof_robot.toml: its [skeleton], [initial], [task], and [simulator] tables
-# are copied here unchanged (tests/test_four_dof_configs.py keeps them equal), and its
-# [controller] is left out, since a human teaches the take.
+# are copied here unchanged (tests/test_four_dof_configs.py keeps them equal), but for the
+# [simulator]'s locked stops, and its [controller] is left out, since a human teaches the take.
 #
 # 1. Record one take, into the storage root's data/ (what cannot be regenerated).
 #    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
@@ -98,3 +98,9 @@ schedule = "minimum_jerk"
 
 [simulator]
 dt = 0.002  # the robot's control and integration step (s); its joint limits are hard stops
+# The stops hold a joint pressed into them by their reaction, which does no work, and stop a
+# joint that reaches them as in a plastic impact. skelarm's default, "projected", zeroes the
+# stopped joint's velocity but lets the others accelerate as if it were free: on this arm,
+# whose joints 1 and 2 are nearly redundant and whose joint 1 starts at its stop, that feeds
+# the arm energy the motors never gave it.
+stops = "locked"

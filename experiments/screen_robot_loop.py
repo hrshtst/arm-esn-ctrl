@@ -201,6 +201,7 @@ def esn_fixed_points(context: Context, key: Key, points: list[dict[str, str]]) -
         context.gains,
         context.simulator["dt"],
         enforce_limits=context.simulator.get("enforce_limits", True),
+        stops=context.simulator.get("stops", "projected"),
     )
     rows = []
     nan = float("nan")
