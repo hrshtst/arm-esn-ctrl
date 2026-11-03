@@ -97,3 +97,13 @@ def test_the_guards_esn_is_v2s_esn_1_setting_on_this_take():
         "hold": 2.0,
         "start_grid": {"span_deg": 15.0, "step_deg": 15.0},
     }
+
+
+@pytest.mark.parametrize("scenario", ["block", "pushes"])
+def test_the_guards_runs_meet_the_grids_tracker_and_disturbances_beside_the_guards_esn(scenario):
+    config, grid = load(SEARCH / f"guard_{scenario}_robot.toml"), load(SEARCH / f"sweep_lr0.03_{scenario}.toml")
+
+    assert config["esn"]["model"].endswith("-guard_esn_lr0.03_sr1.2_is1.5_seed8/esn.toml")
+    assert config["tracker"] == grid["tracker"]
+    assert config["evaluation"] == grid["evaluation"]
+    assert config["disturbance"] == grid["disturbance"]

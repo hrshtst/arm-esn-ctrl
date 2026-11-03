@@ -124,17 +124,19 @@ their configurations, after the search, with their cost.
 The guard's ESN, at v2's ESN #1 setting, is trained on the take and run on its own from
 the 36 offset starts, so that its ESN is saved; the replay then runs beside it with the
 search's tracker, under the block and under the pushes, and its ringing there is the
-rule's guard; `guard_{block,pushes}_robot.toml` are written once the ESN is saved, to
-name its run. Nothing here repeats v2's regression check (its step 0): the code that
+rule's guard. Nothing here repeats v2's regression check (its step 0): the code that
 generalized the programs to four joints gives v2's outputs bit for bit (6278507).
 
 ```bash
 uv run python experiments/autonomous_esn.py experiments/manual_demonstration_four_dof_consistent_search/guard_esn_lr0.03_sr1.2_is1.5_seed8.toml
+uv run python experiments/robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/guard_block_robot.toml
+uv run python experiments/robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/guard_pushes_robot.toml
 ```
 
 | Configurations | What they run |
 | --- | --- |
 | `guard_esn_lr0.03_sr1.2_is1.5_seed8.toml` | the guard's ESN, trained on the take and run on its own from the 36 offset starts |
+| `guard_{block,pushes}_robot.toml` | the replay with the search's tracker, beside the guard's ESN (run `20261103-135144-guard_esn_lr0.03_sr1.2_is1.5_seed8`), under the block and under the pushes |
 
 ### Step 1: the grid
 
