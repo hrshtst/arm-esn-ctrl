@@ -23,6 +23,7 @@ experiments/
 ├── screen_esns.py
 ├── screen_against_robot.py
 ├── release_robot.py
+├── run_queue.sh                               # one runner on many configurations, as one job to pause
 ├── demonstrations/                            # one directory per experiment: README.md and configurations
 ├── single_demonstration_autonomous_reaching/
 ├── single_demonstration_robot_tracking/
@@ -68,6 +69,16 @@ Run a configuration with its runner:
 
 ```bash
 uv run python experiments/<runner>.py experiments/<experiment>/<configuration>.toml
+```
+
+Run many, such as a search's grid, one after another with `run_queue.sh`, as a
+systemd user service that can be paused and resumed (see the script):
+
+```bash
+systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" \
+    experiments/run_queue.sh experiments/<runner>.py [<options>...] -- experiments/<experiment>/<configuration>.toml ...
+systemctl --user freeze arm-grid   # pause
+systemctl --user thaw arm-grid     # resume
 ```
 
 The interactive apps that run a trained ESN or the robot live are described in

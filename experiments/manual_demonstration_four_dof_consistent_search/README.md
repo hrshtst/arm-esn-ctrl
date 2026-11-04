@@ -147,6 +147,17 @@ undisturbed, under the block, and under the pushes, and from the 36 offset start
 uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/sweep_lr0.03_pushes.toml --workers 30
 ```
 
+The 48 with seeds 0 to 9 run as one queue (`run_queue.sh`, to be paused and resumed
+while the machine is wanted), the undisturbed, block, and pushes runs of every leak rate
+first, about 13 min a leak rate, then the offset starts, about 2.4 h a leak rate:
+
+```bash
+D=experiments/manual_demonstration_four_dof_consistent_search
+systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" \
+    experiments/run_queue.sh experiments/sweep_robot_esn.py --workers 30 -- \
+    $(for s in nominal block pushes offsets; do for lr in 0.01 0.015 0.02 0.03 0.04 0.05 0.07 0.1 0.15 0.2 0.3 0.5; do echo $D/sweep_lr${lr}_$s.toml; done; done)
+```
+
 | Configurations | What they sweep |
 | --- | --- |
 | `sweep_lr<leak rate>_{nominal,block,pushes,offsets}.toml` (48) | spectral radius 0.7 to 1.75 × input scaling 0.1 to 2 × seeds 0 to 9, at one leak rate, in one scenario |
