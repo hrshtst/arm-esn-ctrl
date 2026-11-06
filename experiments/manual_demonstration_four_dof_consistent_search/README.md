@@ -165,5 +165,19 @@ systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" \
 
 `tests/test_four_dof_search_configs.py` holds each one to v2's configuration of the
 same name, but for the take, the tracker's mass matrix, and the times and starts above.
-The choice (v2's step 2), the size and the ridge (step 3), and the chosen ESNs on the
-robot (step 4) are configured once the grid has run, as v2's were.
+
+### Step 2: the choice
+
+As v2's: [`select_esns.py`](../select_esns.py) applies the rule to the runs of step 1
+with seeds 0 to 9, listed in `select.toml`, beside the guard's runs of step 0:
+
+```bash
+uv run python experiments/select_esns.py experiments/manual_demonstration_four_dof_consistent_search/select.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `select.toml` | the rule over the runs of step 1 with seeds 0 to 9, and the guard's runs of step 0 |
+
+The held-out seeds, the chosen ESNs' training, the size and the ridge (v2's step 3),
+and the chosen ESNs on the robot (step 4) are configured once the choice is made.

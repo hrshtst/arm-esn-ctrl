@@ -99,6 +99,22 @@ def test_the_guards_esn_is_v2s_esn_1_setting_on_this_take():
     }
 
 
+def test_the_choice_is_v2s_rule_over_the_grid_with_seeds_0_to_9_and_the_guards_runs():
+    config, v2 = load(SEARCH / "select.toml"), load(V2 / "select.toml")
+
+    def names(runs):
+        """The runs' configurations: their directories but for the date and time."""
+        directory = "results/manual_demonstration_four_dof_consistent_search/"
+        assert all(run.startswith(directory) for run in runs)
+        return [run.removeprefix(directory).split("-", 2)[2] for run in runs]
+
+    assert config["rule"] == v2["rule"]
+    assert config["runs"].keys() == v2["runs"].keys()
+    for scenario in SCENARIOS:
+        assert names(config["runs"][scenario]) == [f"sweep_lr{leak:g}_{scenario}" for leak in LEAKS]
+    assert names(config["runs"]["replay"]) == ["guard_block_robot", "guard_pushes_robot"]
+
+
 @pytest.mark.parametrize("scenario", ["block", "pushes"])
 def test_the_guards_runs_meet_the_grids_tracker_and_disturbances_beside_the_guards_esn(scenario):
     config, grid = load(SEARCH / f"guard_{scenario}_robot.toml"), load(SEARCH / f"sweep_lr0.03_{scenario}.toml")
