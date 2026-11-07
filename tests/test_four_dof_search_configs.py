@@ -70,6 +70,22 @@ def test_a_grid_configuration_is_v2s_on_the_four_link_take(name):
     assert config.get("disturbance") == disturbance
 
 
+@pytest.mark.parametrize("leak", LEAKS)
+@pytest.mark.parametrize("scenario", SCENARIOS)
+def test_the_extended_grid_is_the_grid_below_its_input_scalings(leak, scenario):
+    config = load(SEARCH / f"extend_lr{leak:g}_{scenario}.toml")
+    grid = load(SEARCH / f"sweep_lr{leak:g}_{scenario}.toml")
+
+    assert max(config["sweep"]["input_scaling"]) < min(grid["sweep"]["input_scaling"])
+    assert config == grid | {"sweep": grid["sweep"] | {"input_scaling": [0.02, 0.05]}}
+
+
+def test_the_extended_grid_has_one_configuration_per_leak_rate_and_scenario():
+    names = {path.stem for path in SEARCH.glob("extend_*.toml")}
+
+    assert names == {f"extend_lr{leak:g}_{scenario}" for leak in LEAKS for scenario in SCENARIOS}
+
+
 def test_the_times_follow_the_take():
     assert BLOCK["release"] == BLOCK["onset"] + 1.0
     assert PUSH_ONSETS[0] < BLOCK["onset"] < PUSH_ONSETS[1]
