@@ -201,6 +201,11 @@ systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" \
 | Configurations | What they sweep |
 | --- | --- |
 | `extend_lr<leak rate>_{nominal,block,pushes,offsets}.toml` (48) | the grid's `sweep_lr<leak rate>_<scenario>.toml` with input scalings 0.02 and 0.05 |
+| `select_extended.toml` | the rule over the runs of step 1 and of the extension together, and the guard's runs of step 0 |
+
+```bash
+uv run python experiments/select_esns.py experiments/manual_demonstration_four_dof_consistent_search/select_extended.toml
+```
 
 The held-out seeds, the chosen ESNs' training, the size and the ridge (v2's step 3),
 and the chosen ESNs on the robot (step 4) are configured once the choice is made.
