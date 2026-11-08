@@ -149,6 +149,24 @@ def test_the_chosen_esns_are_the_guards_esn_at_their_settings(name):
     assert config == guard | {"esn": guard["esn"] | CHOSEN[name]}
 
 
+@pytest.mark.parametrize("name", CHOSEN)
+@pytest.mark.parametrize("scenario", SCENARIOS)
+def test_the_chosen_esns_run_on_the_robot_as_in_v2s_step_4_with_the_grids_tracker_and_scenarios(scenario, name):
+    config = load(SEARCH / f"{scenario}_robot_{name}.toml")
+    grid = load(SEARCH / f"sweep_lr0.01_{scenario}.toml")
+    v2 = load(V2 / f"{scenario}_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml")
+
+    assert config["esn"]["model"].startswith("results/manual_demonstration_four_dof_consistent_search/")
+    assert config["esn"]["model"].endswith(f"-{name}/esn.toml")
+    assert config["tracker"] == grid["tracker"]
+    assert config["progress"] == v2["progress"]
+    assert config["evaluation"] == grid["evaluation"]
+    assert config.get("disturbance") == grid.get("disturbance")
+    if scenario == "offsets":
+        assert config["plots"] == {"offsets_deg": [[15.0, 15.0, 15.0, 15.0], [0.0, 0.0, -15.0, -15.0]]}
+    assert config.keys() == v2.keys()
+
+
 @pytest.mark.parametrize("scenario", ["block", "pushes"])
 def test_the_guards_runs_meet_the_grids_tracker_and_disturbances_beside_the_guards_esn(scenario):
     config, grid = load(SEARCH / f"guard_{scenario}_robot.toml"), load(SEARCH / f"sweep_lr0.03_{scenario}.toml")

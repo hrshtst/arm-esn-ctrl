@@ -227,5 +227,20 @@ uv run python experiments/autonomous_esn.py experiments/manual_demonstration_fou
 | --- | --- |
 | `esn1_lr0.01_sr1.5_is0.02_seed7.toml`, `esn2_lr0.02_sr1.5_is0.02_seed8.toml` | ESN #1 and ESN #2, as the rule chose them, trained and run on their own from the 36 offset starts |
 
-The held-out seeds, the chosen ESNs' training, the size and the ridge (v2's step 3),
-and the chosen ESNs on the robot (step 4) are configured once the choice is made.
+### Step 4: the chosen ESNs on the robot
+
+As v2's: ESN #1 and ESN #2, as trained in step 2b, against the replay and the progress
+replay with the search's tracker, in every scenario of step 1, so that their runs can
+be drawn over time. From the offset starts, the joint angles and torques are also drawn
+from the start whose hand is nearest the target (+15° in every joint, 223 mm away) and
+the one whose hand is farthest (0, 0, −15, and −15°). The size and the ridge (v2's
+step 3) are deferred with the held-out seeds.
+
+```bash
+uv run python experiments/robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/pushes_robot_esn1_lr0.01_sr1.5_is0.02_seed7.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `{nominal,block,pushes,offsets}_robot_esn1_lr0.01_sr1.5_is0.02_seed7.toml` | ESN #1, the replay, and the progress replay, in one scenario |
+| `{nominal,block,pushes,offsets}_robot_esn2_lr0.02_sr1.5_is0.02_seed8.toml` | the same with ESN #2 |
