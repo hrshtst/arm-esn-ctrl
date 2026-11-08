@@ -86,7 +86,7 @@ SCENES = [
     ("02_block", "block", None, "Blocked: the tip held from 4.0 to 5.0 s"),
     ("03_pushes", "pushes", None, "Pushed: 3 N at 2.6 s, 5 N at 6.7 s, 4 N at 14.9 s"),
     ("04_offset_+15_+15_+15_+15", "offsets", "+15,+15,+15,+15", "From the start offset by +15° in every joint"),
-    ("05_offset_+0_+0_-15_-15", "offsets", "+0,+0,-15,-15", "From the start offset by −15° in joints 3 and 4"),  # noqa: RUF001
+    ("05_offset_+0_+0_-15_-15", "offsets", "+0,+0,-15,-15", "From the start offset by -15° in joints 3 and 4"),
 ]
 ALL_STARTS = "06_offsets_all"
 
@@ -94,6 +94,7 @@ FPS = 30.0
 TEXT_COLOR, TITLE_COLOR, GRID_COLOR = "#52514e", "#0b0b0b", "#e1e0d9"
 DISTURBANCE_COLOR, TAUGHT_COLOR = "#f0efec", "#b9b7b0"
 FIGSIZE, DPI = (12.0, 6.75), 150  # 1800 x 1012 px: 16:9
+ALL_STARTS_SIZE = (15.0, 4.6)  # three panels of the plane side by side: 2250 x 690 px
 START_CUT = 0.05  # s: from an offset start, the torque's axis leaves out the task's first 50 ms
 EVERY = 5  # the plots draw every 5th sample of a run's 2 ms log: every 10 ms
 
@@ -186,8 +187,8 @@ def style(ax: Axes) -> None:
         ax.spines[side].set_color(GRID_COLOR)
 
 
-def figure(title: str) -> Figure:
-    fig = Figure(figsize=FIGSIZE, dpi=DPI, facecolor="white", layout="constrained")
+def figure(title: str, size: tuple[float, float] = FIGSIZE) -> Figure:
+    fig = Figure(figsize=size, dpi=DPI, facecolor="white", layout="constrained")
     fig.suptitle(title, color=TITLE_COLOR, fontsize=15)
     return fig
 
@@ -283,7 +284,7 @@ def passes(row: dict[str, str]) -> bool:
 def all_starts_plot(esn: str, taught: Run) -> tuple[Figure, list[Path]]:
     """Each arm's tip paths from all 36 starts, a panel per arm, each panel titled with how many reach and hold."""
     label, _, setting = ESNS[esn]
-    fig = figure(f"From all 36 starts: {label} ({setting}) and both replays")
+    fig = figure(f"From all 36 starts: {label} ({setting}) and both replays", ALL_STARTS_SIZE)
     axes = fig.subplots(1, 3, sharex=True, sharey=True)
     with (run_dir("offsets", esn) / "metrics.csv").open(newline="") as f:
         rows = list(csv.DictReader(f))
@@ -451,7 +452,7 @@ In each of `01` to `05`:
 
 The replays' runs do not depend on the ESN: ESN #1's and ESN #2's runs give the same
 replays, and their videos are made once. All videos are H.264 at {fps:g} fps, rendered by
-skelarm's player; the plots are 1800 x 1012 px (16:9). [`media.csv`](media.csv) lists
+skelarm's player; the plots are 1800 x 1012 px (16:9), but for `06_offsets_all`'s, 2250 x 690 px. [`media.csv`](media.csv) lists
 every file with the logs it shows, relative to the storage root.
 
 ## Reproducing them
