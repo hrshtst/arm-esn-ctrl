@@ -227,6 +227,7 @@ arm-esn-ctrl/
 ├── experiments/        # the runner scripts, and one directory per experiment: its README and configurations
 ├── tools/              # interactive apps that run a trained ESN or the robot live
 ├── reports/            # one directory per study (see Reports)
+├── presentations/      # scripts that make videos and plots for slides, into the storage root
 ├── tests/              # sanity tests of the core pieces
 └── third_party/        # rclib and skelarm (Git submodules)
 ```
