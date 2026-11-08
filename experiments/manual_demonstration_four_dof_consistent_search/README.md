@@ -207,5 +207,25 @@ systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" \
 uv run python experiments/select_esns.py experiments/manual_demonstration_four_dof_consistent_search/select_extended.toml
 ```
 
+Over both grids (run `20261108-051827-select_extended`), 206 of the 6,720 ESNs pass
+and one setting qualifies, at the extension's lowest input scaling: ESN #1 is its
+typical seed, leak rate 0.01, spectral radius 1.5, input scaling 0.02, and seed 7
+(median following 0.23, median ringing 5.12 mm). ESN #2 comes by the fallback, the
+first of the settings with 9 of 10 passing seeds: leak rate 0.02, spectral radius 1.5,
+input scaling 0.02, and seed 8 (median following 0.46, median ringing 4.87 mm). The
+passing ESNs still grow in number toward the extension's edge (76 at input scaling
+0.02, 47 at 0.05, 46 at 0.1), and the chosen ESNs follow the arm little: under the
+block, ESN #1's reference follows it by 0.06 and runs 8.2% ahead, against the replay's
+0 and 9%. The held-out seeds are deferred. The two ESNs are trained by
+[`autonomous_esn.py`](../autonomous_esn.py):
+
+```bash
+uv run python experiments/autonomous_esn.py experiments/manual_demonstration_four_dof_consistent_search/esn1_lr0.01_sr1.5_is0.02_seed7.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `esn1_lr0.01_sr1.5_is0.02_seed7.toml`, `esn2_lr0.02_sr1.5_is0.02_seed8.toml` | ESN #1 and ESN #2, as the rule chose them, trained and run on their own from the 36 offset starts |
+
 The held-out seeds, the chosen ESNs' training, the size and the ridge (v2's step 3),
 and the chosen ESNs on the robot (step 4) are configured once the choice is made.

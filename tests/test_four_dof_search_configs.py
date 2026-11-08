@@ -135,6 +135,20 @@ def test_the_choice_is_v2s_rule_over_the_grids_with_seeds_0_to_9_and_the_guards_
     assert run_names(config["runs"]["replay"]) == ["guard_block_robot", "guard_pushes_robot"]
 
 
+CHOSEN = {  # select run 20261108-051827-select_extended's ESN #1 and ESN #2
+    "esn1_lr0.01_sr1.5_is0.02_seed7": {"leak_rate": 0.01, "spectral_radius": 1.5, "input_scaling": 0.02, "seed": 7},
+    "esn2_lr0.02_sr1.5_is0.02_seed8": {"leak_rate": 0.02, "spectral_radius": 1.5, "input_scaling": 0.02, "seed": 8},
+}
+
+
+@pytest.mark.parametrize("name", CHOSEN)
+def test_the_chosen_esns_are_the_guards_esn_at_their_settings(name):
+    config = load(SEARCH / f"{name}.toml")
+    guard = load(SEARCH / "guard_esn_lr0.03_sr1.2_is1.5_seed8.toml")
+
+    assert config == guard | {"esn": guard["esn"] | CHOSEN[name]}
+
+
 @pytest.mark.parametrize("scenario", ["block", "pushes"])
 def test_the_guards_runs_meet_the_grids_tracker_and_disturbances_beside_the_guards_esn(scenario):
     config, grid = load(SEARCH / f"guard_{scenario}_robot.toml"), load(SEARCH / f"sweep_lr0.03_{scenario}.toml")
