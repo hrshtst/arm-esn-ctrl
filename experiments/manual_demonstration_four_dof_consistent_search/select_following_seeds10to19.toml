@@ -1,0 +1,57 @@
+# The held-out seeds 10 to 19 of the 8 settings that qualify under select_following.toml, under the storage root, and
+# the same rule, to show whether the settings hold on seeds not used to choose them (see README.md, step 5).
+
+[runs]
+nominal = [
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210045-heldout_lr0.015_sr1.2_is0.02_nominal",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210127-heldout_lr0.015_sr1.2_is0.05_nominal",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210209-heldout_lr0.015_sr1.35_is0.05_nominal",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210251-heldout_lr0.01_sr0.99_is0.02_nominal",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210334-heldout_lr0.01_sr1.2_is0.05_nominal",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210416-heldout_lr0.02_sr1.2_is0.02_nominal",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210459-heldout_lr0.02_sr1.35_is0.02_nominal",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210541-heldout_lr0.02_sr1.35_is0.05_nominal",
+]
+block = [
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210031-heldout_lr0.015_sr1.2_is0.02_block",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210113-heldout_lr0.015_sr1.2_is0.05_block",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210155-heldout_lr0.015_sr1.35_is0.05_block",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210237-heldout_lr0.01_sr0.99_is0.02_block",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210319-heldout_lr0.01_sr1.2_is0.05_block",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210402-heldout_lr0.02_sr1.2_is0.02_block",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210444-heldout_lr0.02_sr1.35_is0.02_block",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210526-heldout_lr0.02_sr1.35_is0.05_block",
+]
+pushes = [
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210058-heldout_lr0.015_sr1.2_is0.02_pushes",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210140-heldout_lr0.015_sr1.2_is0.05_pushes",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210222-heldout_lr0.015_sr1.35_is0.05_pushes",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210305-heldout_lr0.01_sr0.99_is0.02_pushes",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210347-heldout_lr0.01_sr1.2_is0.05_pushes",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210429-heldout_lr0.02_sr1.2_is0.02_pushes",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210512-heldout_lr0.02_sr1.35_is0.02_pushes",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210554-heldout_lr0.02_sr1.35_is0.05_pushes",
+]
+offsets = [
+  "results/manual_demonstration_four_dof_consistent_search/20261109-210609-heldout_lr0.015_sr1.2_is0.02_offsets",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-211153-heldout_lr0.015_sr1.2_is0.05_offsets",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-211833-heldout_lr0.015_sr1.35_is0.05_offsets",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-212510-heldout_lr0.01_sr0.99_is0.02_offsets",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-213124-heldout_lr0.01_sr1.2_is0.05_offsets",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-213802-heldout_lr0.02_sr1.2_is0.02_offsets",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-214437-heldout_lr0.02_sr1.35_is0.02_offsets",
+  "results/manual_demonstration_four_dof_consistent_search/20261109-215114-heldout_lr0.02_sr1.35_is0.05_offsets",
+]
+# the replay with the search's tracker, beside the guard's ESN: the replay's ringing sets the guard
+replay = [
+  "results/manual_demonstration_four_dof_consistent_search/20261103-135237-guard_block_robot",
+  "results/manual_demonstration_four_dof_consistent_search/20261103-135300-guard_pushes_robot",
+]
+
+[rule]
+chosen = 2
+fallback_seeds = 8                     # none is left below the qualifying seeds
+qualifying_seeds = 8                   # a setting qualifies with this many of its 10 seeds passing
+excuse_leaving = ["pushes", "offsets"] # leaving the goal during the hold is excused here: the hand must still arrive and end in the goal
+max_block_gap = 0.5                    # the reference's distance from the arm's joint angles at the block's release, over the replay's
+rank_by = "block_gap"                  # the smallest median first

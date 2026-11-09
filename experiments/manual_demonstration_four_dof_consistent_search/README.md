@@ -310,3 +310,13 @@ systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" ba
 | --- | --- |
 | `{nominal,block,pushes,offsets}_robot_following_esn1_lr0.015_sr1.2_is0.05_seed0.toml` | the new ESN #1, the replay, and the progress replay, in one scenario |
 | `{nominal,block,pushes,offsets}_robot_following_esn2_lr0.02_sr1.35_is0.05_seed7.toml` | the same with the new ESN #2 |
+
+The same rule then reads the held-out runs alone:
+
+```bash
+uv run python experiments/select_esns.py experiments/manual_demonstration_four_dof_consistent_search/select_following_seeds10to19.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `select_following_seeds10to19.toml` | the rule of `select_following.toml`, over the held-out seeds 10 to 19 of the 8 settings |

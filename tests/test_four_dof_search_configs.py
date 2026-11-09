@@ -208,6 +208,18 @@ def test_the_held_out_configurations_are_those_of_the_qualifying_settings():
     assert {path.stem for path in SEARCH.glob("heldout_*.toml")} == expected
 
 
+def test_the_held_out_choice_is_the_following_rule_over_the_held_out_runs_alone():
+    config, following = load(SEARCH / "select_following_seeds10to19.toml"), load(SEARCH / "select_following.toml")
+
+    assert config["rule"] == following["rule"]
+    assert config["runs"]["replay"] == following["runs"]["replay"]
+    assert config["runs"].keys() == following["runs"].keys()
+    for scenario in SCENARIOS:
+        assert sorted(run_names(config["runs"][scenario])) == sorted(
+            f"heldout_lr{leak:g}_sr{radius:g}_is{scaling:g}_{scenario}" for leak, radius, scaling in QUALIFYING
+        )
+
+
 @pytest.mark.parametrize("name", [*CHOSEN, *FOLLOWING])
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_the_chosen_esns_run_on_the_robot_as_in_v2s_step_4_with_the_grids_tracker_and_scenarios(scenario, name):
