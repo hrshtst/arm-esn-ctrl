@@ -294,3 +294,19 @@ uv run python experiments/autonomous_esn.py $D/following_esn2_lr0.02_sr1.35_is0.
 | --- | --- |
 | `following_esn1_lr0.015_sr1.2_is0.05_seed0.toml`, `following_esn2_lr0.02_sr1.35_is0.05_seed7.toml` | the new ESN #1 and ESN #2, trained and run on their own from the 36 offset starts |
 | `heldout_lr<leak rate>_sr<spectral radius>_is<input scaling>_{nominal,block,pushes,offsets}.toml` (32) | each of the 8 qualifying settings with seeds 10 to 19, in one scenario |
+
+As in step 4, the new ESN #1 and ESN #2 run against the replay and the progress replay
+in every scenario, and then the held-out seeds run. The queue can be paused, as for the
+grid:
+
+```bash
+D=experiments/manual_demonstration_four_dof_consistent_search
+systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" bash -c "
+  experiments/run_queue.sh experiments/robot_esn.py -- $D/*_robot_following_esn?_*.toml &&
+  experiments/run_queue.sh experiments/sweep_robot_esn.py --workers 30 -- $D/heldout_*.toml"
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `{nominal,block,pushes,offsets}_robot_following_esn1_lr0.015_sr1.2_is0.05_seed0.toml` | the new ESN #1, the replay, and the progress replay, in one scenario |
+| `{nominal,block,pushes,offsets}_robot_following_esn2_lr0.02_sr1.35_is0.05_seed7.toml` | the same with the new ESN #2 |

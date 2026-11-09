@@ -208,7 +208,7 @@ def test_the_held_out_configurations_are_those_of_the_qualifying_settings():
     assert {path.stem for path in SEARCH.glob("heldout_*.toml")} == expected
 
 
-@pytest.mark.parametrize("name", CHOSEN)
+@pytest.mark.parametrize("name", [*CHOSEN, *FOLLOWING])
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_the_chosen_esns_run_on_the_robot_as_in_v2s_step_4_with_the_grids_tracker_and_scenarios(scenario, name):
     config = load(SEARCH / f"{scenario}_robot_{name}.toml")
