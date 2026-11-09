@@ -155,12 +155,57 @@ CHOSEN = {  # select run 20261108-051827-select_extended's ESN #1 and ESN #2
 }
 
 
-@pytest.mark.parametrize("name", CHOSEN)
+FOLLOWING = {  # select run 20261109-202923-select_following's ESN #1 and ESN #2
+    "following_esn1_lr0.015_sr1.2_is0.05_seed0": {
+        "leak_rate": 0.015,
+        "spectral_radius": 1.2,
+        "input_scaling": 0.05,
+        "seed": 0,
+    },
+    "following_esn2_lr0.02_sr1.35_is0.05_seed7": {
+        "leak_rate": 0.02,
+        "spectral_radius": 1.35,
+        "input_scaling": 0.05,
+        "seed": 7,
+    },
+}
+QUALIFYING = [  # the 8 settings that qualify in that run: (leak rate, spectral radius, input scaling)
+    (0.015, 1.2, 0.05),
+    (0.02, 1.35, 0.05),
+    (0.02, 1.2, 0.02),
+    (0.015, 1.35, 0.05),
+    (0.01, 1.2, 0.05),
+    (0.015, 1.2, 0.02),
+    (0.01, 0.99, 0.02),
+    (0.02, 1.35, 0.02),
+]
+
+
+@pytest.mark.parametrize("name", [*CHOSEN, *FOLLOWING])
 def test_the_chosen_esns_are_the_guards_esn_at_their_settings(name):
     config = load(SEARCH / f"{name}.toml")
     guard = load(SEARCH / "guard_esn_lr0.03_sr1.2_is1.5_seed8.toml")
 
-    assert config == guard | {"esn": guard["esn"] | CHOSEN[name]}
+    assert config == guard | {"esn": guard["esn"] | (CHOSEN | FOLLOWING)[name]}
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS)
+@pytest.mark.parametrize(("leak", "radius", "scaling"), QUALIFYING)
+def test_the_held_out_seeds_run_each_qualifying_setting_as_the_extension_did(leak, radius, scaling, scenario):
+    config = load(SEARCH / f"heldout_lr{leak:g}_sr{radius:g}_is{scaling:g}_{scenario}.toml")
+    extension = load(SEARCH / f"extend_lr{leak:g}_{scenario}.toml")
+    sweep = {"spectral_radius": [radius], "input_scaling": [scaling], "seed": list(range(10, 20))}
+
+    assert config == extension | {"sweep": sweep}
+
+
+def test_the_held_out_configurations_are_those_of_the_qualifying_settings():
+    expected = {
+        f"heldout_lr{leak:g}_sr{radius:g}_is{scaling:g}_{scenario}"
+        for leak, radius, scaling in QUALIFYING
+        for scenario in SCENARIOS
+    }
+    assert {path.stem for path in SEARCH.glob("heldout_*.toml")} == expected
 
 
 @pytest.mark.parametrize("name", CHOSEN)

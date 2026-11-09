@@ -273,3 +273,24 @@ so they stand outside the protocol above.**
 ```bash
 uv run python experiments/select_esns.py experiments/manual_demonstration_four_dof_consistent_search/select_following.toml
 ```
+
+Over the same runs (run `20261109-202923-select_following`), 390 of the 6,720 ESNs pass
+and 8 of the 672 settings qualify, all within the guard. The ranking's first two are the
+new ESN #1, leak rate 0.015, spectral radius 1.2, input scaling 0.05, and seed 0 (median
+gap 0.28, median following 0.69, median ringing 4.43 mm), and the new ESN #2, leak rate
+0.02, spectral radius 1.35, input scaling 0.05, and seed 7 (median gap 0.32, median
+following 0.71, median ringing 4.02 mm). They are trained as in step 2b. Because the
+changes followed the results, the 8 settings are run again with the held-out seeds 10
+to 19, by the same programs as the grid's and in every scenario of step 1. The rule
+over those runs, alone, shows whether they hold on seeds not used to choose them.
+
+```bash
+D=experiments/manual_demonstration_four_dof_consistent_search
+uv run python experiments/autonomous_esn.py $D/following_esn1_lr0.015_sr1.2_is0.05_seed0.toml
+uv run python experiments/autonomous_esn.py $D/following_esn2_lr0.02_sr1.35_is0.05_seed7.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `following_esn1_lr0.015_sr1.2_is0.05_seed0.toml`, `following_esn2_lr0.02_sr1.35_is0.05_seed7.toml` | the new ESN #1 and ESN #2, trained and run on their own from the 36 offset starts |
+| `heldout_lr<leak rate>_sr<spectral radius>_is<input scaling>_{nominal,block,pushes,offsets}.toml` (32) | each of the 8 qualifying settings with seeds 10 to 19, in one scenario |
