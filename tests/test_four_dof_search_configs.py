@@ -135,6 +135,20 @@ def test_the_choice_is_v2s_rule_over_the_grids_with_seeds_0_to_9_and_the_guards_
     assert run_names(config["runs"]["replay"]) == ["guard_block_robot", "guard_pushes_robot"]
 
 
+def test_the_following_rule_is_over_the_same_runs_with_the_three_changes_of_step_5():
+    config, extended = load(SEARCH / "select_following.toml"), load(SEARCH / "select_extended.toml")
+
+    assert config["runs"] == extended["runs"]
+    assert config["rule"] == {
+        "chosen": 2,
+        "fallback_seeds": 8,
+        "qualifying_seeds": 8,
+        "excuse_leaving": ["pushes", "offsets"],
+        "max_block_gap": 0.5,
+        "rank_by": "block_gap",
+    }
+
+
 CHOSEN = {  # select run 20261108-051827-select_extended's ESN #1 and ESN #2
     "esn1_lr0.01_sr1.5_is0.02_seed7": {"leak_rate": 0.01, "spectral_radius": 1.5, "input_scaling": 0.02, "seed": 7},
     "esn2_lr0.02_sr1.5_is0.02_seed8": {"leak_rate": 0.02, "spectral_radius": 1.5, "input_scaling": 0.02, "seed": 8},

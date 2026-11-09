@@ -244,3 +244,32 @@ uv run python experiments/robot_esn.py experiments/manual_demonstration_four_dof
 | --- | --- |
 | `{nominal,block,pushes,offsets}_robot_esn1_lr0.01_sr1.5_is0.02_seed7.toml` | ESN #1, the replay, and the progress replay, in one scenario |
 | `{nominal,block,pushes,offsets}_robot_esn2_lr0.02_sr1.5_is0.02_seed8.toml` | the same with ESN #2 |
+
+### Step 5: a rule that asks the reference to follow the arm
+
+The review of step 4 asked for something the rule did not: under the block, ESN #1's and
+ESN #2's references keep to the taught motion, while the two-link arm's approach the arm's
+joint angles, which lowers the torque after the release. Every ESN of the grids ran under
+the disturbances, but the rule asked only that the hand reach the goal, and the following
+only ranked the settings that qualified, of which there is one. Step 5 changes the rule
+over the same runs, in three ways. **These changes were decided after seeing the results,
+so they stand outside the protocol above.**
+
+1. From the offset starts, leaving the goal during the hold is excused, as under the
+   pushes. The hand must still arrive and end in the goal. Of the runs from offset starts
+   where an ESN with a small gap fails, 55% leave the goal after arriving early (median
+   5.75 s, against 9.58 s for the runs that pass) and end about 3 mm from the target.
+2. An ESN also fails if its reference, at the block's release, is farther from the arm's
+   joint angles than half the replay's. This fraction is `end_gap_deg` over the replay's,
+   measured in every run of the grids; the two-link arm's ESN #1 and ESN #2 have 0.39 and
+   0.34, and this search's ESN #1 and ESN #2 have 0.78 and 0.66.
+3. A setting qualifies if at least 8 of its 10 seeds pass, and the settings are ranked by
+   their median of that fraction, the smallest first.
+
+| Configurations | What they run |
+| --- | --- |
+| `select_following.toml` | the rule with these changes, over the runs of steps 1 and 2b |
+
+```bash
+uv run python experiments/select_esns.py experiments/manual_demonstration_four_dof_consistent_search/select_following.toml
+```

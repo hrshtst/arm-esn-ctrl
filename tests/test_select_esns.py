@@ -12,7 +12,16 @@ from arm_esn_ctrl.storage import REPO_ROOT
 
 # The runners import each other as modules of their own directory, as they run.
 sys.path.insert(0, str(REPO_ROOT / "experiments"))
-from select_esns import disturbance_windows, esn_key, esn_measures, failure, rank_settings, typical_seed
+from select_esns import (
+    disturbance_windows,
+    esn_key,
+    esn_measures,
+    failure,
+    gate_block_gap,
+    rank_settings,
+    replay_block_gap,
+    typical_seed,
+)
 
 RADIUS = 0.02
 BLOCK = {"type": "block", "onset": 4.5, "release": 5.5}
@@ -130,3 +139,60 @@ def test_too_few_qualifying_settings_are_made_up_from_those_with_enough_passing_
     assert row[1.2]["typical_seed"] in (0, 1)  # a passing seed
     assert row[1.35]["chosen"] is None
     assert np.isclose(row[1.2]["following"], 0.81)
+
+
+def test_leaving_the_goal_is_excused_only_where_the_rule_says():
+    excused = ("pushes", "offsets")
+
+    assert failure(run(left_goal=True), "offsets", RADIUS) == "leaves the goal during the hold"
+    assert failure(run(left_goal=True), "offsets", RADIUS, excused) == ""
+    assert failure(run(left_goal=True), "block", RADIUS, excused) == "leaves the goal during the hold"
+    assert failure(run(arrival_time_s=float("nan")), "offsets", RADIUS, excused) == "never arrives"
+    assert failure(run(final_distance_m=0.03), "offsets", RADIUS, excused) == "ends away"
+
+
+def test_an_esn_whose_reference_stays_far_from_the_arm_at_the_release_does_not_pass():
+    keys = [esn_key({"seed": seed}) for seed in range(4)]
+    measures = {key: {"passes": True, "failures": ""} for key in keys[:3]}
+    measures[keys[3]] = {"passes": False, "failures": "offsets: never arrives"}
+    gaps = (10.0, 16.0, float("nan"), 16.0)
+
+    gate_block_gap(measures, {key: [{"end_gap_deg": gap}] for key, gap in zip(keys, gaps, strict=True)}, 20.0, 0.5)
+
+    assert measures[keys[0]]["passes"]  # exactly the limit
+    assert measures[keys[0]]["block_gap"] == pytest.approx(0.5)
+    assert not measures[keys[1]]["passes"]
+    assert measures[keys[1]]["failures"] == "block: reference far from the arm"
+    assert not measures[keys[2]]["passes"]  # a gap that is not a number is not within the limit
+    assert measures[keys[3]]["failures"] == "offsets: never arrives; block: reference far from the arm"
+
+
+def test_a_setting_can_qualify_by_some_of_its_seeds_and_the_settings_be_ranked_by_their_block_gap():
+    mix = esns([(1.0, 0.9, 5.0, 2), (1.2, 0.6, 5.0, 3), (1.35, 0.8, 5.0, 1)])
+    for key, measures in mix.items():
+        measures["block_gap"] = {1.0: 0.4, 1.2: 0.3, 1.35: 0.1}[dict(key)["spectral_radius"]]
+
+    settings = rank_settings(mix, 10.0, 2, 2, qualifying_seeds=2, rank_by="block_gap")
+    row = {dict(k)["spectral_radius"]: v for k, v in settings.items()}
+
+    assert row[1.2]["rank"] == 1 and row[1.2]["chosen"] == 1  # the smallest gap of those qualifying
+    assert row[1.0]["qualifies"] and row[1.0]["rank"] == 2 and row[1.0]["chosen"] == 2
+    assert not row[1.35]["qualifies"] and row[1.35]["chosen"] is None  # the smallest gap, but too few seeds
+
+
+def test_the_replays_gap_comes_from_its_run_under_the_block(tmp_path):
+    tracker = {"laws": [{"type": "pd"}]}
+    for name, disturbance, gap in (
+        ("pushes", '[[disturbance]]\ntype = "push"\n', 3.0),
+        ("block", '[disturbance]\ntype = "block"\n', 20.0),
+    ):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "config.toml").write_text(f'{disturbance}[[tracker.laws]]\ntype = "pd"\n')
+        (tmp_path / name / "metrics.csv").write_text(f"arm,start,end_gap_deg\nesn,0,1.0\nreplay,0,{gap}\n")
+    paths = [str(tmp_path / "pushes"), str(tmp_path / "block")]
+
+    assert replay_block_gap(paths, tracker) == 20.0
+    with pytest.raises(ValueError, match="under a block"):
+        replay_block_gap(paths[:1], tracker)
+    with pytest.raises(ValueError, match="sweeps' \\[tracker\\]"):
+        replay_block_gap(paths, {"laws": []})

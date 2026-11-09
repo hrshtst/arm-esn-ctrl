@@ -46,6 +46,19 @@ The rule (report 011's, with the offset starts counted for every ESN):
    typical seeds of the top settings. If fewer settings qualify, the rest are taken
    from the settings with at least ``fallback_seeds`` passing seeds, ranked alike.
 
+A search can change the rule in its ``[rule]`` table:
+
+- ``excuse_leaving``: the scenarios where leaving the goal during the hold is
+  excused, ``["pushes"]`` by default;
+- ``max_block_gap``: also fail an ESN whose ``block_gap`` exceeds this: its
+  reference's distance from the arm's joint angles at the block's release, over the
+  replay's. The replay's reference ignores the arm, so 1 is a reference that keeps
+  to the taught motion and 0 one that stays with the arm;
+- ``qualifying_seeds``: how many of a setting's seeds must pass for it to qualify,
+  all of them by default;
+- ``rank_by``: the median that ranks the settings: ``following``, the largest first
+  (the default), or ``block_gap``, the smallest first.
+
 The run directory receives:
 
 - ``esns.csv``: one row per ESN: its hyperparameters, whether it passes and how
@@ -74,6 +87,7 @@ SCENARIOS = ("nominal", "block", "pushes", "offsets")
 # The [evaluation] keys every run must share: what the measures and the rule depend on.
 SHARED_EVALUATION = ("duration", "hold", "return_tolerance", "ringing_cutoff_hz", "ringing_window", "following_window")
 EFFORT = ("task_torque_nms", "task_effort_n2m2s", "task_work_j")  # robot_esn.arm_metrics' columns
+DEFAULT_EXCUSED = ("pushes",)  # where leaving the goal during the hold is excused, unless [rule] says otherwise
 # How the hyperparameters are listed; others follow, and the seed last.
 ORDER = ("leak_rate", "spectral_radius", "input_scaling", "n_neurons", "sparsity", "ridge", "warmup")
 
@@ -96,6 +110,9 @@ def main() -> None:
         *disturbance_windows(configs[runs["pushes"][0]], "push"),
     ]
     by_scenario = {scenario: esn_runs(paths, configs) for scenario, paths in runs.items()}
+    rule = config["rule"]
+    excused = tuple(rule.get("excuse_leaving", DEFAULT_EXCUSED))
+    rank_by = rule.get("rank_by", "following")
     missing = [s for s in ("block", "pushes") if set(by_scenario[s]) != set(by_scenario["nominal"])]
     if missing:
         msg = f"the ESNs run undisturbed must also run under the {' and the '.join(missing)}"
@@ -109,12 +126,15 @@ def main() -> None:
             by_scenario["offsets"].get(key),
             disturbances,
             radius,
+            excused,
         )
         for key in by_scenario["nominal"]
     }
+    if "max_block_gap" in rule:
+        replay_gap = replay_block_gap(config["runs"]["replay"], first["tracker"])
+        gate_block_gap(esns, by_scenario["block"], replay_gap, rule["max_block_gap"])
     guard = replay_ringing(config["runs"]["replay"], first["tracker"], len(disturbances))
-    rule = config["rule"]
-    settings = rank_settings(esns, guard, rule["chosen"], rule["fallback_seeds"])
+    settings = rank_settings(esns, guard, rule["chosen"], rule["fallback_seeds"], rule.get("qualifying_seeds"), rank_by)
 
     varying = varying_names(list(esns))
     esn_rows = [dict(key_values(key, varying)) | measures for key, measures in esns.items()]
@@ -126,7 +146,7 @@ def main() -> None:
     ]
     for name, table in (("esns.csv", esn_rows), ("settings.csv", setting_rows), ("chosen.csv", chosen)):
         write_csv(run_dir / name, table)
-    print_summary(esns, settings, guard, varying)
+    print_summary(esns, settings, guard, varying, rank_by)
     print(f"\nWrote the results to {run_dir}")
 
 
@@ -227,13 +247,13 @@ def key_values(key: Key, names: list[str]) -> list[tuple[str, Any]]:
     return [(name, int(values[name]) if name == "seed" else values[name]) for name in names if name in values]
 
 
-def failure(run: dict[str, Any], scenario: str, radius: float) -> str:
-    """How a sweep's run fails by the rule, or "" if it does not: under the pushes, leaving the goal is excused."""
+def failure(run: dict[str, Any], scenario: str, radius: float, excused: tuple[str, ...] = DEFAULT_EXCUSED) -> str:
+    """How a sweep's run fails by the rule, or "" if it does not: in the ``excused`` scenarios, leaving the goal is."""
     if not np.isfinite(run["arrival_time_s"]):
         return "never arrives"
     if run["final_distance_m"] > radius:
         return "ends away"
-    if scenario == "pushes":
+    if scenario in excused:
         return ""
     if run["left_goal"]:
         return "leaves the goal during the hold"
@@ -247,6 +267,7 @@ def esn_measures(
     offsets: list[dict[str, Any]] | None,
     disturbances: list[tuple[str, str, float]],
     radius: float,
+    excused: tuple[str, ...] = DEFAULT_EXCUSED,
 ) -> dict[str, Any]:
     """One ESN's outcome by the rule and its measures, from its runs (see the module).
 
@@ -256,12 +277,12 @@ def esn_measures(
     failures = [
         f"{scenario}: {how}"
         for scenario, run in (("nominal", nominal), ("block", block), ("pushes", pushes))
-        if (how := failure(run, scenario, radius))
+        if (how := failure(run, scenario, radius, excused))
     ]
     if offsets is None:
         failures.append("offsets: not run")
     else:
-        failures += [f"{run['origin']}: {how}" for run in offsets if (how := failure(run, "offsets", radius))]
+        failures += [f"{run['origin']}: {how}" for run in offsets if (how := failure(run, "offsets", radius, excused))]
     measures: dict[str, Any] = {"passes": not failures, "failures": "; ".join(failures)}
     measures["path_rmse_mm"] = 1000 * nominal["taught_path_rmse_m"]
     per: dict[str, list[float]] = {"following": [], "ringing_mm": [], "return_s": [], "off_path_mm": []}
@@ -293,6 +314,17 @@ def esn_measures(
     return measures
 
 
+def gate_block_gap(
+    esns: dict[Key, dict[str, Any]], block_runs: dict[Key, list[dict[str, Any]]], replay_gap: float, limit: float
+) -> None:
+    """Give each ESN its ``block_gap``, over the replay's ``replay_gap`` (deg), and fail those beyond ``limit``."""
+    for key, measures in esns.items():
+        measures["block_gap"] = block_runs[key][0]["end_gap_deg"] / replay_gap
+        if not measures["block_gap"] <= limit:  # also a gap that is NaN
+            measures["failures"] = "; ".join(filter(None, [measures["failures"], "block: reference far from the arm"]))
+            measures["passes"] = False
+
+
 def typical_seed(seeds: list[tuple[int, dict[str, Any]]]) -> int:
     """Of the passing seeds, the one nearest the medians of the path RMSE, the following, and the ringing.
 
@@ -308,7 +340,12 @@ def typical_seed(seeds: list[tuple[int, dict[str, Any]]]) -> int:
 
 
 def rank_settings(
-    esns: dict[Key, dict[str, Any]], guard: float, chosen: int, fallback_seeds: int
+    esns: dict[Key, dict[str, Any]],
+    guard: float,
+    chosen: int,
+    fallback_seeds: int,
+    qualifying_seeds: int | None = None,
+    rank_by: str = "following",
 ) -> dict[Key, dict[str, Any]]:
     """Each setting's seeds, qualification, guard, rank, typical seed, and medians; the chosen (see the module)."""
     grouped: dict[Key, list[tuple[int, dict[str, Any]]]] = {}
@@ -323,7 +360,7 @@ def rank_settings(
         settings[setting] = {
             "seeds": len(seeds),
             "passing_seeds": passing,
-            "qualifies": passing == len(seeds),
+            "qualifies": passing >= (len(seeds) if qualifying_seeds is None else qualifying_seeds),
             "within_guard": medians["ringing_mm"] <= guard,
             "rank": None,
             "chosen": None,
@@ -331,7 +368,8 @@ def rank_settings(
         } | medians
 
     def ranked(eligible: list[Key]) -> list[Key]:
-        return sorted(eligible, key=lambda k: -settings[k]["following"])
+        sign = 1 if rank_by == "block_gap" else -1  # the smallest gap, or the largest following, first
+        return sorted(eligible, key=lambda k: sign * settings[k][rank_by])
 
     qualifying = ranked([k for k, row in settings.items() if row["qualifies"] and row["within_guard"]])
     for rank, k in enumerate(qualifying, start=1):
@@ -369,8 +407,29 @@ def replay_ringing(paths: list[str], tracker: dict[str, Any], count: int) -> flo
     return float(np.mean(ringings))
 
 
+def replay_block_gap(paths: list[str], tracker: dict[str, Any]) -> float:
+    """The replay's reference-to-arm joint gap at the block's release (deg), from its run of ``robot_esn.py``.
+
+    The run under a block is found among ``paths``, and must have the sweeps' ``tracker``.
+    """
+    for path in map(resolve_run_path, paths):
+        config = read_toml(path / "config.toml")
+        if isinstance(config.get("disturbance"), dict) and config["disturbance"].get("type") == "block":
+            if config["tracker"] != tracker:
+                msg = f"the replay's run {path.name} must have the sweeps' [tracker]"
+                raise ValueError(msg)
+            (row,) = [r for r in read_csv(path / "metrics.csv") if r["arm"] == "replay" and r["start"] == 0]
+            return float(row["end_gap_deg"])
+    msg = "no replay's run under a block, which max_block_gap needs"
+    raise ValueError(msg)
+
+
 def print_summary(
-    esns: dict[Key, dict[str, Any]], settings: dict[Key, dict[str, Any]], guard: float, varying: list[str]
+    esns: dict[Key, dict[str, Any]],
+    settings: dict[Key, dict[str, Any]],
+    guard: float,
+    varying: list[str],
+    rank_by: str = "following",
 ) -> None:
     names = [name for name in varying if name != "seed"]
 
@@ -390,11 +449,14 @@ def print_summary(
     print(f"The guard: the replay's ringing, {guard:.2f} mm")
     beyond = [k for k, row in settings.items() if row["qualifies"] and not row["within_guard"]]
     print(f"Qualifying settings beyond the guard: {', '.join(map(label, beyond)) or 'none'}")
-    print("\nThe ranking, by the median following (ringing mm, return s, undisturbed path RMSE mm; typical seed):")
+    print(f"\nThe ranking, by the median {rank_by} (ringing mm, return s, undisturbed path RMSE mm; typical seed):")
     for k, row in sorted(((k, r) for k, r in settings.items() if r["rank"]), key=lambda kv: kv[1]["rank"]):
+        gap = f"block gap {row['block_gap']:.2f}, " if "block_gap" in row else ""
+        seeds = f"{row['passing_seeds']} of {row['seeds']} seeds, "
         print(
-            f"  {row['rank']:3d}. {label(k)}: following {row['following']:.2f}, ringing {row['ringing_mm']:.2f},"
-            f" return {row['return_s']:.2f}, RMSE {row['path_rmse_mm']:.2f}; seed {row['typical_seed']}"
+            f"  {row['rank']:3d}. {label(k)}: {seeds}{gap}following {row['following']:.2f},"
+            f" ringing {row['ringing_mm']:.2f}, return {row['return_s']:.2f}, RMSE {row['path_rmse_mm']:.2f};"
+            f" seed {row['typical_seed']}"
         )
     print("\nThe qualifying settings' best by the earlier reports' measures, each the smallest:")
     qualifying = [k for k, row in settings.items() if row["rank"]]
