@@ -265,6 +265,7 @@ that run them are shared:
 | [manual_demonstration_v2_consistent_trackers](experiments/manual_demonstration_v2_consistent_trackers/README.md) | the consistent search's two ESNs, the replay, and the progress replay with nine trackers, joint PD with and without the reference velocity and computed torque, in every scenario of the search and under the pushes given by hand (Stage 2) | [018](reports/018-trackers-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_dynamics](experiments/manual_demonstration_v2_consistent_dynamics/README.md) | the consistent search's two ESNs read as report 015 read report 011's, and all its 10,080 ESNs screened as report 016 screened report 011's, set against their outcomes with the offset starts counted; the passing ESNs released at their unstable fixed points and blocked along the reach on the robot (Stages 1 and 2) | [019](reports/019-dynamics-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_robot_loop](experiments/manual_demonstration_v2_consistent_robot_loop/README.md) | the ESN and the robot read as one dynamical system: the consistent search's two ESNs on the robot from rest anywhere, their fixed points, rates, and pulses with the arm, and every fixed point of report 019's screens with the arm, against its releases and outcomes (Stages 1 and 2) | [020](reports/020-the-esn-and-the-robot-as-one-system/README.md) |
+| [manual_demonstration_four_dof_consistent_search](experiments/manual_demonstration_four_dof_consistent_search/README.md) | the consistent search on skelarm's four-link arm: the grid and its extension below the lowest input scaling, the rule, a second rule that asks the reference to follow the arm, and the chosen ESNs against both replays in every scenario |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -496,6 +497,15 @@ The reports so far:
   predicts failing less well, the fixed points beyond the arm's stops making the
   difference. Report 019's releases where the arm stayed put were mostly exact rests:
   nudged by 10⁻⁹°, they leave.
+- [021 The search on a four-link arm: the rule's ESNs barely follow, and a rule that asks them to](reports/021-search-on-a-four-link-arm/README.md)
+  (Stages 1 and 2): report 017's search on a redundant four-link arm with tight joint
+  limits, needing the whole mass matrix as the tracker's gains and locked stops. The rule
+  chooses nothing over the grid; extended below its lowest input scaling, it chooses two
+  ESNs that barely follow the arm. A second rule, decided after seeing that, chooses two
+  whose references approach the arm in three of the four joints and whose torque under
+  the block falls to about a third of the replay's, with longer swings after pushes and
+  long presses against the joint stops from offset starts. Their settings do not hold on
+  held-out seeds.
 
 Each report has five parts:
 

@@ -1,0 +1,33 @@
+# The four-link consistent search's ESN #2 by step 5's rule, which asks the reference to
+# follow the arm: of the 8 settings that qualify, the one with the second smallest median
+# block gap (0.32; median ringing 4.02 mm): leak rate 0.02, spectral radius 1.35, input
+# scaling 0.05, and seed 7, its setting's typical seed (select run
+# 20261109-202923-select_following). Trained and run on its own here from the 36 offset
+# starts, so that its ESN is saved for robot_esn.py and the robot app. See README.md, step 5.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_four_dof_consistent_search/following_esn2_lr0.02_sr1.35_is0.05_seed7.toml
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_four_dof.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261103-134628-reach_manual_four_dof"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.35
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.02
+input_scaling = 0.05
+bias = true
+ridge = 1e-2
+seed = 7
+
+[evaluation]
+duration = 23.9        # autonomous run (s), as the search's; the take lasts 21.4 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+[evaluation.start_grid]
+span_deg = 15.0        # the take's start offset by -15, 0, and 15 deg in each joint (36 within the joint limits)
+step_deg = 15.0

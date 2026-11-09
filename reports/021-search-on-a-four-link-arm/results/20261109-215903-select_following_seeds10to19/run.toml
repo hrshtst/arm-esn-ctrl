@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_four_dof_consistent_search/select_following_seeds10to19.toml"
+command = "experiments/select_esns.py experiments/manual_demonstration_four_dof_consistent_search/select_following_seeds10to19.toml"
+started = 2026-11-09 21:59:03+09:00
+host = "delbosque"
+commit = "9f4c68d256fb60f57b5cb66dc9e33317cf0f1566"
+uncommitted_changes = false

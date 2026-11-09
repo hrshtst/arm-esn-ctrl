@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_four_dof_consistent_search/guard_pushes_robot.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/guard_pushes_robot.toml"
+started = 2026-11-03 13:53:00+09:00
+host = "delbosque"
+commit = "478a39d1277e3f005dfd9c50bbecbeaadba8f6e7"
+uncommitted_changes = false

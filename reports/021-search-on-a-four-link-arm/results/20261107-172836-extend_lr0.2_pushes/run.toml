@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_four_dof_consistent_search/extend_lr0.2_pushes.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/extend_lr0.2_pushes.toml --workers 30"
+started = 2026-11-07 17:28:36+09:00
+host = "delbosque"
+commit = "ec122b92eb885a29dc292ada55149f05265f9684"
+uncommitted_changes = false

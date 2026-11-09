@@ -1,0 +1,58 @@
+# One of the 8 settings that qualify by step 5's rule, with held-out seeds: leak rate
+# 0.01, spectral radius 1.2, input scaling 0.05, ten random reservoirs (seeds 10 to 19), run
+# with the search's tracker undisturbed from the 36 offset starts. The extension's extend_lr0.01_offsets.toml
+# but for the setting and the seeds. See README.md, step 5.
+#
+#   uv run python experiments/sweep_robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/heldout_lr0.01_sr1.2_is0.05_offsets.toml --workers 30
+
+[demonstrations]
+# A run directory of experiments/import_demonstrations.py, relative to the storage
+# root: the take of reach_manual_four_dof.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261103-134628-reach_manual_four_dof"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# The protocol's fixed settings (see README.md); a swept key's value here is replaced
+# by each swept value.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 400
+spectral_radius = 1.2
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.01
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 0
+
+[sweep]
+# The heatmap axes of sweep.png: x, then y.
+spectral_radius = [1.2]
+input_scaling = [0.05]
+seed = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]  # the random reservoir, its input weights, and its biases
+
+[tracker]
+# The search's tracker: joint PD at omega = 20 rad/s and a damping ratio of 0.4, its
+# gains the whole mass matrix M at the take's final posture (Kp = omega^2 M and
+# Kd = 2 zeta omega M), given the reference's velocity, its torque computed every
+# 10 ms, the ESN's period, and held between.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+mass_matrix = true
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+
+[evaluation]
+duration = 23.9        # task (s), after the warm-up; the take lasts 21.4 s, and the last push comes at 14.9 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0, 0.0, 0.0]]  # the take's start first; then the grid below
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz); the tracker rings at 2.9 Hz
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)
+
+[evaluation.start_grid]
+span_deg = 15.0        # offsets of -15, 0, and 15 deg in each joint, in every combination
+step_deg = 15.0        # (36 within the joint limits, the take's start first)

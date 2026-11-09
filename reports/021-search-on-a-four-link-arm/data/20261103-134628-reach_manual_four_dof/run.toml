@@ -1,0 +1,6 @@
+config = "experiments/demonstrations/reach_manual_four_dof.toml"
+command = "experiments/import_demonstrations.py experiments/demonstrations/reach_manual_four_dof.toml"
+started = 2026-11-03 13:46:28+09:00
+host = "delbosque"
+commit = "ed211437a288d35f066f92fcd86b938beba258ab"
+uncommitted_changes = false

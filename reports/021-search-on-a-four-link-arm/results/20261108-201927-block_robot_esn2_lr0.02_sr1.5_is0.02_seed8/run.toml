@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_four_dof_consistent_search/block_robot_esn2_lr0.02_sr1.5_is0.02_seed8.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/block_robot_esn2_lr0.02_sr1.5_is0.02_seed8.toml"
+started = 2026-11-08 20:19:27+09:00
+host = "delbosque"
+commit = "b3128a907e062898099017e1e7e95c7e89f7c900"
+uncommitted_changes = false

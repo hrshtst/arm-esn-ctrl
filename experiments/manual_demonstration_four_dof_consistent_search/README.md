@@ -8,7 +8,8 @@ This study runs the same procedure on skelarm's four-link arm,
 chosen ESNs across trackers, the chosen ESNs as dynamical systems, and the ESN and the
 robot as one system. This directory is the first part, and its README holds the
 assumptions of all four. They are v2's, with the changes below; the configurations are
-written once the take is imported, from the values this README fixes.
+written once the take is imported, from the values this README fixes. Results of this
+part: [report 021](../../reports/021-search-on-a-four-link-arm/README.md).
 
 ## The protocol
 

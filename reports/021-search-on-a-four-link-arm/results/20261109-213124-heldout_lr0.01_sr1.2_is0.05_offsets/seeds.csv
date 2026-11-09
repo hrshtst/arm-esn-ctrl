@@ -1,0 +1,2 @@
+spectral_radius,input_scaling,seeds,failing_seeds,median_worst_path_rmse_m,mean_worst_path_rmse_m,sd_worst_path_rmse_m,min_worst_path_rmse_m,max_worst_path_rmse_m,median_latest_arrival_s,worst_final_distance_m
+1.2,0.05,10,10,0.09884676488766109,0.10220011741146029,0.029296270073300476,0.07315181015804631,0.17844925293100747,11.190000000000001,0.011900520706865939

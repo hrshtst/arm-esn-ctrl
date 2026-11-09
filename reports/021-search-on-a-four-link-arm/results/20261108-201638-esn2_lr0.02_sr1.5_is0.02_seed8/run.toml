@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_four_dof_consistent_search/esn2_lr0.02_sr1.5_is0.02_seed8.toml"
+command = "experiments/autonomous_esn.py experiments/manual_demonstration_four_dof_consistent_search/esn2_lr0.02_sr1.5_is0.02_seed8.toml"
+started = 2026-11-08 20:16:38+09:00
+host = "delbosque"
+commit = "7791580e605d4959d633f7c8dbf1fd066d6b6256"
+uncommitted_changes = false

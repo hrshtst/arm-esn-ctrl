@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_four_dof_consistent_search/sweep_lr0.5_nominal.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_four_dof_consistent_search/sweep_lr0.5_nominal.toml --workers 30"
+started = 2026-11-04 14:35:58+09:00
+host = "delbosque"
+commit = "189fb3162c9fce9fbcc95a8c1464456800206465"
+uncommitted_changes = false
