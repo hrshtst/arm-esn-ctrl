@@ -5,7 +5,7 @@
 
     uv run python presentations/four-dof-arm/make_media.py
 
-From the take and from step 4's runs of the four-link consistent search (ESN #1 and
+From the take and from step 5's runs of the four-link consistent search (ESN #1 and
 ESN #2 against the replay and the progress replay, with the search's tracker;
 ``experiments/manual_demonstration_four_dof_consistent_search/README.md``), under the
 storage root, it writes into ``presentations/four-dof-arm/`` there a folder per scene:
@@ -62,17 +62,17 @@ TAKES = {  # the take: its file, relative to the storage root, and what it is
 TRACKER = "pd_w20_z0.4"  # the search's tracker's folder in a run of robot_esn.py
 TARGET, RADIUS = np.array([0.0, 0.4]), 0.02  # the goal (m)
 
-# The chosen ESNs: their key, label, configuration name, and setting.
+# The chosen ESNs of step 5: their key, label, configuration name, and setting.
 ESNS = {
     "esn1": (
         "ESN #1",
-        "esn1_lr0.01_sr1.5_is0.02_seed7",
-        "leak rate 0.01, spectral radius 1.5, input scaling 0.02, seed 7",
+        "following_esn1_lr0.015_sr1.2_is0.05_seed0",
+        "leak rate 0.015, spectral radius 1.2, input scaling 0.05, seed 0",
     ),
     "esn2": (
         "ESN #2",
-        "esn2_lr0.02_sr1.5_is0.02_seed8",
-        "leak rate 0.02, spectral radius 1.5, input scaling 0.02, seed 8",
+        "following_esn2_lr0.02_sr1.35_is0.05_seed7",
+        "leak rate 0.02, spectral radius 1.35, input scaling 0.05, seed 7",
     ),
 }
 # The arms of a run: their log's prefix, label, and color (report 018's).
@@ -108,7 +108,7 @@ def lowercase(text: str) -> str:
 
 
 def run_dir(scenario: str, esn: str) -> Path:
-    """Step 4's run of an ESN in a scenario, under the storage root."""
+    """Step 5's run of an ESN in a scenario, under the storage root."""
     name = f"{scenario}_robot_{ESNS[esn][1]}"
     (path,) = sorted(resolve_run_path(SEARCH).glob(f"*-{name}"))
     return path
@@ -408,7 +408,7 @@ README = """\
 # The four-link arm's results, for slides
 
 Videos and plots of the four-link consistent search's chosen ESNs on the robot, against
-the two replays: step 4 of `experiments/manual_demonstration_four_dof_consistent_search/`
+the two replays: step 5 of `experiments/manual_demonstration_four_dof_consistent_search/`
 in the arm-esn-ctrl repository (its README.md gives the protocol). They are not kept in
 Git; `presentations/four-dof-arm/make_media.py` there makes them.
 
@@ -425,7 +425,8 @@ Git; `presentations/four-dof-arm/make_media.py` there makes them.
   - **Progress replay**, green: the take replayed by time, but never more than 2.5 deg
     along its joint path ahead of the arm's progress, so that it waits for the arm.
   Both ESNs have 400 neurons, sparsity 0.05, and a random bias, trained by teacher
-  forcing with ridge 1e-2 and a 1 s warm-up; the rule of the search chose them.
+  forcing with ridge 1e-2 and a 1 s warm-up; the rule of step 5, which asks the
+  reference to follow the arm, chose them.
 - **The tracker** of every arm: joint PD at omega = 20 rad/s and a damping ratio of 0.4,
   its gains the arm's whole mass matrix at the take's end, given the reference's
   velocity, its torque computed every 10 ms and held between.
