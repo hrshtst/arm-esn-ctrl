@@ -261,7 +261,7 @@ so they stand outside the protocol above.**
    5.75 s, against 9.58 s for the runs that pass) and end about 3 mm from the target.
 2. An ESN also fails if its reference, at the block's release, is farther from the arm's
    joint angles than half the replay's. This fraction is `end_gap_deg` over the replay's,
-   measured in every run of the grids; the two-link arm's ESN #1 and ESN #2 have 0.39 and
+   measured in every run of the grids; the two-link arm's ESN #1 and ESN #2 have 0.38 and
    0.34, and this search's ESN #1 and ESN #2 have 0.78 and 0.66.
 3. A setting qualifies if at least 8 of its 10 seeds pass, and the settings are ranked by
    their median of that fraction, the smallest first.
@@ -365,3 +365,7 @@ that fail the original rule from the offset starts leave the goal and still end 
 of the four-link ESNs, old and new, leave the goal during the pushes, and end in it. The
 new ESNs' peak torque under the pushes is 67% and 69% above the replay's, where the old
 ESNs' is 5% and 20% above it. The reason was not examined.
+
+The new ESN #1 and ESN #2 replace the earlier ones as this study's ESN #1 and ESN #2,
+by the author's decision after these results. `presentations/four-dof-arm/make_media.py`
+makes the slides' media from their runs.
