@@ -320,3 +320,48 @@ uv run python experiments/select_esns.py experiments/manual_demonstration_four_d
 | Configurations | What they run |
 | --- | --- |
 | `select_following_seeds10to19.toml` | the rule of `select_following.toml`, over the held-out seeds 10 to 19 of the 8 settings |
+
+**Results.** Over the held-out runs alone (run `20261109-215903-select_following_seeds10to19`),
+53 of the 80 ESNs pass and 2 of the 8 settings qualify. The gap holds on the new seeds;
+the passing does not, most of all at input scaling 0.05, the scaling of the new ESN #1
+and ESN #2.
+
+| Leak rate | Spectral radius | Input scaling | Seeds passing, 0 to 9 | Seeds passing, 10 to 19 | Median gap, 0 to 9 | Median gap, 10 to 19 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.015 | 1.2 | 0.02 | 9 | 8 | 0.41 | 0.41 |
+| 0.01 | 0.99 | 0.02 | 8 | 8 | 0.44 | 0.43 |
+| 0.02 | 1.2 | 0.02 | 9 | 7 | 0.36 | 0.33 |
+| 0.02 | 1.35 | 0.02 | 8 | 7 | 0.45 | 0.47 |
+| 0.01 | 1.2 | 0.05 | 8 | 7 | 0.40 | 0.37 |
+| 0.015 | 1.2 | 0.05 (new ESN #1) | 8 | 6 | 0.28 | 0.29 |
+| 0.015 | 1.35 | 0.05 | 8 | 5 | 0.38 | 0.38 |
+| 0.02 | 1.35 | 0.05 (new ESN #2) | 8 | 5 | 0.32 | 0.27 |
+
+Of the 27 ESNs that fail, 13 end away from the goal after the pushes, 12 fail from the
+offset starts, and 5 have a gap above the limit (3 fail on both the pushes and the
+offset starts). Of the 143 offset runs that never arrive, 96 start with joint 3 at -15
+degrees.
+
+The runs of the new ESN #1 and ESN #2 against the replay, beside the earlier ESNs and the
+two-link arm's. "Following" is the fit of the reference's departure from the taught motion
+to the arm's, in joint space, from the onset to 0.5 s after the disturbance ends.
+
+| | Old #1 | Old #2 | New #1 | New #2 | Two-link #1 | Two-link #2 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Block: gap at the release, over the replay's | 0.78 | 0.66 | 0.31 | 0.29 | 0.38 | 0.34 |
+| Block: following, joints 1 to 4 (two-link: 1, 2) | 0.09, -0.03, -0.05, 0.06 | 0.19, -0.09, -0.11, 0.19 | 0.54, 0.32, -0.03, 0.65 | 0.57, 0.43, 0.03, 0.60 | 1.03, 0.55 | 0.96, 0.60 |
+| Block: following, all joints | 0.01 | 0.02 | 0.32 | 0.36 | 0.84 | 0.79 |
+| Block: peak torque, % of the replay's | 88 | 81 | 39 | 35 | 17 | 7 |
+| Pushes: following, all joints, pushes 1 to 3 | 0.16, 0.15, 0.12 | 0.36, 0.39, 0.34 | 0.43, 0.56, 0.48 | 0.52, 0.61, 0.62 | 0.70, 0.61, 0.76 | 0.67, 0.62, 0.65 |
+| Pushes: peak torque, % of the replay's | 105 | 120 | 167 | 169 | 89 | 77 |
+| Offsets: median peak torque, % of the replay's | 82 | 70 | 59 | 67 | 49 | 54 |
+| Offsets: median of the largest reference-to-arm distance in the first second, % of the replay's | 95 | 103 | 90 | 80 | 54 | 61 |
+| Offsets: starts that pass the original rule, of those with an offset | 35 of 35 | 35 of 35 | 32 of 35 | 35 of 35 | 48 of 48 | 48 of 48 |
+
+At the block's release, the new ESN #1's reference is 2.9, 2.8, 4.9, and 0.0 degrees from
+the arm in joints 1 to 4, against the replay's 6.6, 6.3, 13.4, and 12.0. Joint 3 keeps to
+the taught motion, with a following of about zero in both new ESNs. The new ESNs' 3 runs
+that fail the original rule from the offset starts leave the goal and still end in it. All
+of the four-link ESNs, old and new, leave the goal during the pushes, and end in it. The
+new ESNs' peak torque under the pushes is 67% and 69% above the replay's, where the old
+ESNs' is 5% and 20% above it. The reason was not examined.
