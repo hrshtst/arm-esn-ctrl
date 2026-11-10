@@ -403,8 +403,8 @@ The progress replay is the replay in every run here (they differ only at the ful
 so only the replay is given.
 
 **Pushes.** The largest hand displacement grows in proportion to the force for every arm,
-and the ESNs' stays about twice the replay's. Each cell is at the full, half, and quarter
-force.
+and the ESNs' stays 1.8 to 2.9 times the replay's. Each cell is at the full, half, and
+quarter force.
 
 | | ESN #1 | ESN #2 | Replay |
 | --- | --- | --- | --- |
@@ -415,7 +415,9 @@ force.
 | Hand path length (mm) | 2925 / 1774 / 1110 | 2369 / 1498 / 975 | 1018 / 793 / 678 |
 | Peak torque (N m) | 3.51 / 1.88 / 1.02 | 3.55 / 1.83 / 0.96 | 2.10 / 1.03 / 0.53 |
 | Accumulated torque (N m s) | 12.3 / 6.6 / 3.5 | 11.0 / 6.0 / 3.2 | 7.3 / 4.7 / 3.4 |
-| Leaves the goal after arriving | yes / yes / yes | yes / yes / yes | no / no / no |
+| Leaves the goal within 2 s of arriving | yes / yes / yes | yes / yes / yes | no / no / no |
+| Farthest from the target between arrival and push 3 (mm) | 130 / 75 / 38 | 87 / 44 / 21 | stays in the goal |
+| In the goal from then on, from (s) | 23.5 / 23.2 / 20.5 | 21.3 / 20.8 / 17.6 | 15.5 / 15.4 / 9.5 |
 | Ends in the goal (mm from the target) | 2.2 / 1.8 / 1.9 | 7.4 / 5.6 / 4.2 | 3.3 / 3.3 / 3.3 |
 
 - The ESNs' peak torque falls less than in proportion to the force, from 167% and 169% of
@@ -427,9 +429,11 @@ force.
   1.03, but for joint 2 under push 1 (0.53 and 0.61), and joint 4 with 0.3 to 0.4, as at
   every size. Taking each signal less the same arm's undisturbed run in place of the take
   changes the gains by at most 0.05, and the reading not at all.
-- The slow swing after each push is still there in proportion: it depends on the ESN, not
-  on the force's size. Both ESNs still leave the goal after the third push, whose
-  displacement is 35 and 47 mm at a quarter of the force, above the goal's 20 mm.
+- The slow swing after each push, of about 8 s, is still there in proportion to the force.
+  It is what takes the hand out of the goal: both ESNs arrive while the arm still swings
+  from the second push, and the hand comes out within the 2 s after arriving, at every
+  size. It comes out again after the third push. The replay is out of the goal only around
+  the third push, at the full and half force.
 
 **Offset starts.** Over the 35 offset starts shared by the three sizes (the 36 directions
 less the take's own start); each cell is at ±15°, ±5°, and ±2.5°.
