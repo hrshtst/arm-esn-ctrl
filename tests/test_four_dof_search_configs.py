@@ -238,6 +238,34 @@ def test_the_chosen_esns_run_on_the_robot_as_in_v2s_step_4_with_the_grids_tracke
     assert config.keys() == v2.keys()
 
 
+def without(config, key):
+    return {k: v for k, v in config.items() if k != key}
+
+
+@pytest.mark.parametrize("name", FOLLOWING)
+@pytest.mark.parametrize(("scenario", "scale"), [("pushes_half", 0.5), ("pushes_quarter", 0.25)])
+def test_step_6s_smaller_pushes_are_step_5s_with_only_the_forces_scaled(scenario, scale, name):
+    config = load(SEARCH / f"{scenario}_robot_{name}.toml")
+    step_5 = load(SEARCH / f"pushes_robot_{name}.toml")
+
+    assert without(config, "disturbance") == without(step_5, "disturbance")
+    assert config["disturbance"] == [push | {"force": push["force"] * scale} for push in step_5["disturbance"]]
+
+
+@pytest.mark.parametrize("name", FOLLOWING)
+@pytest.mark.parametrize(("scenario", "size"), [("offsets_5deg", 5.0), ("offsets_2.5deg", 2.5)])
+def test_step_6s_smaller_offsets_are_step_5s_with_only_the_grid_and_the_plotted_starts_changed(scenario, size, name):
+    config = load(SEARCH / f"{scenario}_robot_{name}.toml")
+    step_5 = load(SEARCH / f"offsets_robot_{name}.toml")
+    start = np.radians(load(ARM)["initial"]["q"])
+    limits = joint_limits_deg(Skeleton.from_toml(ARM))
+
+    assert without(without(config, "evaluation"), "plots") == without(without(step_5, "evaluation"), "plots")
+    assert config["evaluation"] == step_5["evaluation"] | {"start_grid": {"span_deg": size, "step_deg": size}}
+    assert config["plots"] == {"offsets_deg": [[size] * 4, [0.0, 0.0, -size, -size], [0.0, -size, -size, -size]]}
+    assert len(start_postures(config["evaluation"], {"demo_00": start[np.newaxis]}, limits)) == 54
+
+
 @pytest.mark.parametrize("scenario", ["block", "pushes"])
 def test_the_guards_runs_meet_the_grids_tracker_and_disturbances_beside_the_guards_esn(scenario):
     config, grid = load(SEARCH / f"guard_{scenario}_robot.toml"), load(SEARCH / f"sweep_lr0.03_{scenario}.toml")

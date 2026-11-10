@@ -370,3 +370,29 @@ ESNs' is 5% and 20% above it. The reason was not examined.
 The new ESN #1 and ESN #2 replace the earlier ones as this study's ESN #1 and ESN #2,
 by the author's decision after these results. `presentations/four-dof-arm/make_media.py`
 makes the slides' media from their runs.
+
+## Step 6: smaller pushes and offset starts
+
+Step 5's ESN #1 and ESN #2, no training, under smaller disturbances than those of the
+search that chose them. The ESNs stay the same, so these runs describe those two ESNs,
+not which ESN would be best at the smaller sizes.
+
+- **Pushes:** step 5's three, at the same times, durations, and directions, with every
+  force at half (1.5, 2.5, and 2 N) and at a quarter (0.75, 1.25, and 1 N) of its size.
+- **Offset starts:** every combination of −s, 0, and s in each joint, within the joint
+  limits, for s of 5° and of 2.5° (step 5's: 15°). These are 54 starts rather than 36,
+  because joint 2 may now start below the take's 10°. Sizes are compared over the 36
+  directions the three sets share, and the 18 with joint 2 lower are reported apart.
+- **The block and the undisturbed runs** are step 5's, not run again.
+
+```bash
+D=experiments/manual_demonstration_four_dof_consistent_search
+systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" \
+    experiments/run_queue.sh experiments/robot_esn.py -- \
+    $D/pushes_{half,quarter}_robot_following_esn?_*.toml $D/offsets_{5,2.5}deg_robot_following_esn?_*.toml
+```
+
+| Configurations | What they run |
+| --- | --- |
+| `pushes_{half,quarter}_robot_following_esn{1,2}_*.toml` (4) | step 5's pushes at half and at a quarter of their force: the ESN, the replay, and the progress replay |
+| `offsets_{5,2.5}deg_robot_following_esn{1,2}_*.toml` (4) | the same three, from the 54 starts offset by 5° and by 2.5° |
