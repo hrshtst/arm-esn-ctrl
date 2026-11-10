@@ -33,6 +33,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
@@ -139,11 +140,11 @@ def disturbances(scenario: str) -> list[tuple[dict[str, Any], tuple[float, float
     return list(zip(tables, disturbance_spans(table), strict=True))
 
 
-def check_replays_equal() -> None:
-    """The replays' runs of ESN #1 and ESN #2 are the same: the replays do not depend on the ESN."""
-    for scenario in ("nominal", "block", "pushes", "offsets"):
+def check_replays_equal(scenarios: dict[str, int] | None = None) -> None:
+    """The replays' runs of ESN #1 and ESN #2 are the same in the scenarios, given with their number of starts."""
+    for scenario, n_starts in (scenarios or {"nominal": 1, "block": 1, "pushes": 1, "offsets": 36}).items():
         for arm in REPLAYS:
-            for start in range(36 if scenario == "offsets" else 1):
+            for start in range(n_starts):
                 a, b = (StateLog.load(log_path(scenario, esn, arm, start)) for esn in ESNS)
                 if not np.array_equal(a.channel("q"), b.channel("q")):
                     msg = f"the {arm} runs of {scenario}, start {start}, differ between the ESNs' runs"
@@ -281,20 +282,21 @@ def passes(row: dict[str, str]) -> bool:
     )
 
 
-def all_starts_plot(esn: str, taught: Run) -> tuple[Figure, list[Path]]:
-    """Each arm's tip paths from all 36 starts, a panel per arm, each panel titled with how many reach and hold."""
+def all_starts_plot(esn: str, taught: Run, scenario: str = "offsets") -> tuple[Figure, list[Path]]:
+    """Each arm's tip paths from a scenario's starts, a panel per arm, each titled with how many reach and hold."""
     label, _, setting = ESNS[esn]
-    fig = figure(f"From all 36 starts: {label} ({setting}) and both replays", ALL_STARTS_SIZE)
-    axes = fig.subplots(1, 3, sharex=True, sharey=True)
-    with (run_dir("offsets", esn) / "metrics.csv").open(newline="") as f:
+    with (run_dir(scenario, esn) / "metrics.csv").open(newline="") as f:
         rows = list(csv.DictReader(f))
+    n_starts = len({r["start"] for r in rows})
+    fig = figure(f"From all {n_starts} starts: {label} ({setting}) and both replays", ALL_STARTS_SIZE)
+    axes = fig.subplots(1, 3, sharex=True, sharey=True)
     logs = []
     for ax, (arm, name) in zip(axes, [("esn", label), *REPLAYS.items()], strict=True):
         style(ax)
         ax.plot(*taught.tip.T, color=TAUGHT_COLOR, linewidth=5.0, zorder=1)
         starts = sorted(int(r["start"]) for r in rows if r["arm"] == arm)
         for start in starts:
-            path = log_path("offsets", esn, arm, start)
+            path = log_path(scenario, esn, arm, start)
             logs.append(path)
             run = Run(path)
             ax.plot(*run.tip.T, color=COLORS[arm], linewidth=1.0, alpha=0.7, zorder=2)
@@ -467,41 +469,18 @@ included. Made on {day}.
 """  # noqa: E501
 
 
-def export_all() -> None:
-    check_replays_equal()
-    OUT.mkdir(parents=True, exist_ok=True)
-    media: list[dict[str, str]] = []
-    root = storage_root()
-
-    def add(folder: str, name: str, shows: str, logs: list[Path]) -> None:
-        media.append(
-            {"folder": folder, "file": name, "shows": shows, "logs": "; ".join(str(p.relative_to(root)) for p in logs)}
-        )
-
-    exports: list[tuple[Path, Path, bool]] = []  # (log, video, panel)
-    taught = Run(root / TAKES["take_filtered"][0])
-
-    # The take.
-    folder = OUT / "00_take"
-    folder.mkdir(exist_ok=True)
-    for name, (path, shows) in TAKES.items():
-        exports.append((root / path, folder / f"{name}.mp4", True))
-        add(folder.name, f"{name}.mp4", shows, [root / path])
-    recorded = Run(root / TAKES["take_as_recorded"][0])
-    for name, fig in zip(("joints", "tip_xy"), take_plots(recorded, taught), strict=True):
-        fig.savefig(folder / f"{name}.png")
-        add(
-            folder.name,
-            f"{name}.png",
-            f"the take's {'joint angles' if name == 'joints' else 'tip path'}",
-            [recorded.path, taught.path],
-        )
-
-    # The scenes.
+def export_scenes(
+    out: Path,
+    scenes: list[tuple[str, str, str | None, str]],
+    taught: Run,
+    add: Callable[[str, str, str, list[Path]], None],
+    exports: list[tuple[Path, Path, bool]],
+) -> None:
+    """Each scene's videos and plots, in a folder of ``out``; ``exports`` (log, video, panel) are rendered too."""
     compares = []
     with tempfile.TemporaryDirectory() as tmp:
-        for folder_name, scenario, offset, title in SCENES:
-            folder = OUT / folder_name
+        for folder_name, scenario, offset, title in scenes:
+            folder = out / folder_name
             folder.mkdir(exist_ok=True)
             start = start_of(scenario, "esn1", offset)
             spans = [span for _, span in disturbances(scenario)]
@@ -545,9 +524,43 @@ def export_all() -> None:
         with ThreadPoolExecutor(max_workers=8) as pool:
             list(pool.map(lambda e: player_export(e[0], e[1], panel=e[2]), exports))
         print(f"exported {len(exports)} videos")
-        for out, title, scenario, panels, t0 in compares:
-            compare_video(out, title, scenario, panels, t0)
-            print(f"composed {out.parent.name}/{out.name}")
+        for video, title, scenario, panels, t0 in compares:
+            compare_video(video, title, scenario, panels, t0)
+            print(f"composed {video.parent.name}/{video.name}")
+
+
+def export_all() -> None:
+    check_replays_equal()
+    OUT.mkdir(parents=True, exist_ok=True)
+    media: list[dict[str, str]] = []
+    root = storage_root()
+
+    def add(folder: str, name: str, shows: str, logs: list[Path]) -> None:
+        media.append(
+            {"folder": folder, "file": name, "shows": shows, "logs": "; ".join(str(p.relative_to(root)) for p in logs)}
+        )
+
+    exports: list[tuple[Path, Path, bool]] = []  # (log, video, panel)
+    taught = Run(root / TAKES["take_filtered"][0])
+
+    # The take.
+    folder = OUT / "00_take"
+    folder.mkdir(exist_ok=True)
+    for name, (path, shows) in TAKES.items():
+        exports.append((root / path, folder / f"{name}.mp4", True))
+        add(folder.name, f"{name}.mp4", shows, [root / path])
+    recorded = Run(root / TAKES["take_as_recorded"][0])
+    for name, fig in zip(("joints", "tip_xy"), take_plots(recorded, taught), strict=True):
+        fig.savefig(folder / f"{name}.png")
+        add(
+            folder.name,
+            f"{name}.png",
+            f"the take's {'joint angles' if name == 'joints' else 'tip path'}",
+            [recorded.path, taught.path],
+        )
+
+    # The scenes.
+    export_scenes(OUT, SCENES, taught, add, exports)
 
     folder = OUT / ALL_STARTS
     folder.mkdir(exist_ok=True)

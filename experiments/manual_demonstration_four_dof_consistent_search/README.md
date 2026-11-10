@@ -396,3 +396,68 @@ systemd-run --user --unit=arm-grid --same-dir --collect --setenv=PATH="$PATH" \
 | --- | --- |
 | `pushes_{half,quarter}_robot_following_esn{1,2}_*.toml` (4) | step 5's pushes at half and at a quarter of their force: the ESN, the replay, and the progress replay |
 | `offsets_{5,2.5}deg_robot_following_esn{1,2}_*.toml` (4) | the same three, from the 54 starts offset by 5° and by 2.5° |
+
+### What step 6 found
+
+The progress replay is the replay in every run here (they differ only at the full force),
+so only the replay is given.
+
+**Pushes.** The largest hand displacement grows in proportion to the force for every arm,
+and the ESNs' stays about twice the replay's. Each cell is at the full, half, and quarter
+force.
+
+| | ESN #1 | ESN #2 | Replay |
+| --- | --- | --- | --- |
+| Hand's largest displacement, push 1 (mm) | 66 / 38 / 21 | 77 / 45 / 25 | 37 / 19 / 9 |
+| Hand's largest displacement, push 2 (mm) | 200 / 110 / 56 | 198 / 114 / 60 | 77 / 41 / 21 |
+| Hand's largest displacement, push 3 (mm) | 126 / 69 / 35 | 158 / 91 / 47 | 67 / 34 / 17 |
+| Path RMSE (mm) | 61.6 / 29.5 / 13.2 | 59.7 / 31.2 / 15.4 | 19.6 / 8.6 / 4.0 |
+| Hand path length (mm) | 2925 / 1774 / 1110 | 2369 / 1498 / 975 | 1018 / 793 / 678 |
+| Peak torque (N m) | 3.51 / 1.88 / 1.02 | 3.55 / 1.83 / 0.96 | 2.10 / 1.03 / 0.53 |
+| Accumulated torque (N m s) | 12.3 / 6.6 / 3.5 | 11.0 / 6.0 / 3.2 | 7.3 / 4.7 / 3.4 |
+| Leaves the goal after arriving | yes / yes / yes | yes / yes / yes | no / no / no |
+| Ends in the goal (mm from the target) | 2.2 / 1.8 / 1.9 | 7.4 / 5.6 / 4.2 | 3.3 / 3.3 / 3.3 |
+
+- The ESNs' peak torque falls less than in proportion to the force, from 167% and 169% of
+  the replay's at the full force to 195% and 182% at a quarter. Their accumulated torque
+  falls more: at a quarter of the force it is 103% and 95% of the replay's.
+- Following does not depend much on the size. The hand's following gain stays between 0.64
+  and 0.78 at every size. Joint 1 under push 1, which is 1.85 and 1.97 at the full force,
+  falls to 0.98 and 1.03 at a quarter. There, joints 1 to 3 follow with gains from 0.86 to
+  1.03, but for joint 2 under push 1 (0.53 and 0.61), and joint 4 with 0.3 to 0.4, as at
+  every size. Taking each signal less the same arm's undisturbed run in place of the take
+  changes the gains by at most 0.05, and the reading not at all.
+- The slow swing after each push is still there in proportion: it depends on the ESN, not
+  on the force's size. Both ESNs still leave the goal after the third push, whose
+  displacement is 35 and 47 mm at a quarter of the force, above the goal's 20 mm.
+
+**Offset starts.** Over the 35 offset starts shared by the three sizes (the 36 directions
+less the take's own start); each cell is at ±15°, ±5°, and ±2.5°.
+
+| | ESN #1 | ESN #2 | Replay |
+| --- | --- | --- | --- |
+| Arrive and never leave the goal (of 35) | 32 / 35 / 35 | 35 / 35 / 35 | 35 / 35 / 35 |
+| Latest arrival (s) | 15.27 / 9.85 / 9.73 | 14.59 / 9.66 / 9.63 | 9.51 / 9.51 / 9.51 |
+| Path RMSE, median (mm) | 58.0 / 11.4 / 5.7 | 34.4 / 9.0 / 3.8 | 17.6 / 3.5 / 1.3 |
+| Path RMSE, largest (mm) | 108.6 / 25.2 / 11.5 | 138.4 / 19.4 / 8.5 | 65.5 / 10.0 / 3.4 |
+| Peak torque, median (N m) | 64.1 / 18.9 / 9.2 | 72.8 / 23.8 / 12.3 | 109.5 / 36.5 / 18.2 |
+| Accumulated torque, median (N m s) | 10.2 / 1.8 / 0.9 | 5.3 / 1.6 / 0.9 | 9.5 / 4.4 / 3.2 |
+| Accumulated torque, largest (N m s) | 399.8 / 3.7 / 1.9 | 797.0 / 4.2 / 2.2 | 18.2 / 7.4 / 4.7 |
+| Starts with joints 2 to 4 at a stop over 0.1 s | 16 / 1 / 0 | 7 / 0 / 0 | 0 / 0 / 0 |
+| Starts with the reference over 5° past a limit | 23 / 1 / 0 | 9 / 0 / 0 | 0 / 0 / 0 |
+| Offset retained, median | 0.55 / 0.22 / 0.24 | 0.14 / 0.13 / 0.15 | 0.02 / 0.03 / 0.05 |
+
+- The large excursions of ±15°, where the reference runs past the joint limits and the
+  arm is held against its stops, are gone at ±2.5° and all but gone at ±5°.
+- **One start of the 18 with joint 2 lower** still shows one: ESN #1 from (0, −5, −5, −5)°,
+  the farthest from the target, arrives at 14.56 s with a path RMSE of 96.5 mm, its
+  reference 32.3° past a limit, joints 1, 2, and 4 at their stops for 5.0, 3.5, and
+  2.6 s, and an accumulated torque of 227 N m s. All the other runs from these 18 starts
+  arrive by 9.8 s. At ±5°, ESN #1's joint 2 touches its stop for 0.95 s from
+  (5, −5, −5, −5)° and ESN #2's for 0.43 s from (0, −5, −5, 5)°, and the reference is over
+  5° past a limit from 2 other starts of ESN #1 and from 2 of ESN #2. At ±2.5° none of this
+  happens. The ESNs' median peak torque over these 18, from the first instants, is 104% and
+  113% of the replay's at ±5° and 75% and 115% at ±2.5°, against 50% to 68% over the 35
+  above, since the replay's own peak is lower there.
+- At ±5° and ±2.5° the ESNs' accumulated torque is 29% to 40% of the replay's, whose
+  own undisturbed run has 2.18 N m s against the ESNs' 0.27 and 0.28.
