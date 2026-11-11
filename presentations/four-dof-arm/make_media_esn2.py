@@ -78,8 +78,8 @@ runs, whose READMEs describe the arm, the take, the ESNs, the tracker, and the
 disturbances. They are not kept in Git; `presentations/four-dof-arm/make_media_esn2.py`
 in the arm-esn-ctrl repository makes them.
 
-- **{label}**, blue: {setting}, chosen in step 5 by the rule that asks the reference to
-  follow the arm.
+- **{label}**, blue: {setting}.
+  Step 5's rule, which asks the reference to follow the arm, chose it.
 - **Replay (by time)**, orange: the take replayed by time, whatever the arm does.
 
 ## The folders
@@ -172,8 +172,8 @@ def main() -> None:
             setting=setting,
             scenes="\n".join(f"| `{name}` | {title} | `{videos}/` |" for name, videos, _, _, title in SCENES),
             all_starts="\n".join(
-                f"| `{name}` | the tip paths of ESN #2 and of the replay from all {STARTS} starts offset by -{size}, 0,"
-                f" or +{size} deg in each joint (`tip_xy.png`; with both replays in `{plots}/`) | |"
+                f"| `{name}` | From all {STARTS} starts offset by -{size}, 0, or +{size}° in each joint: `tip_xy.png`,"
+                f" the tip paths of each arm | none; the same plot with both replays is in `{plots}/` |"
                 for name, plots, scenario in ALL_STARTS
                 for size in [scenario.removeprefix("offsets_").removesuffix("deg")]
             ),
