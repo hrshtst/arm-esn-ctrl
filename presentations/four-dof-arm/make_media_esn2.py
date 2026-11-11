@@ -8,8 +8,8 @@
 The plots of ``make_media.py`` and ``make_media_smaller.py``, from the same runs, with
 ESN #1 and the progress replay left out: step 5's ESN #2 against the replay of the take
 by time, undisturbed and under the block (step 5's runs), and under the half and the
-quarter pushes and from the 5 and 2.5 deg offset starts (step 6's runs), and from each
-offset start, close-ups of the joint angles and torques from -1 to 3 s. Under the
+quarter pushes and from the 5 and 2.5 deg offset starts (step 6's runs), and, undisturbed
+and from each offset start, close-ups of the joint angles and torques from -1 to 3 s. Under the
 storage root, it writes them into ``presentations/four-dof-arm_esn2-and-replay/``, a
 folder per scene, with a ``README.md`` that names each scene's videos in the other two
 folders, and ``media.csv``. It makes no videos, and leaves the other folders as they are.
@@ -49,7 +49,8 @@ OUT = storage_root() / "presentations" / "four-dof-arm_esn2-and-replay"
 ESN = "esn2"
 SHOWN = {"replay": REPLAYS["replay"]}  # the replays drawn: the replay by time alone
 STUDY, SMALLER = "four-dof-arm", "four-dof-arm_smaller-disturbances"  # the folders of the videos, under presentations/
-CLOSEUP = (-1.0, 3.0)  # s: from an offset start, the close-ups show the warm-up and the task's first 3 s
+CLOSEUP = (-1.0, 3.0)  # s: the close-ups show the warm-up and the task's first 3 s
+CLOSEUP_SCENARIOS = {"nominal", "offsets_5deg", "offsets_2.5deg"}  # undisturbed, and from the offset starts
 
 
 def numbered(index: int, name: str) -> str:
@@ -102,11 +103,11 @@ In each of `01` to `{last:02d}`:
 | `torques.png` | each joint's torque over time, likewise (from an offset start, the axis leaves out the task's first 50 ms, whose peak would crush the rest) |
 | `tip_xy.png` | the tip paths in the plane, with the take's, the start posture, and the goal |
 
-In each of `{first_offset}` to `{last_offset}`, from an offset start, also:
+In {closeup_folders}, undisturbed and from the offset starts, also:
 
 | File | What it shows |
 | --- | --- |
-| `joints_closeup.png`, `torques_closeup.png` | the same from {closeup_from:g} to {closeup_to:g} s, the warm-up (t < 0) and the task's first {closeup_to:g} s, each vertical axis fit to all it shows; the torque's includes the first instants' peak, left out of `torques.png` |
+| `joints_closeup.png`, `torques_closeup.png` | the same from {closeup_from:g} to {closeup_to:g} s, the warm-up (t < 0) and the task's first {closeup_to:g} s, each vertical axis fit to all it shows; the torque's includes the first instants' peak, which from an offset start `torques.png` leaves out |
 
 The replay's runs are those of ESN #2's runs, checked to equal those of ESN #1's, from
 which the replay's videos were made. The plots are 1800 x 1012 px (16:9), but for the
@@ -154,7 +155,7 @@ def main() -> None:
             fig = series_plot(runs, ESN, f"{what}, {lowercase(title)}\n{against}", channel, spans, taught, cut)
             fig.savefig(folder / f"{channel}.png")
             add(folder_name, f"{channel}.png", f"{what.lower()} over time: {lowercase(title)}", videos, logs)
-            if offset is not None:  # from an offset start, a close-up of the warm-up and the first seconds
+            if scenario in CLOSEUP_SCENARIOS:  # a close-up of the warm-up and the first seconds
                 closeup = f"{what}, {lowercase(title)}, close-up of {CLOSEUP[0]:g} to {CLOSEUP[1]:g} s\n{against}"
                 fig = series_plot(runs, ESN, closeup, channel, spans, taught, -np.inf, CLOSEUP)
                 fig.savefig(folder / f"{channel}_closeup.png")
@@ -185,7 +186,7 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(media)
     commit, dirty = commit_state()
-    offset_folders = [name.split("_", 1)[0] for name, _, _, offset, _ in SCENES if offset is not None]
+    closeups = [f"`{name.split('_', 1)[0]}`" for name, _, scenario, _, _ in SCENES if scenario in CLOSEUP_SCENARIOS]
     (OUT / "README.md").write_text(
         README.format(
             label=label,
@@ -198,8 +199,7 @@ def main() -> None:
                 for size in [scenario.removeprefix("offsets_").removesuffix("deg")]
             ),
             last=len(SCENES),
-            first_offset=offset_folders[0],
-            last_offset=offset_folders[-1],
+            closeup_folders=", ".join(closeups[:-1]) + f", and {closeups[-1]}",
             closeup_from=CLOSEUP[0],
             closeup_to=CLOSEUP[1],
             all_starts_px=" and ".join(sorted(sizes)),
