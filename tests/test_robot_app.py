@@ -371,6 +371,7 @@ def test_space_plays_while_a_number_box_has_the_focus(qapp, demo_config, box):
         (["--law", "pd", "--kp", "100", "--kd", "10", "--damping", "0.1"], "with --omega"),
         (["--law", "pd", "--omega", "20", "--replay", "take.npz", "--model", "esn.toml"], "excludes"),
         (["--replay", "take.npz", "--demonstrator"], "excludes"),
+        (["--demonstrator", "--gains-from", "take.npz"], "does not use"),
     ],
 )
 def test_the_command_line_rejects_contradictions(arguments, complaint, capsys):
@@ -400,6 +401,7 @@ def test_the_command_line_accepts_each_mode():
         ["--law", "pd", "--omega", "20", "--damping", "0.1", "--zero-reference-velocity", "--replay", "take.npz"],
         ["--law", "pd", "--omega", "20", "--damping", "0.1", "--zero-reference-velocity", "--model", "esn.toml"],
         ["--law", "pd", "--omega", "20", "--damping", "0.4", "--control-period", "0.01", "--model", "esn.toml"],
+        ["--law", "pd", "--omega", "20", "--model", "esn.toml", "--gains-from", "take.npz"],
     ):
         check_arguments(parser, parser.parse_args([str(CONFIG), *arguments]))
 
@@ -588,6 +590,19 @@ def test_the_reference_demonstrations_are_the_esns_training_takes(demo_config, e
     assert len(takes) == len(names)
     for take, expected in zip(takes, training_takes(demo_config), strict=True):
         assert take == pytest.approx(expected, abs=1e-12)
+
+
+def test_a_given_take_sets_the_gains_without_the_storage(demo_config, esn, tmp_path, monkeypatch):
+    """With --gains-from, the gains are set where that take ends; the model's run and the storage are not read."""
+    monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path / "not mounted"))
+    path = tmp_path / "take.sklog.npz"
+    simulate_reaches(demo_config)[0].save(path)
+    model = tmp_path / "elsewhere" / "esn.toml"  # no run configuration beside it
+
+    takes = reference_demonstrations(demo_config, model, esn, None, ESN_CONFIG.dt, gains_from=path)
+
+    assert len(takes) == 1
+    assert takes[0] == pytest.approx(training_takes(demo_config)[0], abs=1e-12)
 
 
 def test_the_reference_demonstrations_of_the_other_modes(demo_config, take):

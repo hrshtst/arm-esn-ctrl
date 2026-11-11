@@ -35,7 +35,10 @@ The mode is fixed at launch:
 With ``--omega``, ``--damping`` sets the damping ratio of the tracking error (1,
 critically damped, by default). Joint PD's gains are set at the posture where the
 reference's demonstrations end, as the experiments set them: the takes the ESN was
-trained on, the replayed take, or the demonstrator's reaches. ``--zero-reference-velocity`` gives the tracking law
+trained on, read from the storage root, the replayed take, or the demonstrator's reaches.
+``--gains-from`` sets them where a given take ends instead, such as a copy of the ESN's
+training take kept in a report, so that the storage need not be mounted.
+``--zero-reference-velocity`` gives the tracking law
 a zero reference velocity, so that its derivative term damps the arm's own velocity
 rather than the velocity error. ``--mass-matrix`` makes joint PD's gains the whole
 mass matrix there, scaled (``Kp = ω² M``, ``Kd = 2ζω M``), rather than each joint's
@@ -1047,6 +1050,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--kd", help="the tracker's derivative gain instead of --omega: one value, or one per joint (comma-separated)"
     )
+    parser.add_argument(
+        "--gains-from",
+        type=Path,
+        help="a take (.sklog.npz) whose final posture sets joint PD's gains, instead of the reference's demonstrations"
+        " (with --model, the takes the ESN was trained on, read from the storage root)",
+    )
     parser.add_argument("--model", type=Path, help="a trained ESN (esn.toml) to generate the reference")
     parser.add_argument(
         "--demonstrator", action="store_true", help="drive the arm with the demonstrator's own controller instead"
@@ -1095,10 +1104,11 @@ def check_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -
         or any(value is not None for value in gains)
         or args.zero_reference_velocity
         or args.control_period is not None
+        or args.gains_from is not None
     ):
         parser.error(
-            "--law, --omega, --damping, --kp, --kd, --zero-reference-velocity, and --control-period set the tracker,"
-            " which the demonstrator's own controller does not use"
+            "--law, --omega, --damping, --kp, --kd, --zero-reference-velocity, --control-period, and --gains-from set"
+            " the tracker, which the demonstrator's own controller does not use"
         )
     if args.demonstrator:
         return
@@ -1117,14 +1127,23 @@ def check_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -
 
 
 def reference_demonstrations(
-    config: dict[str, Any], model: Path | None, esn: ReachingEsn | None, take: NDArray[np.float64] | None, period: float
+    config: dict[str, Any],
+    model: Path | None,
+    esn: ReachingEsn | None,
+    take: NDArray[np.float64] | None,
+    period: float,
+    *,
+    gains_from: Path | None = None,
 ) -> list[NDArray[np.float64]]:
     """The demonstrations of the reference, whose final postures set joint PD's gains, as in the experiments.
 
-    The takes the ESN was trained on, named in its run's configuration; else the
-    replayed take; else the demonstrator's reaches of the configuration's
-    ``[demonstrations]``; else none.
+    The take ``gains_from``, if given; else the takes the ESN was trained on, named in
+    its run's configuration and read from the storage root; else the replayed take;
+    else the demonstrator's reaches of the configuration's ``[demonstrations]``; else
+    none. Each is sampled every reference period: the ESN's, or else ``period``.
     """
+    if gains_from is not None:
+        return [load_joint_angles(gains_from, period if esn is None else esn.config.dt)[1]]
     if model is not None and esn is not None:
         with (model.parent / "config.toml").open("rb") as f:
             demonstrations = tomllib.load(f)["demonstrations"]
@@ -1192,7 +1211,11 @@ def main() -> None:
         )
 
     name = args.model.parent.name if args.model is not None else None if args.replay is None else args.replay.name
-    demonstrations = [] if args.demonstrator else reference_demonstrations(config, args.model, esn, take, period)
+    demonstrations = (
+        []
+        if args.demonstrator
+        else reference_demonstrations(config, args.model, esn, take, period, gains_from=args.gains_from)
+    )
     app = QApplication(sys.argv)
     try:
         window = RobotApp(
