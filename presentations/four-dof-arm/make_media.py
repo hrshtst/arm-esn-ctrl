@@ -198,12 +198,19 @@ def figure(title: str, size: tuple[float, float] = FIGSIZE) -> Figure:
     return fig
 
 
-def arm_handles(esn: str, *, references: bool) -> list[Line2D]:
+def replays_in(runs: dict[str, Run]) -> dict[str, str]:
+    """The replays among ``runs``, with their labels."""
+    return {arm: label for arm, label in REPLAYS.items() if arm in runs}
+
+
+def arm_handles(esn: str, *, references: bool, replays: dict[str, str] = REPLAYS) -> list[Line2D]:
+    """The legend's lines: the ESN, ``replays``, and with ``references``, the dashed references and the take."""
     handles = [Line2D([], [], color=COLORS["esn"], linewidth=2.0, label=ESNS[esn][0])]
-    handles += [Line2D([], [], color=COLORS[arm], linewidth=2.0, label=label) for arm, label in REPLAYS.items()]
+    handles += [Line2D([], [], color=COLORS[arm], linewidth=2.0, label=label) for arm, label in replays.items()]
     if references:
+        followers = "ESN, progress replay" if "progress" in replays else "ESN"
         handles += [
-            Line2D([], [], color=TEXT_COLOR, linewidth=1.4, linestyle="--", label="reference (ESN, progress replay)"),
+            Line2D([], [], color=TEXT_COLOR, linewidth=1.4, linestyle="--", label=f"reference ({followers})"),
             Line2D([], [], color=TAUGHT_COLOR, linewidth=5.0, label="the take"),
         ]
     return handles
@@ -212,7 +219,7 @@ def arm_handles(esn: str, *, references: bool) -> list[Line2D]:
 def series_plot(
     runs: dict[str, Run], esn: str, title: str, channel: str, spans: list[tuple[float, float]], taught: Run, cut: float
 ) -> Figure:
-    """Each joint's angle or torque over time: the ESN's over both replays', the disturbances shaded."""
+    """Each joint's angle or torque over time: the ESN's over the replays' in ``runs``, the disturbances shaded."""
     fig = figure(title)
     axes = fig.subplots(2, 2, sharex=True).ravel()
     for joint, ax in enumerate(axes):
@@ -240,7 +247,7 @@ def series_plot(
         ax.set_ylabel(f"joint {joint + 1} ({'deg' if channel == 'joints' else 'N m'})", color=TEXT_COLOR, fontsize=12)
         if joint >= 2:
             ax.set_xlabel("time (s)", color=TEXT_COLOR, fontsize=12)
-    handles = arm_handles(esn, references=channel == "joints")
+    handles = arm_handles(esn, references=channel == "joints", replays=replays_in(runs))
     fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), frameon=False, fontsize=12)
     return fig
 
@@ -266,7 +273,7 @@ def tip_plot(runs: dict[str, Run], esn: str, title: str, taught: Run) -> Figure:
     ax.set_xlabel("x (m)", color=TEXT_COLOR, fontsize=12)
     ax.set_ylabel("y (m)", color=TEXT_COLOR, fontsize=12)
     handles = [
-        *arm_handles(esn, references=False),
+        *arm_handles(esn, references=False, replays=replays_in(runs)),
         Line2D([], [], color=TAUGHT_COLOR, linewidth=5.0, label="the take"),
         Line2D([], [], color="#9a9890", linewidth=3.0, marker="o", label="start posture"),
         Line2D([], [], color="#8a2be2", marker="o", linestyle="none", markerfacecolor="none", label="goal (20 mm)"),
@@ -286,16 +293,24 @@ def passes(row: dict[str, str]) -> bool:
     )
 
 
-def all_starts_plot(esn: str, taught: Run, scenario: str = "offsets") -> tuple[Figure, list[Path]]:
-    """Each arm's tip paths from a scenario's starts, a panel per arm, each titled with how many reach and hold."""
+def all_starts_plot(
+    esn: str, taught: Run, scenario: str = "offsets", replays: dict[str, str] = REPLAYS
+) -> tuple[Figure, list[Path]]:
+    """Each arm's tip paths from a scenario's starts, a panel per arm (the ESN and ``replays``), each titled with
+    how many reach and hold."""
     label, _, setting = ESNS[esn]
     with (run_dir(scenario, esn) / "metrics.csv").open(newline="") as f:
         rows = list(csv.DictReader(f))
     n_starts = len({r["start"] for r in rows})
-    fig = figure(f"From all {n_starts} starts: {label} ({setting}) and both replays", ALL_STARTS_SIZE)
-    axes = fig.subplots(1, 3, sharex=True, sharey=True)
+    if replays == REPLAYS:
+        fig = figure(f"From all {n_starts} starts: {label} ({setting}) and both replays", ALL_STARTS_SIZE)
+    else:  # fewer panels, as large as three's, under a title on two lines
+        others = " and ".join(f"the {lowercase(name)}" for name in replays.values())
+        size = (ALL_STARTS_SIZE[0] * (1 + len(replays)) / (1 + len(REPLAYS)), ALL_STARTS_SIZE[1])
+        fig = figure(f"From all {n_starts} starts: {label} and {others}\n{label}: {setting}", size)
+    axes = fig.subplots(1, 1 + len(replays), sharex=True, sharey=True, squeeze=False)[0]
     logs = []
-    for ax, (arm, name) in zip(axes, [("esn", label), *REPLAYS.items()], strict=True):
+    for ax, (arm, name) in zip(axes, [("esn", label), *replays.items()], strict=True):
         style(ax)
         ax.plot(*taught.tip.T, color=TAUGHT_COLOR, linewidth=5.0, zorder=1)
         starts = sorted(int(r["start"]) for r in rows if r["arm"] == arm)
