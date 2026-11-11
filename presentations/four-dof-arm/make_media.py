@@ -20,13 +20,16 @@ storage root, it writes into ``presentations/four-dof-arm/`` there a folder per 
 - ``06_offsets_all``: the tip paths of each arm from all 36 starts (``tip_xy_esn1.png``,
   ``tip_xy_esn2.png``).
 
-The folder's ``README.md`` explains them and ``media.csv`` lists every file with the logs
-it shows. The videos are rendered by skelarm's player (``--export``); the replays do not
+The folder's ``README.md`` explains them, with ``demo/README.md`` (how to run the arms
+live in the simulator) as a section, and ``media.csv`` lists every file with the logs it
+shows. The videos are rendered by skelarm's player (``--export``); the replays do not
 depend on the ESN, and are taken from ESN #1's runs, checked to equal ESN #2's.
+``--readme-only`` rewrites the README alone, leaving the media as they are.
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 import subprocess
@@ -54,6 +57,7 @@ from arm_esn_ctrl.disturbances import disturbance_spans
 from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, storage_root
 
 OUT = storage_root() / "presentations" / "four-dof-arm"
+DEMO = Path(__file__).parent / "demo" / "README.md"  # the live demonstration, a section of the READMEs
 SEARCH = "results/manual_demonstration_four_dof_consistent_search"
 TAKE_RUN = "results/demonstrations/20261103-134628-reach_manual_four_dof"
 TAKES = {  # the take: its file, relative to the storage root, and what it is
@@ -458,6 +462,12 @@ replays, and their videos are made once. All videos are H.264 at {fps:g} fps, re
 skelarm's player; the plots are 1800 x 1012 px (16:9), but for `06_offsets_all`'s, 2250 x 690 px. [`media.csv`](media.csv) lists
 every file with the logs it shows, relative to the storage root.
 
+## Live in the simulator
+
+From the arm-esn-ctrl repository, as its `presentations/four-dof-arm/demo/README.md` says:
+
+{demo}
+
 ## Reproducing them
 
 From the repository, at commit `{commit}`{dirty}:
@@ -465,8 +475,43 @@ From the repository, at commit `{commit}`{dirty}:
     uv run python presentations/four-dof-arm/make_media.py
 
 It reads the runs under the storage root and overwrites the files here, this README
-included. Made on {day}.
+included; with `--readme-only`, it rewrites this README alone. This README was written
+on {day}.
 """  # noqa: E501
+
+
+def live_demo() -> str:
+    """``demo/README.md`` as a section of a README: without its title, its headings one level down."""
+    lines = DEMO.read_text().splitlines()[1:]
+    return "\n".join(f"#{line}" if line.startswith("#") else line for line in lines).strip()
+
+
+def commit_state() -> tuple[str, str]:
+    """The repository's commit, and `` (with uncommitted changes)`` if it has any, else nothing."""
+    git = [["git", "rev-parse", "--short", "HEAD"], ["git", "status", "--porcelain"]]
+    commit, changes = (subprocess.run(c, cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout for c in git)
+    return commit.strip(), " (with uncommitted changes)" if changes.strip() else ""
+
+
+def write_readme() -> None:
+    """The folder's README.md, naming the commit of the code and the day."""
+    commit, dirty = commit_state()
+    arms = "\n".join(f"  - **{label}**, blue: {setting}." for label, _, setting in ESNS.values())
+    scenes = "\n".join(f"| `{name}` | {title} |" for name, _, _, title in SCENES)
+    (OUT / "README.md").write_text(
+        README.format(
+            arms=arms,
+            scenes=scenes,
+            torque_note=(
+                " (from an offset start, the axis leaves out the task's first 50 ms, whose peak would crush the rest)"
+            ),
+            fps=FPS,
+            demo=live_demo(),
+            commit=commit,
+            dirty=dirty,
+            day=date.today().isoformat(),
+        )
+    )
 
 
 def export_scenes(
@@ -573,25 +618,20 @@ def export_all() -> None:
         writer = csv.DictWriter(f, fieldnames=list(media[0]))
         writer.writeheader()
         writer.writerows(media)
-    git = [["git", "rev-parse", "--short", "HEAD"], ["git", "status", "--porcelain"]]
-    commit, changes = (subprocess.run(c, cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout for c in git)
-    arms = "\n".join(f"  - **{label}**, blue: {setting}." for label, _, setting in ESNS.values())
-    scenes = "\n".join(f"| `{name}` | {title} |" for name, _, _, title in SCENES)
-    (OUT / "README.md").write_text(
-        README.format(
-            arms=arms,
-            scenes=scenes,
-            torque_note=(
-                " (from an offset start, the axis leaves out the task's first 50 ms, whose peak would crush the rest)"
-            ),
-            fps=FPS,
-            commit=commit.strip(),
-            dirty=" (with uncommitted changes)" if changes.strip() else "",
-            day=date.today().isoformat(),
-        )
-    )
+    write_readme()
     print(f"wrote {len(media)} files and their README to {OUT}")
 
 
+def readme_only(description: str | None) -> bool:
+    """Whether the command line of the script ``description`` describes asks for the README alone."""
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--readme-only", action="store_true", help="rewrite README.md alone, leaving the media")
+    return bool(parser.parse_args().readme_only)
+
+
 if __name__ == "__main__":
-    export_all()
+    if readme_only(__doc__):
+        write_readme()
+        print(f"wrote the README to {OUT}")
+    else:
+        export_all()

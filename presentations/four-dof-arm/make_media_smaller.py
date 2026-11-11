@@ -11,13 +11,14 @@ the replay and the progress replay, under smaller pushes and from nearer offset 
 storage root, it writes into ``presentations/four-dof-arm_smaller-disturbances/`` there a
 folder per scene, of the same files as ``make_media.py``'s scenes, and each offset size's
 tip paths from all 54 starts. ``presentations/four-dof-arm/`` is left as it is: the take,
-the undisturbed runs, and the block are there.
+the undisturbed runs, and the block are there. Its ``README.md`` has ``demo/README.md``
+(how to run the arms live in the simulator) as a section, as ``make_media.py``'s does;
+``--readme-only`` rewrites the README alone, leaving the media as they are.
 """
 
 from __future__ import annotations
 
 import csv
-import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -29,10 +30,13 @@ from make_media import (
     Run,
     all_starts_plot,
     check_replays_equal,
+    commit_state,
     export_scenes,
+    live_demo,
+    readme_only,
 )
 
-from arm_esn_ctrl.storage import REPO_ROOT, storage_root
+from arm_esn_ctrl.storage import storage_root
 
 OUT = storage_root() / "presentations" / "four-dof-arm_smaller-disturbances"
 # The scenes: folder, scenario (a configuration's name before "_robot_"), offset start, and title.
@@ -113,6 +117,12 @@ skelarm's player; the plots are 1800 x 1012 px (16:9), but for the tip paths fro
 starts, 2250 x 690 px. [`media.csv`](media.csv) lists every file with the logs it shows,
 relative to the storage root.
 
+## Live in the simulator
+
+From the arm-esn-ctrl repository, as its `presentations/four-dof-arm/demo/README.md` says:
+
+{demo}
+
 ## Reproducing them
 
 From the repository, at commit `{commit}`{dirty}:
@@ -120,8 +130,24 @@ From the repository, at commit `{commit}`{dirty}:
     uv run python presentations/four-dof-arm/make_media_smaller.py
 
 It reads the runs under the storage root and overwrites the files here, this README
-included. Made on {day}.
+included; with `--readme-only`, it rewrites this README alone. This README was written
+on {day}.
 """  # noqa: E501
+
+
+def write_readme() -> None:
+    """The folder's README.md, naming the commit of the code and the day."""
+    commit, dirty = commit_state()
+    (OUT / "README.md").write_text(
+        README.format(
+            scenes="\n".join(f"| `{name}` | {title} |" for name, _, _, title in SCENES),
+            fps=FPS,
+            demo=live_demo(),
+            commit=commit,
+            dirty=dirty,
+            day=date.today().isoformat(),
+        )
+    )
 
 
 def main() -> None:
@@ -154,20 +180,14 @@ def main() -> None:
         writer = csv.DictWriter(f, fieldnames=list(media[0]))
         writer.writeheader()
         writer.writerows(media)
-    git = [["git", "rev-parse", "--short", "HEAD"], ["git", "status", "--porcelain"]]
-    commit, changes = (subprocess.run(c, cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout for c in git)
-    (OUT / "README.md").write_text(
-        README.format(
-            scenes="\n".join(f"| `{name}` | {title} |" for name, _, _, title in SCENES),
-            fps=FPS,
-            commit=commit.strip(),
-            dirty=" (with uncommitted changes)" if changes.strip() else "",
-            day=date.today().isoformat(),
-        )
-    )
+    write_readme()
     print(f"wrote {len(media)} files and their README to {OUT}")
 
 
 if __name__ == "__main__":
     assert set(REPLAYS) == {"replay", "progress"}
-    main()
+    if readme_only(__doc__):
+        write_readme()
+        print(f"wrote the README to {OUT}")
+    else:
+        main()
