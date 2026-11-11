@@ -304,10 +304,9 @@ def all_starts_plot(
     n_starts = len({r["start"] for r in rows})
     if replays == REPLAYS:
         fig = figure(f"From all {n_starts} starts: {label} ({setting}) and both replays", ALL_STARTS_SIZE)
-    else:  # fewer panels, as large as three's, under a title on two lines
+    else:  # fewer panels, each wider, under a title on two lines
         others = " and ".join(f"the {lowercase(name)}" for name in replays.values())
-        size = (ALL_STARTS_SIZE[0] * (1 + len(replays)) / (1 + len(REPLAYS)), ALL_STARTS_SIZE[1])
-        fig = figure(f"From all {n_starts} starts: {label} and {others}\n{label}: {setting}", size)
+        fig = figure(f"From all {n_starts} starts: {label} and {others}\n{label}: {setting}", ALL_STARTS_SIZE)
     axes = fig.subplots(1, 1 + len(replays), sharex=True, sharey=True, squeeze=False)[0]
     logs = []
     for ax, (arm, name) in zip(axes, [("esn", label), *replays.items()], strict=True):
