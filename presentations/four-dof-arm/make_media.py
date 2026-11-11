@@ -217,33 +217,53 @@ def arm_handles(esn: str, *, references: bool, replays: dict[str, str] = REPLAYS
 
 
 def series_plot(
-    runs: dict[str, Run], esn: str, title: str, channel: str, spans: list[tuple[float, float]], taught: Run, cut: float
+    runs: dict[str, Run],
+    esn: str,
+    title: str,
+    channel: str,
+    spans: list[tuple[float, float]],
+    taught: Run,
+    cut: float,
+    window: tuple[float, float] | None = None,
 ) -> Figure:
-    """Each joint's angle or torque over time: the ESN's over the replays' in ``runs``, the disturbances shaded."""
+    """Each joint's angle or torque over time: the ESN's over the replays' in ``runs``, the disturbances shaded.
+
+    With ``window`` (s), a close-up of that span, its vertical axes fit to all it
+    draws from ``cut`` on, the take and the references included.
+    """
     fig = figure(title)
     axes = fig.subplots(2, 2, sharex=True).ravel()
     for joint, ax in enumerate(axes):
         style(ax)
         for onset, end in spans:
             ax.axvspan(onset, end, color=DISTURBANCE_COLOR, zorder=0)
+        drawn = []  # (times, values) of every line
         if channel == "joints":
             ax.plot(taught.t, taught.q[:, joint], color=TAUGHT_COLOR, linewidth=5.0, zorder=1)
+            drawn.append((taught.t, taught.q[:, joint]))
         lows, highs = [], []
         for arm, run in runs.items():
             values = run.q if channel == "joints" else run.tau
             assert values is not None
             ax.plot(run.t, values[:, joint], color=COLORS[arm], linewidth=1.6, zorder=ZORDERS[arm])
+            drawn.append((run.t, values[:, joint]))
             if channel == "joints" and arm != "replay" and run.q_ref is not None:
                 ax.plot(
                     run.t, run.q_ref[:, joint], color=COLORS[arm], linewidth=1.2, linestyle="--", zorder=ZORDERS[arm]
                 )
+                drawn.append((run.t, run.q_ref[:, joint]))
             shown = values[run.t >= cut, joint]
             lows.append(shown.min())
             highs.append(shown.max())
-        if channel == "torques" and cut > 0:  # from an offset start, the first instants' torque would crush the rest
+        if window is not None:
+            within = [v[(t >= max(window[0], cut)) & (t <= window[1])] for t, v in drawn]
+            low, high = min(v.min() for v in within if v.size), max(v.max() for v in within if v.size)
+            pad = 0.08 * (high - low)
+            ax.set_ylim(low - pad, high + pad)
+        elif channel == "torques" and cut > 0:  # from an offset start, the first instants' torque would crush the rest
             pad = 0.08 * (max(highs) - min(lows))
             ax.set_ylim(min(lows) - pad, max(highs) + pad)
-        ax.set_xlim(runs["esn"].t[0], runs["esn"].t[-1])
+        ax.set_xlim(*(window or (runs["esn"].t[0], runs["esn"].t[-1])))
         ax.set_ylabel(f"joint {joint + 1} ({'deg' if channel == 'joints' else 'N m'})", color=TEXT_COLOR, fontsize=12)
         if joint >= 2:
             ax.set_xlabel("time (s)", color=TEXT_COLOR, fontsize=12)
