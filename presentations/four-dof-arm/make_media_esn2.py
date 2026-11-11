@@ -8,11 +8,13 @@
 The plots of ``make_media.py`` and ``make_media_smaller.py``, from the same runs, with
 ESN #1 and the progress replay left out: step 5's ESN #2 against the replay of the take
 by time, undisturbed and under the block (step 5's runs), and under the half and the
-quarter pushes and from the 5 and 2.5 deg offset starts (step 6's runs), and, undisturbed
-and from each offset start, close-ups of the joint angles and torques from -1 to 3 s. Under the
-storage root, it writes them into ``presentations/four-dof-arm_esn2-and-replay/``, a
-folder per scene, with a ``README.md`` that names each scene's videos in the other two
-folders, and ``media.csv``. It makes no videos, and leaves the other folders as they are.
+quarter pushes and from the 5 and 2.5 deg offset starts (step 6's runs). It adds
+close-ups of the joint angles and torques: undisturbed and from each offset start, from
+-1 to 3 s; under the pushes, one of each push, from 0.5 s before it to 3 s after it
+(``joints_closeup_push1.png`` and so on). Under the storage root, it writes them into
+``presentations/four-dof-arm_esn2-and-replay/``, a folder per scene, with a
+``README.md`` that names each scene's videos in the other two folders, and
+``media.csv``. It makes no videos, and leaves the other folders as they are.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ SHOWN = {"replay": REPLAYS["replay"]}  # the replays drawn: the replay by time a
 STUDY, SMALLER = "four-dof-arm", "four-dof-arm_smaller-disturbances"  # the folders of the videos, under presentations/
 CLOSEUP = (-1.0, 3.0)  # s: the close-ups show the warm-up and the task's first 3 s
 CLOSEUP_SCENARIOS = {"nominal", "offsets_5deg", "offsets_2.5deg"}  # undisturbed, and from the offset starts
+PUSH_BEFORE, PUSH_AFTER = 0.5, 3.0  # s: a push's close-up shows from this long before it to this long after it
 
 
 def numbered(index: int, name: str) -> str:
@@ -109,6 +112,13 @@ In {closeup_folders}, undisturbed and from the offset starts, also:
 | --- | --- |
 | `joints_closeup.png`, `torques_closeup.png` | the same from {closeup_from:g} to {closeup_to:g} s, the warm-up (t < 0) and the task's first {closeup_to:g} s, each vertical axis fit to all it shows; the torque's includes the first instants' peak, which from an offset start `torques.png` leaves out |
 
+In {push_folders}, under the pushes, also a close-up of each push, from {push_before:g} s before
+it begins to {push_after:g} s after it ends, each vertical axis fit to all it shows:
+
+| File | What it shows |
+| --- | --- |
+{push_rows}
+
 The replay's runs are those of ESN #2's runs, checked to equal those of ESN #1's, from
 which the replay's videos were made. The plots are 1800 x 1012 px (16:9), but for the
 tip paths from all starts, {all_starts_px}. [`media.csv`](media.csv) lists every file
@@ -125,6 +135,21 @@ included. This README was written on {day}.
 """  # noqa: E501
 
 
+def push_rows(push_windows: dict[str, list[tuple[float, tuple[float, float]]]]) -> str:
+    """The README's rows of the pushes' close-ups: each push's span, its close-up's, and its force in each folder."""
+    (spans,) = {tuple(span for _, span in pushes) for pushes in push_windows.values()}  # the same in every folder
+    rows = []
+    for i, (onset, end) in enumerate(spans, 1):
+        forces = ", ".join(
+            f"{pushes[i - 1][0]:g} N in `{name.split('_', 1)[0]}`" for name, pushes in push_windows.items()
+        )
+        rows.append(
+            f"| `joints_closeup_push{i}.png`, `torques_closeup_push{i}.png` | push {i} of {len(spans)}, from {onset:g}"
+            f" to {end:g} s ({forces}), shown from {onset - PUSH_BEFORE:g} to {end + PUSH_AFTER:g} s |"
+        )
+    return "\n".join(rows)
+
+
 def main() -> None:
     # The replay's videos are of ESN #1's runs; the plots here are of ESN #2's, the same.
     starts = {scenario: 1 for _, _, scenario, offset, _ in SCENES if offset is None}
@@ -135,6 +160,7 @@ def main() -> None:
     against = f"{label} ({setting}) against the replay"
     taught = Run(root / TAKES["take_filtered"][0])
     media: list[dict[str, str]] = []
+    push_windows: dict[str, list[tuple[float, tuple[float, float]]]] = {}  # folder: each push's force and span
 
     def add(folder: str, name: str, shows: str, videos: str, logs: list[Path]) -> None:
         media.append(
@@ -151,6 +177,9 @@ def main() -> None:
         runs = {arm: Run(path) for arm, path in zip(arms, logs, strict=True)}
         spans = [span for _, span in disturbances(scenario)]
         cut = START_CUT if offset is not None else -np.inf
+        pushes = [(table, span) for table, span in disturbances(scenario) if table["type"] == "push"]
+        if pushes:
+            push_windows[folder_name] = [(table["force"], span) for table, span in pushes]
         for channel, what in (("joints", "Joint angles"), ("torques", "Joint torques")):
             fig = series_plot(runs, ESN, f"{what}, {lowercase(title)}\n{against}", channel, spans, taught, cut)
             fig.savefig(folder / f"{channel}.png")
@@ -163,6 +192,23 @@ def main() -> None:
                     folder_name,
                     f"{channel}_closeup.png",
                     f"{what.lower()} from {CLOSEUP[0]:g} to {CLOSEUP[1]:g} s: {lowercase(title)}",
+                    videos,
+                    logs,
+                )
+            # Under the pushes, a close-up of each, from just before it to the swing after it.
+            for i, (table, (onset, end)) in enumerate(pushes, 1):
+                window = (onset - PUSH_BEFORE, end + PUSH_AFTER)
+                push = f"push {i} of {len(pushes)}, {table['force']:g} N from {onset:g} to {end:g} s"
+                closeup = f"close-up of {window[0]:g} to {window[1]:g} s"
+                scene = lowercase(title.split(":")[0])  # such as "pushed at half force"
+                fig = series_plot(
+                    runs, ESN, f"{what}, {scene}: {push}, {closeup}\n{against}", channel, spans, taught, cut, window
+                )
+                fig.savefig(folder / f"{channel}_closeup_push{i}.png")
+                add(
+                    folder_name,
+                    f"{channel}_closeup_push{i}.png",
+                    f"{what.lower()} from {window[0]:g} to {window[1]:g} s: {scene}, {push}",
                     videos,
                     logs,
                 )
@@ -200,6 +246,10 @@ def main() -> None:
             ),
             last=len(SCENES),
             closeup_folders=", ".join(closeups[:-1]) + f", and {closeups[-1]}",
+            push_folders=" and ".join(f"`{name.split('_', 1)[0]}`" for name in push_windows),
+            push_before=PUSH_BEFORE,
+            push_after=PUSH_AFTER,
+            push_rows=push_rows(push_windows),
             closeup_from=CLOSEUP[0],
             closeup_to=CLOSEUP[1],
             all_starts_px=" and ".join(sorted(sizes)),
