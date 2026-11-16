@@ -9,7 +9,8 @@ chosen ESNs across trackers, the chosen ESNs as dynamical systems, and the ESN a
 robot as one system. This directory is the first part, and its README holds the
 assumptions of all four. They are v2's, with the changes below; the configurations are
 written once the take is imported, from the values this README fixes. Results of this
-part: [report 021](../../reports/021-search-on-a-four-link-arm/README.md).
+part: [report 021](../../reports/021-search-on-a-four-link-arm/README.md); of step 6:
+[report 022](../../reports/022-smaller-disturbances-on-a-four-link-arm/README.md).
 
 ## The protocol
 
@@ -416,7 +417,7 @@ quarter force.
 | Peak torque (N m) | 3.51 / 1.88 / 1.02 | 3.55 / 1.83 / 0.96 | 2.10 / 1.03 / 0.53 |
 | Accumulated torque (N m s) | 12.3 / 6.6 / 3.5 | 11.0 / 6.0 / 3.2 | 7.3 / 4.7 / 3.4 |
 | Leaves the goal within 2 s of arriving | yes / yes / yes | yes / yes / yes | no / no / no |
-| Farthest from the target between arrival and push 3 (mm) | 130 / 75 / 38 | 87 / 44 / 21 | stays in the goal |
+| Farthest from the target between arrival and push 3 (mm) | 130 / 74 / 38 | 87 / 43 / 21 | stays in the goal |
 | In the goal from then on, from (s) | 23.5 / 23.2 / 20.5 | 21.3 / 20.8 / 17.6 | 15.5 / 15.4 / 9.5 |
 | Ends in the goal (mm from the target) | 2.2 / 1.8 / 1.9 | 7.4 / 5.6 / 4.2 | 3.3 / 3.3 / 3.3 |
 
@@ -428,8 +429,10 @@ quarter force.
   falls to 0.98 and 1.03 at a quarter. There, joints 1 to 3 follow with gains from 0.86 to
   1.03, but for joint 2 under push 1 (0.53 and 0.61), and joint 4 with 0.3 to 0.4, as at
   every size. Taking each signal less the same arm's undisturbed run in place of the take
-  changes the gains by at most 0.05, and the reading not at all.
-- The slow swing after each push, of about 8 s, is still there in proportion to the force.
+  changes the hand's gains by at most 0.04 and the joints' by at most 0.13 (ESN #1's joint
+  2 under push 1 at a quarter), and the reading not at all.
+- The slow swing after each push, with a period of about 5 s for ESN #1 and 4 s for ESN
+  #2, is still there in proportion to the force, turning at the same times at every size.
   It is what takes the hand out of the goal: both ESNs arrive while the arm still swings
   from the second push, and the hand comes out within the 2 s after arriving, at every
   size. It comes out again after the third push. The replay is out of the goal only around
