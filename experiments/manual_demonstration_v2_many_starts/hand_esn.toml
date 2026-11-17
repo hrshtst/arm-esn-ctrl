@@ -1,0 +1,60 @@
+# An ESN to tune by hand: trained on the takes from the nine start postures of
+# reach_manual_v2_starts.toml, and run on its own from each take's start and from 36
+# start postures no take starts from, spread over the joint space. Edit [esn], train,
+# and watch the ESN in the apps; the run prints their commands. See README.md.
+#
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_many_starts/hand_esn.toml
+
+[demonstrations]
+# The run directory of experiments/import_demonstrations.py for reach_manual_v2_starts.toml,
+# relative to the storage root, and the takes to train on, filtered at 2 Hz. Leave
+# takes out of `train` to train on fewer: demo_00 is the take of reports 005 to 020.
+run = "results/demonstrations/YYYYMMDD-HHMMSS-reach_manual_v2_starts"  # EDIT: the import's run
+train = [
+  "demo_00_filtered.sklog.npz",  # from (30, 30) deg
+  "demo_01_filtered.sklog.npz",  # from (-60, 30)
+  "demo_02_filtered.sklog.npz",  # from (-60, 90)
+  "demo_03_filtered.sklog.npz",  # from (-60, 150)
+  "demo_04_filtered.sklog.npz",  # from (30, 90)
+  "demo_05_filtered.sklog.npz",  # from (30, 150)
+  "demo_06_filtered.sklog.npz",  # from (120, 30)
+  "demo_07_filtered.sklog.npz",  # from (120, 90)
+  "demo_08_filtered.sklog.npz",  # from (120, 150)
+]
+
+[esn]
+# EDIT: the values to tune. They start from the consistent search's ESN #1 (report
+# 017), with 800 neurons in place of its 400.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 800
+spectral_radius = 1.2
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.03
+input_scaling = 1.5
+bias = true
+ridge = 1e-2
+seed = 0
+
+[evaluation]
+duration = 24.0        # autonomous run (s)
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start
+
+[evaluation.extra_starts]
+# Start postures no take starts from (deg): joint 1 every 60 deg from -150, joint 2
+# every 60 deg from -165, so that none is a taught start.
+untaught = [
+  [-150.0, -165.0], [-150.0, -105.0], [-150.0, -45.0], [-150.0, 15.0], [-150.0, 75.0], [-150.0, 135.0],
+  [-90.0, -165.0], [-90.0, -105.0], [-90.0, -45.0], [-90.0, 15.0], [-90.0, 75.0], [-90.0, 135.0],
+  [-30.0, -165.0], [-30.0, -105.0], [-30.0, -45.0], [-30.0, 15.0], [-30.0, 75.0], [-30.0, 135.0],
+  [30.0, -165.0], [30.0, -105.0], [30.0, -45.0], [30.0, 15.0], [30.0, 75.0], [30.0, 135.0],
+  [90.0, -165.0], [90.0, -105.0], [90.0, -45.0], [90.0, 15.0], [90.0, 75.0], [90.0, 135.0],
+  [150.0, -165.0], [150.0, -105.0], [150.0, -45.0], [150.0, 15.0], [150.0, 75.0], [150.0, 135.0],
+]
+
+[apps]
+# The robot app's arguments, for the command the run prints: the consistent search's
+# tracker, its gains set where the take of reports 005 to 020 ends (a copy in report
+# 005), whatever takes the ESN was trained on.
+robot_app = "--law pd --omega 20 --damping 0.4 --control-period 0.01 --gains-from reports/005-tuned-on-the-robot/data/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"

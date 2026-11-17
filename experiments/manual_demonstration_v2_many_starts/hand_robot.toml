@@ -1,0 +1,39 @@
+# The ESN tuned by hand on the robot, undisturbed, from each take's start and from the
+# 36 start postures no take starts from, against the replay of the take that starts
+# nearest. About 8 minutes: 90 runs, one after another. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts/hand_robot.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py, relative
+# to the storage root.
+model = "results/manual_demonstration_v2_many_starts/YYYYMMDD-HHMMSS-hand_esn/esn.toml"  # EDIT: the ESN's run
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start
+
+[evaluation.extra_starts]
+# hand_esn.toml's start postures no take starts from (deg).
+untaught = [
+  [-150.0, -165.0], [-150.0, -105.0], [-150.0, -45.0], [-150.0, 15.0], [-150.0, 75.0], [-150.0, 135.0],
+  [-90.0, -165.0], [-90.0, -105.0], [-90.0, -45.0], [-90.0, 15.0], [-90.0, 75.0], [-90.0, 135.0],
+  [-30.0, -165.0], [-30.0, -105.0], [-30.0, -45.0], [-30.0, 15.0], [-30.0, 75.0], [-30.0, 135.0],
+  [30.0, -165.0], [30.0, -105.0], [30.0, -45.0], [30.0, 15.0], [30.0, 75.0], [30.0, 135.0],
+  [90.0, -165.0], [90.0, -105.0], [90.0, -45.0], [90.0, 15.0], [90.0, 75.0], [90.0, 135.0],
+  [150.0, -165.0], [150.0, -105.0], [150.0, -45.0], [150.0, 15.0], [150.0, 75.0], [150.0, 135.0],
+]

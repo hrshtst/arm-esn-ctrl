@@ -64,6 +64,7 @@ experiments/
 | [manual_demonstration_v2_consistent_dynamics](manual_demonstration_v2_consistent_dynamics/README.md) | part 3 of the study under one protocol: the consistent search's ESN #1 and ESN #2 from rest anywhere for 60 s, with other warm-ups, pushed by short pulses along the reach with the search's tracker, and read as maps of their reservoir state; the search's 5,040 and 5,040 held-out ESNs screened on their own and set against their outcomes with the offset starts counted; and the passing ESNs released at their unstable fixed points and blocked along the reach on the robot | `global_starts.py`, `warmup_esn.py`, `push_pulses.py`, `fixed_points.py`, `screen_esns.py`, `screen_against_robot.py`, `release_robot.py` | [019](../reports/019-dynamics-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_robot_loop](manual_demonstration_v2_consistent_robot_loop/README.md) | the ESN and the robot read as one dynamical system, the reservoir's state and the arm's every 10 ms: the consistent search's ESN #1 and ESN #2 on the robot from rest anywhere for 60 s, their fixed points and rates with the arm, and report 019's pulses linearized; every fixed point of report 019's screens with the arm, against its releases and outcomes | `robot_starts.py`, `robot_fixed_points.py`, `screen_robot_loop.py`, `nudge_releases.py`, `robot_rates_weighed.py` | [020](../reports/020-the-esn-and-the-robot-as-one-system/README.md) |
 | [manual_demonstration_four_dof_consistent_search](manual_demonstration_four_dof_consistent_search/README.md) | reports 017 to 020's procedure on skelarm's four-link arm, its protocol fixed before the take is taught: the search with joint PD whose gains are the whole mass matrix, 36 offset starts within the joint limits, and the disturbances placed along the take as v2's | `import_demonstrations.py`, then as reports 017 to 020 | to be written |
+| [manual_demonstration_v2_many_starts](manual_demonstration_v2_many_starts/README.md) | one target reached from many start postures, taught by one take from each, with ESNs of 800 neurons: the first stage of extending reports 017 to 020 to more tasks; its ESN is tuned by hand first | `import_demonstrations.py`, `autonomous_esn.py`, `robot_esn.py` | to be written |
 
 Run a configuration with its runner:
 
@@ -212,6 +213,26 @@ and the replay: its `[[arm]]` tables name each arm's run, the arm in it (`esn` o
 (`joints.png`) and torque (`torques.png`) over time, one column per tracker setting
 the runs share, the ESNs' lines over the replay's, and refuses arms that met
 different forces.
+
+## Several takes and several tasks
+
+- **Several takes of one task.** A demonstration configuration lists them as
+  `[recording]` `takes`, one per start posture of `[demonstrations]` `start_q`, and
+  `import_demonstrations.py` imports them into one run (`demo_00`, `demo_01`, ...). An
+  ESN's `[demonstrations]` `train` names the ones to train on. On the robot, each
+  run is set against the replay of the take that starts nearest.
+- **Several tasks in one ESN.** The ESN's configuration has one `[[demonstrations]]`
+  table per task, each with its demonstration run, its `train` files, and the task's
+  name as its `context`. The ESN's input then holds one value per task after the
+  joint angles, 1 for the task being done (times `[esn]` `context_scaling`), and
+  nothing else tells it the task. `autonomous_esn.py` and `robot_esn.py` run each
+  task from its own start postures; in `robot_esn.py`, `[[switch]]` tables (`time`,
+  `task`) change the task during every run. The other runners take one task.
+- **Joint PD's gains.** With `[tracker]` `gains_from`, a demonstration file under the
+  storage root, they are set where that take ends, whatever the ESN was trained on.
+- **Pushes along the take.** A push's `way` (0 to 1) places it where the hand of the
+  take the run starts from is that fraction of the way to the target, instead of at
+  an `onset`.
 
 ## Adding an experiment
 

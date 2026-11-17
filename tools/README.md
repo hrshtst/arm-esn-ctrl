@@ -28,6 +28,14 @@ path, and compares the two; with the checkbox off (`--no-demonstrator`), nothing
 is simulated. Reset returns the arm to the start posture of the last run, ready to
 be posed again.
 
+An ESN of several tasks gets a button for each in the side panel, and the keys `1`,
+`2`, ...: they give the ESN that task's context, before a run or while it runs, the
+reservoir keeping its state. Every task's target is drawn, the chosen one's filled,
+and the arrival and the hold are measured at it, anew from each change. The tasks are
+read from the demonstration runs the ESN was trained on, so the storage must be
+mounted. The robot app does the same, and its saved log records the context at every
+step.
+
 ## Simulating the robot interactively
 
 `tools/robot_app.py` simulates the arm in real time, so you can pose it, watch it
@@ -90,4 +98,16 @@ scaled as a drag of the set stiffness would draw it.
 uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml \
     --law pd --omega 20 --damping 0.4 --control-period 0.01 --model <run directory>/esn.toml \
     --forces <storage root>/data/recorded_forces/<log>.sklog.npz
+```
+
+## Seeing the start postures before recording
+
+`tools/starts_figure.py` draws the start postures of a demonstration configuration, in
+the workspace and in joint space, with the target and the postures that put the hand
+on it; `--starts` adds the start postures no take starts from that another
+configuration lists (`[evaluation.extra_starts]`):
+
+```bash
+uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_starts.toml --output starts.png \
+    --starts experiments/manual_demonstration_v2_many_starts/hand_esn.toml
 ```

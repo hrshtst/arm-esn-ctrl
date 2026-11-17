@@ -15,7 +15,7 @@ from arm_esn_ctrl.tracking import TrackerConfig, tracking_gains
 
 # The runners import each other as modules of their own directory, as they run.
 sys.path.insert(0, str(REPO_ROOT / "experiments"))
-from robot_esn import progress_source, tracker_settings, warmup_steps
+from robot_esn import progress_source, switch_schedule, tracker_settings, warmup_steps
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 
@@ -101,3 +101,21 @@ def test_the_warmup_is_the_esns_unless_the_evaluation_gives_one():
 
     assert warmup_steps({}, config) == config.warmup_steps == 100
     assert warmup_steps({"warmup": 4.0}, config) == 400
+
+
+def test_switches_name_the_tasks_of_an_esn_of_several_in_the_order_of_their_times():
+    names = ("near", "far", "loop")
+
+    schedule = switch_schedule([{"time": 6.0, "task": "far"}, {"time": 12, "task": "near"}], names)
+
+    assert schedule == [(6.0, 1), (12.0, 0)]
+    assert switch_schedule([], names) == []
+    assert switch_schedule([], ()) == []
+    with pytest.raises(ValueError, match="one of near, far, loop"):
+        switch_schedule([{"time": 6.0, "task": "elsewhere"}], names)
+    with pytest.raises(ValueError, match="one of near, far, loop"):
+        switch_schedule([{"task": "far"}], names)
+    with pytest.raises(ValueError, match="order of their times"):
+        switch_schedule([{"time": 6.0, "task": "far"}, {"time": 3.0, "task": "near"}], names)
+    with pytest.raises(ValueError, match="this ESN has one"):
+        switch_schedule([{"time": 6.0, "task": "far"}], ())

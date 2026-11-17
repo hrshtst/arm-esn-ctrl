@@ -17,6 +17,7 @@ from arm_esn_ctrl.disturbances import (
     disturbance_spans,
     keep_recorded_logs,
     make_disturbance,
+    placed,
     recorded_evaluation,
     same_arm,
 )
@@ -321,3 +322,50 @@ def test_a_recorded_disturbance_needs_a_log_with_a_force(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="ext_force"):
         make_disturbance({"type": "recorded", "log": "data/quiet.sklog.npz"}, np.array([0.5, 1.2]), TARGET)
+
+
+# A taught hand that waits 1 s and then goes straight from (0, 0) to the target at (1, 0) in 2 s, sampled every 10 ms.
+TAUGHT_HAND = np.column_stack([np.clip((np.arange(401) * 0.01 - 1.0) / 2.0, 0.0, 1.0), np.zeros(401)]).astype(
+    np.float64
+)
+PUSH_BY_WAY = {"type": "push", "force": 3.0, "duration": 0.5, "way": 0.25}
+
+
+def test_a_way_places_a_push_when_the_taught_hand_is_that_far_to_the_target():
+    target = np.array([1.0, 0.0])
+
+    table = placed(PUSH_BY_WAY, TAUGHT_HAND, target, dt=0.01)
+
+    assert table == {"type": "push", "force": 3.0, "duration": 0.5, "onset": pytest.approx(1.5)}
+    assert disturbance_spans(table) == [(pytest.approx(1.5), pytest.approx(2.0))]
+    push = make_disturbance(table, TAUGHT_HAND[0], target)
+    assert push is not None
+    skeleton = Skeleton.from_toml(CONFIG)  # a push ignores the arm
+    assert push(1.6, skeleton) == pytest.approx([0.0, 3.0])  # across the reach, the default direction
+
+
+def test_placing_keeps_the_other_disturbances_and_the_list():
+    block = {"type": "block", "onset": 0.5, "release": 1.0, "stiffness": 1.0, "damping": 0.1}
+    by_onset = {"type": "push", "force": 1.0, "duration": 0.2, "onset": 3.0}
+
+    tables = placed([block, PUSH_BY_WAY, by_onset], TAUGHT_HAND, np.array([1.0, 0.0]), dt=0.01)
+
+    assert isinstance(tables, list)
+    assert tables[0] == block and tables[2] == by_onset
+    assert tables[1]["onset"] == pytest.approx(1.5) and "way" not in tables[1]
+    assert placed(None, TAUGHT_HAND, np.array([1.0, 0.0]), dt=0.01) is None
+
+
+def test_a_push_cannot_be_placed_where_the_taught_hand_never_comes():
+    with pytest.raises(ValueError, match="never comes"):
+        placed(PUSH_BY_WAY | {"way": 0.9}, TAUGHT_HAND[:200], np.array([1.0, 0.0]), dt=0.01)
+
+
+def test_a_push_takes_an_onset_or_a_way_and_must_be_placed():
+    target = np.array([1.0, 0.0])
+    with pytest.raises(ValueError, match="an onset or a way"):
+        make_disturbance(PUSH_BY_WAY | {"onset": 1.0}, TAUGHT_HAND[0], target)
+    with pytest.raises(ValueError, match="an onset or a way"):
+        make_disturbance({"type": "push", "force": 3.0, "duration": 0.5}, TAUGHT_HAND[0], target)
+    with pytest.raises(ValueError, match="needs the taught motion"):
+        make_disturbance(PUSH_BY_WAY, TAUGHT_HAND[0], target)

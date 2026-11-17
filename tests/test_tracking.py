@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from skelarm import Skeleton
 
-from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
+from arm_esn_ctrl.demonstrations import joint_trajectory_log, resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import (
@@ -19,6 +19,8 @@ from arm_esn_ctrl.tracking import (
     ReplaySource,
     TrackerConfig,
     error_dynamics,
+    gain_posture,
+    gains_posture,
     nearest_demonstration,
     task_joint_angles,
     track,
@@ -451,3 +453,17 @@ def test_the_loops_path_goes_on_from_its_last_sample_to_its_first():
 
     assert turn == pytest.approx(40 * np.linalg.norm(PERIODIC[11] - PERIODIC[10]))
     assert source._length_at(95, LOOP) == pytest.approx(source._length_at(15, LOOP) + 2 * turn)
+
+
+def test_a_given_take_sets_where_the_gains_are_set(demos, tmp_path, monkeypatch):
+    monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
+    skeleton = Skeleton.from_toml(CONFIG)
+    times = (ESN_CONFIG.dt * np.arange(len(demos[0]))).astype(np.float64)
+    joint_trajectory_log(skeleton, times, demos[0], {"type": "reaching"}, producer="test").save(
+        tmp_path / "take.sklog.npz"
+    )
+
+    given = gains_posture({"gains_from": "take.sklog.npz"}, [demos[1]], ESN_CONFIG.dt)
+
+    assert given == pytest.approx(demos[0][-1])
+    assert gains_posture({}, demos, ESN_CONFIG.dt) == pytest.approx(gain_posture(demos))

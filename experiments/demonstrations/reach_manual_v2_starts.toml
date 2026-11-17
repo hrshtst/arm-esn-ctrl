@@ -1,0 +1,111 @@
+# Reaches to one target taught by hand from nine start postures, on the v2 arm
+# (reach_manual_v2.toml's robot and target): the takes of the many-starts study
+# (experiments/manual_demonstration_v2_many_starts). The first take is
+# reach_manual_v2.toml's own, from (30, 30) deg, as it was recorded for reports 005
+# to 020; the other eight are recorded here, one from each of the other start
+# postures of a lattice in joint space, joint 1 at -60, 30, and 120 deg and joint 2
+# at 30, 90, and 150 deg.
+#
+# 0. See the start postures before recording:
+#
+#   uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_starts.toml --output starts.png
+#
+# 1. Record each take, into the storage root's data/ (what cannot be regenerated).
+#    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
+#    names; the recorder does not create the directory. --pose is the take's start
+#    posture, the same as its row of [demonstrations] start_q, and --output its file
+#    in [recording] takes:
+#
+#   mkdir -p "$STORAGE/data/reach_manual_v2_starts"
+#   uv run python third_party/skelarm/tools/trajectory_recorder.py \
+#       experiments/demonstrations/reach_manual_v2_starts.toml --mode ik --sample-rate 100 \
+#       --duration 0 --show-tip-trail --pose -60,30 \
+#       --output "$STORAGE/data/reach_manual_v2_starts/start_01.sklog.npz"
+#
+#    and likewise --pose -60,90 for start_02, -60,150 for start_03, 30,90 for start_04,
+#    30,150 for start_05, 120,30 for start_06, 120,90 for start_07, and 120,150 for
+#    start_08. Maximize the window: its pixels are the steps the tip moves in. The
+#    ring is the [task] target. Space starts the take. Grab the tip within the dashed
+#    circle around it, move it to the cross at the center of the ring at a natural
+#    pace, let go, and keep still for at least 3 s. S saves the take; R discards an
+#    attempt before saving it; Q closes. A file is written once and never
+#    overwritten: to record a take again, remove its file first.
+#
+# 2. Import them into one demonstration run, which checks and measures every take,
+#    as recorded (demo_00, demo_01, ...) and filtered (demo_00_filtered, ...). None is
+#    imported unless all pass:
+#
+#   uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_v2_starts.toml
+#
+# To try another set of starts, list other takes and start postures here, in the
+# same order, and import again: each import is its own run. An ESN's configuration
+# then trains on any of a run's takes ([demonstrations] train).
+
+[recording]
+# The takes taught by hand, relative to the storage root, in the order of
+# [demonstrations] start_q. They are imported unchanged: the human's pause before
+# moving stays in.
+takes = [
+  "data/reach_manual_v2/reach_manual_v2.sklog.npz",        # demo_00: reach_manual_v2.toml's take, from (30, 30)
+  "data/reach_manual_v2_starts/start_01.sklog.npz",
+  "data/reach_manual_v2_starts/start_02.sklog.npz",
+  "data/reach_manual_v2_starts/start_03.sklog.npz",
+  "data/reach_manual_v2_starts/start_04.sklog.npz",
+  "data/reach_manual_v2_starts/start_05.sklog.npz",
+  "data/reach_manual_v2_starts/start_06.sklog.npz",
+  "data/reach_manual_v2_starts/start_07.sklog.npz",
+  "data/reach_manual_v2_starts/start_08.sklog.npz",
+]
+# What the import checks of each take (experiments/import_demonstrations.py):
+start_tolerance_deg = 0.01  # the take begins at its start posture within this, in every joint
+hold = 2.0                  # after arriving within the target tolerance, the hand stays this long (s)
+max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, not a reach
+
+# The filter of the filtered copies, as reach_manual_v2.toml's: a first-order low-pass
+# at 2 Hz, run forward and backward.
+[recording.filter]
+kind = "lowpass"
+cutoff_hz = 2.0
+
+[demonstrations]
+# The start posture of each take: joint angles in degrees.
+start_q = [
+  [30.0, 30.0],     # demo_00
+  [-60.0, 30.0],    # demo_01
+  [-60.0, 90.0],    # demo_02
+  [-60.0, 150.0],   # demo_03
+  [30.0, 90.0],     # demo_04
+  [30.0, 150.0],    # demo_05
+  [120.0, 30.0],    # demo_06
+  [120.0, 90.0],    # demo_07
+  [120.0, 150.0],   # demo_08
+]
+
+[initial]
+q = [30.0, 30.0]  # where the recorder starts without --pose (deg)
+
+# reach_manual_v2.toml's two-link planar arm.
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 0.5
+mass = 0.5
+inertia = 0.0125
+com = [0.25, 0.0]
+limits = [-180.0, 180.0]
+
+[[skeleton.link]]
+length = 0.4
+mass = 0.4
+inertia = 0.0064
+com = [0.2, 0.0]
+limits = [-180.0, 180.0]
+
+[task]
+type = "reaching"
+target = { pos = [-0.6, 0.4], tolerance = 0.02 }  # the hand goal (m) and its radius (m)
+duration = 4.0  # skelarm's run length for this task (s); the recorder does not use it
+
+[simulator]
+dt = 0.002  # the robot's control and integration step (s)
