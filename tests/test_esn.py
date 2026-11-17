@@ -4,6 +4,7 @@
 """Tests for the ESN trained on one trajectory and run autonomously."""
 
 import dataclasses
+import itertools
 
 import numpy as np
 import pytest
@@ -290,3 +291,117 @@ def test_colored_teacher_noise_changes_the_readout():
         colored = trained(config, q).generate(q[0], 150)
         np.testing.assert_array_equal(colored, trained(config, q).generate(q[0], 150))
         assert not np.allclose(colored, white)
+
+
+def two_tasks() -> tuple[list[NDArray[np.float64]], list[int]]:
+    """Reaches from two starts to each of two goals: the task is the goal."""
+    starts, goals = [(0.3, 2.0), (0.1, 1.7)], [(0.8, 1.6), (-0.2, 2.4)]
+    return [joint_reach(start, goal) for goal in goals for start in starts], [0, 0, 1, 1]
+
+
+def test_without_contexts_the_input_is_the_joint_angles_alone():
+    esn = ReachingEsn(CONFIG)
+    esn.fit([joint_reach()])
+
+    assert esn.contexts == ()
+    assert esn.model.get_reservoir(0).getInputWeights().shape[0] == 2
+    with pytest.raises(ValueError, match="without contexts"):
+        esn.set_context(0)
+
+
+def test_the_context_chooses_the_goal_from_the_same_start():
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(CONFIG)
+    esn.fit(trajectories, contexts, names=["near", "far"])
+
+    assert esn.contexts == ("near", "far")
+    assert esn.model.get_reservoir(0).getInputWeights().shape[0] == 4  # two joints, then two tasks
+    for task, q in zip(("near", "near", "far", "far"), trajectories, strict=True):
+        esn.set_context(task)
+        generated = esn.generate(q[0], 2 * (len(q) - 1))
+        assert np.degrees(np.abs(generated[-1] - q[-1])).max() < 2.0
+
+
+def test_the_context_can_change_while_the_esn_runs():
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(CONFIG)
+    esn.fit(trajectories, contexts)
+    start, switch = trajectories[0][0], CONFIG.warmup_steps + 50
+
+    esn.set_context(0)
+    kept = np.array(list(itertools.islice(esn.stream(start), switch + 100)))
+    stream = esn.stream(start)
+    changed = [next(stream) for _ in range(switch)]
+    esn.set_context(1)  # from the next step on; the reservoir keeps its state
+    changed = np.array(changed + [next(stream) for _ in range(100)])
+
+    assert changed[:switch] == pytest.approx(kept[:switch], abs=1e-12)
+    assert np.degrees(np.abs(changed[switch:] - kept[switch:]).max()) > 1.0
+
+
+def test_generate_with_contexts_is_stepping_on_its_own_outputs():
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(CONFIG)
+    esn.fit(trajectories, contexts)
+    esn.set_context(1)
+    start = trajectories[2][0]
+
+    generated = esn.generate(start, 50)
+
+    esn.reset()
+    for _ in range(CONFIG.warmup_steps):
+        esn.step(start)
+    q, stepped = start, [start]
+    for _ in range(50):
+        q = esn.step(q)
+        stepped.append(q)
+    assert generated == pytest.approx(np.array(stepped), abs=1e-12)
+
+
+def test_a_context_can_lie_between_two_tasks():
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(CONFIG)
+    esn.fit(trajectories, contexts)
+
+    esn.set_context([0.5, 0.5])
+
+    assert esn.context == pytest.approx([0.5, 0.5])
+    assert np.all(np.isfinite(esn.generate(trajectories[0][0], 50)))
+    with pytest.raises(ValueError, match="one weight per task"):
+        esn.set_context([1.0, 0.0, 0.0])
+    with pytest.raises(ValueError, match="unknown task"):
+        esn.set_context("elsewhere")
+
+
+def test_the_context_scaling_scales_the_context_input():
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(dataclasses.replace(CONFIG, context_scaling=0.25))
+    esn.fit(trajectories, contexts)
+    esn.set_context(1)
+
+    row = esn._with_context(np.zeros((3, 2)), esn.context)
+
+    assert row == pytest.approx(np.tile([0.0, 0.0, 0.0, 0.25], (3, 1)))
+
+
+def test_a_saved_esn_keeps_its_tasks(tmp_path):
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(CONFIG)
+    esn.fit(trajectories, contexts, names=["near", "far"])
+    esn.save(tmp_path / "esn.toml")
+
+    loaded = ReachingEsn.load(tmp_path / "esn.toml")
+
+    assert loaded.contexts == ("near", "far")
+    start = trajectories[2][0]
+    for model in (esn, loaded):
+        model.set_context("far")
+    assert loaded.generate(start, 100) == pytest.approx(esn.generate(start, 100), abs=1e-12)
+
+
+def test_each_trajectory_needs_its_context():
+    trajectories, _ = two_tasks()
+    with pytest.raises(ValueError, match="contexts"):
+        ReachingEsn(CONFIG).fit(trajectories, [0, 1])
+    with pytest.raises(ValueError, match="task indices"):
+        ReachingEsn(CONFIG).fit(trajectories, [0, 0, 1, 2], names=["near", "far"])

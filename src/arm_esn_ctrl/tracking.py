@@ -39,7 +39,8 @@ the warm-up is at negative times.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+import itertools
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -187,16 +188,37 @@ class ReferenceSource(Protocol):
 
 
 class EsnSource:
-    """The ESN, driven by the arm's measured joint angles."""
+    """The ESN, driven by the arm's measured joint angles.
 
-    def __init__(self, esn: ReachingEsn) -> None:
+    An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) is given its context by a
+    ``schedule``: pairs of a time on the task clock (s) and a task (its index or
+    name, or the context's weights), in the order of their times. Each task is the
+    ESN's from its time on; the first is also the warm-up's, whatever its time.
+    Without a schedule, the ESN keeps the context it has.
+    """
+
+    def __init__(self, esn: ReachingEsn, schedule: Sequence[tuple[float, Any]] | None = None) -> None:
         self.esn = esn
+        self.schedule = [] if schedule is None else [(float(time), task) for time, task in schedule]
+        if any(later[0] < earlier[0] for earlier, later in itertools.pairwise(self.schedule)):
+            msg = "the context schedule must be in the order of its times"
+            raise ValueError(msg)
 
     def reset(self, start_q: NDArray[np.float64]) -> None:
         self.esn.reset()
 
     def next_posture(self, k: int, q: NDArray[np.float64]) -> NDArray[np.float64]:
+        if self.schedule:
+            self.esn.set_context(self.task_at(k * self.esn.config.dt))
         return self.esn.step(q)
+
+    def task_at(self, time: float) -> Any:
+        """The scheduled task at ``time`` on the task clock: the last one whose time has come, or else the first."""
+        task = self.schedule[0][1]
+        for start, scheduled in self.schedule[1:]:
+            if start <= time + 1e-9:
+                task = scheduled
+        return task
 
 
 class ReplaySource:

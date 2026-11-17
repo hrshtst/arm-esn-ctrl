@@ -52,9 +52,10 @@ from skelarm import compute_forward_kinematics, compute_jacobian, integrate_with
 from arm_esn_ctrl.tracking import EsnSource
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
+    from typing import Any
 
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
     from skelarm import Skeleton, StateLog
     from skelarm.dynamics import StopModel
 
@@ -77,8 +78,16 @@ class ClosedLoop:
     dt: float  # the ESN's period (s)
 
     @classmethod
-    def from_esn(cls, esn: ReachingEsn) -> ClosedLoop:
-        """The update of ``esn``, a trained ESN of one reservoir and a ridge readout with a bias, read from rclib."""
+    def from_esn(cls, esn: ReachingEsn, context: int | str | ArrayLike | None = None) -> ClosedLoop:
+        """The update of ``esn``, a trained ESN of one reservoir and a ridge readout with a bias, read from rclib.
+
+        An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) is read with one context
+        held: that of the task ``context`` (its index or name, or the context's
+        weights), or by default the ESN's current one. A held context reaches each
+        neuron as a constant, so it is added to the bias here, and the maps are then
+        those of the ESN doing that task; ``inputs`` holds the joint angles' weights
+        alone.
+        """
         reservoir = esn.model.get_reservoir(0)
         n = reservoir.getNNeurons()
         rows, cols, values = reservoir.getRecurrentWeights()
@@ -92,10 +101,19 @@ class ClosedLoop:
         if weights.shape[0] != n + 1:
             msg = "the ESN's readout must read one reservoir's state"
             raise ValueError(msg)
+        inputs, bias = reservoir.getInputWeights(), reservoir.getBias()
+        if esn.contexts:
+            held = esn.context if context is None else esn.context_vector(context)
+            n_joints = len(esn.center)
+            bias = bias + esn.config.context_scaling * held @ inputs[n_joints:]
+            inputs = inputs[:n_joints]
+        elif context is not None:
+            msg = "the ESN was trained without contexts"
+            raise ValueError(msg)
         return cls(
             recurrent,
-            reservoir.getInputWeights(),
-            reservoir.getBias(),
+            inputs,
+            bias,
             reservoir.getLeakRate(),
             weights[:-1],
             weights[-1],
@@ -420,8 +438,8 @@ class StateRecorder(EsnSource):
     k (negative in the warm-up) and the state before the ESN's step there.
     """
 
-    def __init__(self, esn: ReachingEsn) -> None:
-        super().__init__(esn)
+    def __init__(self, esn: ReachingEsn, schedule: Sequence[tuple[float, Any]] | None = None) -> None:
+        super().__init__(esn, schedule)
         self.states: list[tuple[int, NDArray[np.float64]]] = []
 
     def reset(self, start_q: NDArray[np.float64]) -> None:

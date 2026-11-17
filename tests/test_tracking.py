@@ -352,3 +352,47 @@ def test_the_progress_replay_searches_the_arm_only_within_its_window():
 def test_the_progress_replay_needs_a_positive_lead_and_window(lead, window):
     with pytest.raises(ValueError, match="must be positive"):
         ProgressReplaySource(RESTING_LINE, lead=lead, window=window)
+
+
+@pytest.fixture(scope="module")
+def task_esn(demos):
+    """An ESN of two tasks: demonstration 6 as the first, demonstration 7 as the second."""
+    trained = ReachingEsn(ESN_CONFIG)
+    trained.fit(demos, contexts=[0, 1], names=["six", "seven"])
+    return trained
+
+
+def test_a_schedule_gives_the_esn_its_first_task_through_the_warmup(task_esn):
+    source = EsnSource(task_esn, [(0.0, "seven")])
+    task_esn.set_context("six")
+
+    source.reset(np.zeros(2))
+    source.next_posture(-W, np.zeros(2))
+
+    assert task_esn.context == pytest.approx([0.0, 1.0])
+
+
+def test_a_schedule_changes_the_task_at_its_times(task_esn):
+    source = EsnSource(task_esn, [(0.0, "six"), (0.5, "seven"), (1.0, [0.5, 0.5])])
+
+    assert [source.task_at(time) for time in (-0.25, 0.0, 0.49, 0.5, 0.99)] == ["six", "six", "six", "seven", "seven"]
+    assert source.task_at(1.0) == [0.5, 0.5]
+    source.reset(np.zeros(2))
+    source.next_posture(round(0.5 / ESN_CONFIG.dt), np.zeros(2))  # the step at 0.5 s is already the second task's
+    assert task_esn.context == pytest.approx([0.0, 1.0])
+
+
+def test_without_a_schedule_the_esn_keeps_its_context(demos, task_esn):
+    start = demos[1][0]
+    task_esn.set_context("seven")
+
+    log = run(EsnSource(task_esn), start)
+
+    task_esn.set_context("seven")
+    q = task_joint_angles(log, ESN_CONFIG.dt, 2.0)
+    assert np.degrees(q - task_esn.generate(start, 200)) == pytest.approx(0.0, abs=0.1)
+
+
+def test_a_schedule_must_be_in_the_order_of_its_times(task_esn):
+    with pytest.raises(ValueError, match="order of its times"):
+        EsnSource(task_esn, [(1.0, "six"), (0.5, "seven")])

@@ -265,3 +265,37 @@ def test_the_robot_map_is_joint_pds_torque_held_over_the_period(loop, arm):
         RobotLoop.from_tracker(loop, skeleton, TrackerConfig("computed_torque", 20.0, 0.02), gains, SIMULATION_DT)
     with pytest.raises(ValueError, match="joint PD"):
         RobotLoop.from_tracker(loop, skeleton, TrackerConfig("pd", 20.0, 0.02), gains, SIMULATION_DT)
+
+
+@pytest.fixture(scope="module")
+def task_esn(demo):
+    """An ESN of two tasks: the demonstration, and the demonstration run backward."""
+    trained = ReachingEsn(ESN_CONFIG)
+    trained.fit([demo, demo[::-1].copy()], contexts=[0, 1], names=["there", "back"])
+    return trained
+
+
+@pytest.mark.parametrize("task", ["there", "back"])
+def test_with_a_context_held_the_map_is_the_esns_doing_that_task(task_esn, demo, task):
+    start = demo[0] if task == "there" else demo[-1]
+    task_esn.set_context(task)
+    q, states = run_states(task_esn, start, 80)
+
+    loop = ClosedLoop.from_esn(task_esn, task)
+
+    assert loop.inputs.shape == (2, ESN_CONFIG.n_neurons)  # the joint angles' weights alone
+    np.testing.assert_allclose(q, task_esn.generate(start, 80), atol=1e-12)
+    np.testing.assert_allclose(loop.advance(states[:-1]), states[1:], atol=1e-12)
+    np.testing.assert_allclose(loop.posture(states[:-1]), q[1:], atol=1e-12)
+
+
+def test_the_map_takes_the_esns_current_context_by_default(task_esn):
+    task_esn.set_context("back")
+
+    np.testing.assert_array_equal(ClosedLoop.from_esn(task_esn).bias, ClosedLoop.from_esn(task_esn, "back").bias)
+    assert not np.allclose(ClosedLoop.from_esn(task_esn).bias, ClosedLoop.from_esn(task_esn, "there").bias)
+
+
+def test_an_esn_without_contexts_has_no_context_to_hold(esn):
+    with pytest.raises(ValueError, match="without contexts"):
+        ClosedLoop.from_esn(esn, 0)
