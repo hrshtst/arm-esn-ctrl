@@ -109,7 +109,9 @@ Each training is its own run directory, so earlier ESNs stay; to keep a setting,
 ## The search
 
 The search chooses two ESNs by how reliably the hand arrives and holds from the
-takes' starts, and then by how directly it goes there.
+takes' starts, and then by how directly it goes there. Its rule is given as it was
+fixed; a step added afterwards, [below](#scoring-again-with-the-untaught-starts),
+chose ESN #1 and ESN #2.
 
 1. **The runs.** Each ESN is trained on the nine takes and generates the reference
    of the simulated robot, undisturbed, from each take's start: nine runs of 24 s,
@@ -141,7 +143,7 @@ takes' starts, and then by how directly it goes there.
    to two digits), and in difference for the spectral radius. Where the center is at
    an edge of the coarse grid, the value beyond the edge is as far from the center
    as the one on the other side. A setting's runs are the 45 of its five seeds.
-8. **ESN #1 and ESN #2** are the typical seeds of the two fine settings with the
+8. **The chosen ESNs** are the typical seeds of the two fine settings with the
    best scores. A setting's typical seed is, of its seeds with the most runs that
    hold, the one whose own median detour ratio is nearest the setting's.
 
@@ -175,14 +177,15 @@ it:
 The center's ridge is the coarse grid's largest, so the fine search goes as far
 above it as below.
 
-**The chosen ESNs.** Of the fine search's 81 settings, 20 hold in all 45 runs of
+**The first pair.** Of the fine search's 81 settings, 20 hold in all 45 runs of
 their five seeds. The two with the smallest median detour ratios, and their typical
-seeds:
+seeds, were the ESNs the rule chose. The step below replaced them, so they are named
+by the starts they were scored from:
 
-| ESN | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold | Median detour ratio of the setting |
+| | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold | Median detour ratio of the setting |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| #1 | 0.1 | 1.2 | 1 | 1 | 2 | 45 of 45 | 1.0068 |
-| #2 | 0.055 | 1.2 | 1 | 0.1 | 4 | 45 of 45 | 1.0082 |
+| first | 0.1 | 1.2 | 1 | 1 | 2 | 45 of 45 | 1.0068 |
+| second | 0.055 | 1.2 | 1 | 0.1 | 4 | 45 of 45 | 1.0082 |
 
 Their configurations train them, run them on their own from the takes' starts and
 from the 36 start postures no take starts from, and save `esn.toml` for the apps, as
@@ -190,16 +193,16 @@ from the 36 start postures no take starts from, and save `esn.toml` for the apps
 
 ```bash
 uv run python experiments/autonomous_esn.py \
-    experiments/manual_demonstration_v2_many_starts/esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml
+    experiments/manual_demonstration_v2_many_starts/taught1_lr0.1_sr1.2_is1_ridge1_seed2.toml
 uv run python experiments/autonomous_esn.py \
-    experiments/manual_demonstration_v2_many_starts/esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml
+    experiments/manual_demonstration_v2_many_starts/taught2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml
 ```
 
 ### Scoring again with the untaught starts
 
 On their own from the 36 start postures no take starts from, which the search did
-not see, the two chosen ESNs differ: ESN #1 arrives and stays from 27 of them and
-ends 1.61 m from the target from six; ESN #2 arrives and stays from 35, but its
+not see, the first pair differ: the first arrives and stays from 27 of them and ends
+1.61 m from the target from six; the second arrives and stays from 35, but its
 median detour ratio there is 1.19 and four of its runs exceed 2. The scores from the
 takes' starts did not tell the two apart. So a step was added on 2026-11-17, after
 those results were seen and before any run of it:
@@ -218,26 +221,32 @@ uv run python experiments/sweep_robot_esn.py \
     experiments/manual_demonstration_v2_many_starts/untaught_search.toml --workers 30
 ```
 
-**The outcome.** No run from a take's start fails. Three of the 20 settings hold in
-all 225 runs; the settings of ESN #1 and ESN #2 hold in 215 and 203, and the worst
-setting in 168. The two best, and their typical seeds:
+**ESN #1 and ESN #2.** No run from a take's start fails. Three of the 20 settings
+hold in all 225 runs; the first pair's settings hold in 215 and 203, and the worst
+setting in 168. The typical seeds of the two best are ESN #1 and ESN #2, in place of
+the first pair (decided on 2026-11-18):
 
-| | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold | Median detour ratio of the setting |
+| ESN | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold | Median detour ratio of the setting |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| first | 0.055 | 1.2 | 1 | 1 | 4 | 225 of 225 | 1.054 |
-| second | 0.1 | 1.05 | 0.5 | 10 | 3 | 225 of 225 | 1.063 |
+| #1 | 0.055 | 1.2 | 1 | 1 | 4 | 225 of 225 | 1.054 |
+| #2 | 0.1 | 1.05 | 0.5 | 10 | 3 | 225 of 225 | 1.063 |
 
-`rescored1_lr0.055_sr1.2_is1_ridge1_seed4.toml` and
-`rescored2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml` train them and run them on their
-own, as ESN #1's and ESN #2's configurations do.
+Their configurations train them and run them on their own, as the first pair's do:
+
+```bash
+uv run python experiments/autonomous_esn.py \
+    experiments/manual_demonstration_v2_many_starts/esn1_lr0.055_sr1.2_is1_ridge1_seed4.toml
+uv run python experiments/autonomous_esn.py \
+    experiments/manual_demonstration_v2_many_starts/esn2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml
+```
 
 | Configurations | What they run |
 | --- | --- |
 | `coarse_search.toml` | the coarse search: 108 settings, seed 0, each on the robot from each take's start (about 7 minutes with 30 workers) |
 | `fine_search.toml` | the fine search: 81 settings around the coarse search's best, seeds 1 to 5, alike (about 25 minutes) |
 | `untaught_search.toml` | the fine search's 20 settings that hold in every run, seeds 1 to 5, each on the robot from each take's start and from the 36 untaught ones (about 30 minutes) |
-| `esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml`, `esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml` | ESN #1 and ESN #2, trained and run on their own as `hand_esn.toml`'s |
-| `rescored1_lr0.055_sr1.2_is1_ridge1_seed4.toml`, `rescored2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml` | the typical seeds of the two best settings of `untaught_search.toml`, trained and run on their own alike |
+| `esn1_lr0.055_sr1.2_is1_ridge1_seed4.toml`, `esn2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml` | ESN #1 and ESN #2, the typical seeds of the two best settings of `untaught_search.toml`, trained and run on their own as `hand_esn.toml`'s |
+| `taught1_lr0.1_sr1.2_is1_ridge1_seed2.toml`, `taught2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml` | the first pair, the typical seeds of the two best settings of `fine_search.toml`, trained and run on their own alike |
 | `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (90 runs, about 8 minutes) |
 | `hand_pushes_robot.toml` | that ESN on the robot under report 007's three pushes, the first two placed along each take, from each take's start, against the replays of that take (about 2 minutes) |

@@ -2,7 +2,8 @@
 # radius 1.2, input scaling 0.5, ridge 1), five reservoirs each (seeds 1 to 5), trained
 # on the nine takes and run on the robot, undisturbed, from each take's start. Each
 # setting is scored over the 45 runs of its five seeds by how many arrive and hold, then
-# by their median detour ratio; ESN #1 and ESN #2 are the typical seeds of the two best.
+# by their median detour ratio; the typical seeds of the two best are the first pair of
+# chosen ESNs, and the settings that hold in every run go on to untaught_search.toml.
 # About 25 minutes with 30 workers. See README.md.
 #
 #   uv run python experiments/sweep_robot_esn.py \

@@ -2,7 +2,8 @@
 # again with the start postures no take starts from: each with its five reservoirs
 # (seeds 1 to 5), on the robot, undisturbed, from each take's start and from
 # hand_esn.toml's 36 untaught ones. Each setting is scored over its 225 runs by how many
-# arrive and hold, then by their median detour ratio. About 30 minutes with 30 workers.
+# arrive and hold, then by their median detour ratio; ESN #1 and ESN #2 are the typical
+# seeds of the two best. About 30 minutes with 30 workers.
 # See README.md.
 #
 #   uv run python experiments/sweep_robot_esn.py \

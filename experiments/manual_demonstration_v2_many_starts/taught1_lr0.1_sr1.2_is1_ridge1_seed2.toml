@@ -1,10 +1,11 @@
-# The typical seed of the best setting when the fine search's settings are scored
-# again with the start postures no take starts from (untaught_search.toml): trained on
-# the nine takes of reach_manual_v2_no_limits.toml, and run on its own from each take's
-# start and from those 36 start postures. The run saves esn.toml and prints the apps'
-# commands. See README.md.
+# The typical seed of the fine search's best setting, which was scored from the
+# takes' starts only: one of the first pair of chosen ESNs, which ESN #1 and ESN #2
+# replaced. Trained on the nine takes of reach_manual_v2_no_limits.toml, and run on its
+# own from each take's start and from 36 hand positions no take starts from, which the
+# fine search did not see. The run saves esn.toml and prints the apps' commands. See
+# README.md.
 #
-#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_many_starts/rescored1_lr0.055_sr1.2_is1_ridge1_seed4.toml
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_many_starts/taught1_lr0.1_sr1.2_is1_ridge1_seed2.toml
 
 [demonstrations]
 # The nine takes of reach_manual_v2_no_limits.toml, filtered at 2 Hz.
@@ -22,17 +23,17 @@ train = [
 ]
 
 [esn]
-# The best setting of untaught_search.toml and its typical seed.
+# The fine search's best setting and its typical seed.
 dt = 0.01              # sampling period (s)
 warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
 n_neurons = 800
 spectral_radius = 1.2
 sparsity = 0.05        # fraction of nonzero reservoir connections
-leak_rate = 0.055
+leak_rate = 0.1
 input_scaling = 1.0
 bias = true
 ridge = 1.0
-seed = 4
+seed = 2
 
 [evaluation]
 duration = 24.0        # autonomous run (s)

@@ -1,10 +1,10 @@
-# The typical seed of the second best setting when the fine search's settings are scored
-# again with the start postures no take starts from (untaught_search.toml): trained on
-# the nine takes of reach_manual_v2_no_limits.toml, and run on its own from each take's
-# start and from those 36 start postures. The run saves esn.toml and prints the apps'
-# commands. See README.md.
+# ESN #2 of the many-starts search: the typical seed of the second best setting when the
+# fine search's settings are scored again with the start postures no take starts from
+# (untaught_search.toml). Trained on the nine takes of reach_manual_v2_no_limits.toml,
+# and run on its own from each take's start and from those 36 start postures. The run
+# saves esn.toml and prints the apps' commands. See README.md.
 #
-#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_many_starts/rescored2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml
+#   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_many_starts/esn2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml
 
 [demonstrations]
 # The nine takes of reach_manual_v2_no_limits.toml, filtered at 2 Hz.
