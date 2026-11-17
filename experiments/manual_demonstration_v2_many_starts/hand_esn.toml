@@ -9,7 +9,7 @@
 # The run directory of experiments/import_demonstrations.py for reach_manual_v2_no_limits.toml,
 # relative to the storage root, and the takes to train on, filtered at 2 Hz. Leave
 # takes out of `train` to train on fewer.
-run = "results/demonstrations/YYYYMMDD-HHMMSS-reach_manual_v2_no_limits"  # EDIT: the import's run
+run = "results/demonstrations/20261117-164658-reach_manual_v2_no_limits"  # EDIT: the import's run
 train = [
   "demo_00_filtered.sklog.npz",  # from (13, 71) deg
   "demo_01_filtered.sklog.npz",  # from (73, 71)
@@ -28,10 +28,10 @@ train = [
 dt = 0.01              # sampling period (s)
 warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
 n_neurons = 800
-spectral_radius = 1.2
+spectral_radius = 0.9
 sparsity = 0.05        # fraction of nonzero reservoir connections
 leak_rate = 0.03
-input_scaling = 1.5
+input_scaling = 0.1
 bias = true
 ridge = 1e-2
 seed = 0
