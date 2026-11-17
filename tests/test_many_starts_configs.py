@@ -251,3 +251,78 @@ def test_v2s_joint_1_limit_crosses_the_workspace_below_the_base_on_the_takes_elb
     other = joint_1_wall(skeleton, -starts)
     assert other is not None
     assert other[1:-1, 1].min() > 0.0
+
+
+UNSEEN = [18, 12, 6], 38.3  # the unseen starts' rings and first direction
+
+
+def test_the_unseen_starts_are_36_more_hands_away_from_every_start_the_search_saw():
+    skeleton = Skeleton.from_toml(TAKES)
+    unseen = load(EXPERIMENT / "robot_esn1.toml")["evaluation"]["extra_starts"]["unseen"]
+    untaught = load(EXPERIMENT / "hand_esn.toml")["evaluation"]["extra_starts"]["untaught"]
+    taught = load(TAKES)["demonstrations"]["start_q"]
+
+    assert unseen == hand_postures(skeleton, ring_hands(skeleton, *UNSEEN), 1).tolist()
+    hands = endpoint_positions(skeleton, np.radians(unseen))
+
+    def nearest(postures):
+        others = endpoint_positions(skeleton, np.radians(postures))
+        return np.linalg.norm(hands[:, np.newaxis] - others[np.newaxis], axis=2).min()
+
+    assert nearest(taught) >= 0.085
+    assert nearest(untaught) >= 0.065
+    assert np.linalg.norm(hands - load(TAKES)["task"]["target"]["pos"], axis=1).min() >= 0.115
+
+
+@pytest.mark.parametrize("n", [1, 2])
+def test_the_analysis_runs_each_chosen_esn_with_the_searchs_tracker_from_the_takes_and_the_unseen_starts(n):
+    robot, hand = load(EXPERIMENT / f"robot_esn{n}.toml"), load(EXPERIMENT / "hand_robot.toml")
+    (chosen,) = EXPERIMENT.glob(f"esn{n}_*.toml")
+
+    assert robot["esn"]["model"].endswith(f"-{chosen.stem}/esn.toml")
+    assert robot["tracker"] == hand["tracker"]
+    assert list(robot["evaluation"].pop("extra_starts")) == ["unseen"]
+    hand["evaluation"].pop("extra_starts")
+    assert robot["evaluation"] == hand["evaluation"]
+    assert "disturbance" not in robot
+    assert "progress" not in robot
+
+
+@pytest.mark.parametrize("n", [1, 2])
+@pytest.mark.parametrize("times", [1, 2, 4])
+def test_the_analysis_pushes_each_chosen_esn_at_one_two_and_four_times_report_007s_forces(n, times):
+    pushes, hand = load(EXPERIMENT / f"pushes{times}x_robot_esn{n}.toml"), load(EXPERIMENT / "hand_pushes_robot.toml")
+
+    assert pushes["esn"] == load(EXPERIMENT / f"robot_esn{n}.toml")["esn"]
+    for table in ("tracker", "progress", "evaluation"):
+        assert pushes[table] == hand[table]
+    for push, theirs in zip(pushes["disturbance"], hand["disturbance"], strict=True):
+        assert push.pop("force") == times * theirs.pop("force")
+        assert push == theirs
+
+
+@pytest.mark.parametrize(("n_takes", "trained"), [(1, [0]), (3, [0, 2, 4]), (6, [0, 1, 2, 3, 4, 5]), (9, range(9))])
+def test_the_take_counts_train_the_chosen_settings_on_nested_sets_and_run_from_the_same_45_starts(n_takes, trained):
+    config, again = load(EXPERIMENT / f"takes{n_takes}.toml"), load(EXPERIMENT / "untaught_search.toml")
+    start_q = load(TAKES)["demonstrations"]["start_q"]
+
+    assert config["demonstrations"]["run"] == again["demonstrations"]["run"]
+    assert config["demonstrations"]["train"] == [f"demo_{i:02d}_filtered.sklog.npz" for i in trained]
+    for n, setting in enumerate(config["settings"], start=1):
+        (chosen,) = EXPERIMENT.glob(f"esn{n}_*.toml")
+        assert setting == {key: load(chosen)["esn"][key] for key in setting}
+    assert config["sweep"] == {"seed": [1, 2, 3, 4, 5]}
+    for table in ("esn", "tracker", "ranking"):
+        assert config[table] == again[table]
+    extra = config["evaluation"]["extra_starts"]
+    assert extra["unseen"] == load(EXPERIMENT / "robot_esn1.toml")["evaluation"]["extra_starts"]["unseen"]
+    # Every take's start is run from: as a take trained on, or among the other takes' starts.
+    assert extra.get("other_takes", []) == [start_q[i] for i in range(9) if i not in trained]
+
+
+def test_the_one_take_coarse_search_is_the_coarse_search_trained_on_take_00_alone():
+    one, coarse = load(EXPERIMENT / "one_take_coarse_search.toml"), load(EXPERIMENT / "coarse_search.toml")
+
+    assert one["demonstrations"].pop("train") == ["demo_00_filtered.sklog.npz"]
+    coarse["demonstrations"].pop("train")
+    assert one == coarse

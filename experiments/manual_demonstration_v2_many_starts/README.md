@@ -7,7 +7,8 @@ have 800 neurons.
 
 **Status.** The ESN's setting was tuned by hand first, with the configurations
 below. The search's rule, [below](#the-search), was fixed on 2026-11-17 before any
-run of the search. The claims of this stage are not fixed yet.
+run of the search. The claims of this stage and the runs that test them,
+[below](#the-analysis), were fixed on 2026-11-18 before any of those runs.
 
 ## The robot and the takes
 
@@ -239,6 +240,74 @@ uv run python experiments/autonomous_esn.py \
 uv run python experiments/autonomous_esn.py \
     experiments/manual_demonstration_v2_many_starts/esn2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml
 ```
+
+## The analysis
+
+ESN #1 and ESN #2 are tested on the robot with the search's tracker, against the
+replay of a take by time and against ESNs trained on fewer takes. No size is fixed in
+advance: every claim is a count or a direction, and the sizes are reported. A claim
+holds if it holds for ESN #1 and for ESN #2.
+
+**The measures.** A run holds as in the search: the hand arrives within 20 mm of the
+target and stays within it for 2 s. Its detour ratio is the search's. How a run
+starts is measured by the reference's fastest joint speed and by the run's largest
+joint torque: a reference that begins away from the arm jumps to it, and the tracker
+kicks.
+
+**The unseen starts** are 36 more hand positions, on the rings of the 36 untaught
+ones turned 15° back (`tools/tip_starts.py <takes> --counts 18 12 6 --first-angle
+38.3`), joint 2 positive: none is nearer than 0.09 m to a take's start, 0.07 m to an
+untaught start of the scoring, or 0.12 m to the target. No search or scoring ran
+from them.
+
+**The one-take baseline** is trained on take 00 alone, whose hand starts in the
+direction of the start of reports 005 to 020's take, and chosen as ESN #1 and ESN #2
+were: the coarse search (seed 0), the fine search around its best (seeds 1 to 5),
+and the fine settings whose every run holds scored again with the 36 untaught starts
+of `hand_esn.toml`. The typical seeds of its two best settings are one-take ESN #1
+and one-take ESN #2.
+
+### The claims
+
+1. **The takes' starts.** Undisturbed, from each of the nine takes' starts, the hand
+   arrives and holds, as the replay's does.
+2. **The unseen starts.** From the 36 unseen starts, the hand arrives and holds from
+   as many as the replay of the take that starts nearest.
+3. **Starting where the arm is.** From the 36 unseen starts, the reference's fastest
+   joint speed and the largest joint torque are smaller than the replay's, in their
+   medians over the starts.
+4. **Going directly.** From the 36 unseen starts, the median detour ratio is smaller
+   than the replay's.
+5. **Pushes.** Under report 007's three pushes at their forces, at twice, and at four
+   times them, from each take's start, the hand arrives and ends within 20 mm of
+   the target in at least as many of the nine runs as the replay's and as the
+   progress replay's, at each size. Leaving the goal during the hold is excused, as
+   in report 017: a push can carry the arm into the goal early.
+6. **Nine takes against one.** From the 44 starts take 00 does not start from (the
+   other eight takes' and the 36 unseen), ESN #1 and ESN #2 each hold from more
+   starts than one-take ESN #1 and than one-take ESN #2, with a smaller median detour
+   ratio. The eight and the 36 are also reported apart, with the reference's fastest
+   joint speed and the largest torque.
+7. **More takes.** At ESN #1's setting and at ESN #2's, over five reservoirs (seeds
+   1 to 5), the runs that hold from the 36 unseen starts are more with nine takes
+   than with one, and do not decrease from one take to three, to six, to nine.
+
+The plan had sets of three and five takes, proposed for start postures a step apart
+in joint space. With the hands on rings, the sets are one, three, six, and nine, each
+holding the one before: take 00; takes 00, 02, and 04, every other hand of the outer
+ring; the outer ring; and all nine.
+
+### The runs
+
+| Claims | Configurations | What they run |
+| --- | --- | --- |
+| 1 to 4 | `robot_esn1.toml`, `robot_esn2.toml` | ESN #1 and ESN #2 against the replay, undisturbed, from the nine takes' starts and the 36 unseen ones (`robot_esn.py`; 90 runs, about 8 minutes each) |
+| 5 | `pushes1x_robot_esn1.toml`, `pushes2x_…`, `pushes4x_…`, and those of ESN #2 | ESN #1 and ESN #2 against the replay and the progress replay under the three pushes at 1, 2, and 4 times their forces, from each take's start (`robot_esn.py`; 27 runs, about 2 minutes each) |
+| 6 | `one_take_coarse_search.toml`, then the one-take fine search, its scoring with the untaught starts, and the two chosen ESNs, written as each step gives the next | the one-take baseline's search, and one-take ESN #1 and ESN #2 against the replay of take 00, undisturbed, from take 00's start, the other eight takes' starts, and the 36 unseen ones |
+| 7 | `takes1.toml`, `takes3.toml`, `takes6.toml`, `takes9.toml` | ESN #1's and ESN #2's settings, seeds 1 to 5, trained on one, three, six, and nine takes, each ESN on the robot, undisturbed, from every take's start and the 36 unseen ones (`sweep_robot_esn.py`; about 4 minutes each with 30 workers) |
+
+The pushes are `hand_pushes_robot.toml`'s: the first two placed along each take,
+where its hand is 18% and 62% of the way to the target, the third at 15 s.
 
 | Configurations | What they run |
 | --- | --- |
