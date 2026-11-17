@@ -123,7 +123,7 @@ def main() -> None:
             esn.set_context(task)
             print(f"\nTask {names[task]}")
         runs = run_autonomously(esn, setup)
-        task_rows = []
+        task_rows: list[dict[str, Any]] = []
         for run in runs:
             i = len(rows) + len(task_rows)
             joint_trajectory_log(setup.skeleton, setup.times, run.q, setup.task, producer="autonomous ESN").save(

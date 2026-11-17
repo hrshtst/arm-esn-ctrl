@@ -658,7 +658,9 @@ def test_a_task_button_changes_the_context_during_a_run_and_the_log_records_it(q
     assert app.run is not None
     state = task_esn.state()
 
-    app.task_buttons.button(1).click()
+    button = app.task_buttons.button(1)
+    assert button is not None
+    button.click()
 
     assert task_esn.context == pytest.approx([0.0, 1.0])
     assert task_esn.state() == pytest.approx(state)  # the reservoir keeps its state
