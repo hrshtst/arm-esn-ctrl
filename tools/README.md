@@ -111,7 +111,7 @@ outermost ring's first hand, and `--elbow` the sign of joint 2. The postures are
 rounded to whole degrees:
 
 ```bash
-uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_starts.toml \
+uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
     --counts 6 3 --first-angle 43.3
 ```
 
@@ -119,10 +119,12 @@ uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_sta
 the workspace and in joint space, with the target and the postures that put the hand
 on it; `--starts` adds the start postures no take starts from that another
 configuration lists (`[evaluation.extra_starts]`), a shape for each group. For a
-two-link arm whose joint 1 turns a whole turn, a dashed line shows where the hand is
-with joint 1 at its limit, which the hand cannot cross:
+two-link arm whose joint 1 turns a whole turn and no further, as
+`reach_manual_v2.toml`'s, a dashed line shows where the hand is with joint 1 at its
+limit, which the hand cannot cross; an arm whose joints turn further is shown within
+one turn:
 
 ```bash
-uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_starts.toml --output starts.png \
+uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_no_limits.toml --output starts.png \
     --starts experiments/manual_demonstration_v2_many_starts/hand_esn.toml
 ```

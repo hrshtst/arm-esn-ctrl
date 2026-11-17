@@ -1,18 +1,17 @@
 # An ESN to tune by hand: trained on the takes from the nine start postures of
-# reach_manual_v2_starts.toml, and run on its own from each take's start and from 36
-# hand positions no take starts from, spread evenly over the workspace, with the elbow
-# on either side. Edit [esn], train, and watch the ESN in the apps; the run prints
-# their commands. See README.md.
+# reach_manual_v2_no_limits.toml, and run on its own from each take's start and from 36
+# hand positions no take starts from, spread evenly over the workspace. Edit [esn],
+# train, and watch the ESN in the apps; the run prints their commands. See README.md.
 #
 #   uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_many_starts/hand_esn.toml
 
 [demonstrations]
-# The run directory of experiments/import_demonstrations.py for reach_manual_v2_starts.toml,
+# The run directory of experiments/import_demonstrations.py for reach_manual_v2_no_limits.toml,
 # relative to the storage root, and the takes to train on, filtered at 2 Hz. Leave
-# takes out of `train` to train on fewer: demo_00 is the take of reports 005 to 020.
-run = "results/demonstrations/YYYYMMDD-HHMMSS-reach_manual_v2_starts"  # EDIT: the import's run
+# takes out of `train` to train on fewer.
+run = "results/demonstrations/YYYYMMDD-HHMMSS-reach_manual_v2_no_limits"  # EDIT: the import's run
 train = [
-  "demo_00_filtered.sklog.npz",  # from (30, 30) deg
+  "demo_00_filtered.sklog.npz",  # from (13, 71) deg
   "demo_01_filtered.sklog.npz",  # from (73, 71)
   "demo_02_filtered.sklog.npz",  # from (133, 71)
   "demo_03_filtered.sklog.npz",  # from (-167, 71)
@@ -45,16 +44,12 @@ start_offsets_deg = [[0.0, 0.0]]  # each take's own start
 [evaluation.extra_starts]
 # Start postures no take starts from (deg), laid out by the hand: 36 hand positions
 # spread evenly over the workspace, on three rings around the base, 0.78, 0.53, and
-# 0.28 m from it, with 18, 12, and 6 hands, each standing for the same area. They are
-# turned 10 deg from the takes' rings, so that no hand is nearer than 0.10 m to a
-# take's start:
+# 0.28 m from it, with 18, 12, and 6 hands, each standing for the same area, and
+# joint 2 positive, as in the takes. They are turned 10 deg from the takes' rings, so
+# that no hand is nearer than 0.10 m to a take's start:
 #
-#   uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_starts.toml \
+#   uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
 #       --counts 18 12 6 --first-angle 53.3
-#
-# `untaught` has the elbow on the takes' side (joint 2 positive), and
-# `untaught_other_elbow` the same hand positions with the elbow on the other side
-# (--elbow -1), where no take goes.
 untaught = [
   [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
   [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
@@ -62,14 +57,6 @@ untaught = [
   [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
   [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
   [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
-]
-untaught_other_elbow = [
-  [80.0, -60.0], [100.0, -60.0], [120.0, -60.0], [140.0, -60.0], [160.0, -60.0], [-180.0, -60.0],
-  [-160.0, -60.0], [-140.0, -60.0], [-120.0, -60.0], [-100.0, -60.0], [-80.0, -60.0], [-60.0, -60.0],
-  [-40.0, -60.0], [-20.0, -60.0], [0.0, -60.0], [20.0, -60.0], [40.0, -60.0], [60.0, -60.0],
-  [109.0, -109.0], [139.0, -109.0], [169.0, -109.0], [-161.0, -109.0], [-131.0, -109.0], [-101.0, -109.0],
-  [-71.0, -109.0], [-41.0, -109.0], [-11.0, -109.0], [19.0, -109.0], [49.0, -109.0], [79.0, -109.0],
-  [131.0, -146.0], [-169.0, -146.0], [-109.0, -146.0], [-49.0, -146.0], [11.0, -146.0], [71.0, -146.0],
 ]
 
 [apps]

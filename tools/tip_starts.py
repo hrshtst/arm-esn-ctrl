@@ -3,7 +3,7 @@
 
 """Start postures of a two-link arm whose hands are spread evenly over the workspace.
 
-    uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_starts.toml \
+    uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
         --counts 6 3 --first-angle 43.3
 
 Start postures a step apart in joint space put their hands unevenly in the

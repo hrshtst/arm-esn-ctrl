@@ -3,21 +3,21 @@
 
 """Draw the start postures of a demonstration configuration, to judge them before recording.
 
-    uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_starts.toml --output starts.png
+    uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_no_limits.toml --output starts.png
 
 The left panel shows the workspace: the arm at each start posture of
 ``[demonstrations]`` ``start_q``, numbered as its take (``demo_00``, ...), the
 target and its goal radius, and the ring the hand can reach. The right panel shows
-the same starts in joint space, within the joint limits, with the postures that put
-the hand at the target (stars). ``--starts`` adds the start postures no take
+the same starts in joint space, within the joint limits or within one turn, whichever
+is narrower, with the postures that put the hand at the target (stars). ``--starts`` adds the start postures no take
 starts from that another configuration lists, such as an ESN's
 ``[evaluation.extra_starts]``, as hollow markers, a shape for each group. A task
 without a target, such as a periodic motion, shows its curve instead.
 
-Where joint 1 of a two-link arm turns a whole turn and no further, the workspace
-panel also shows where the hand is with joint 1 at its limit and the elbow on the
-takes' side (dashed): the hand cannot cross it, so a start on its far side from the
-target goes around the base the other way.
+Where joint 1 of a two-link arm turns a whole turn and no further, as
+reach_manual_v2.toml's, the workspace panel also shows where the hand is with joint 1
+at its limit and the elbow on the takes' side (dashed): the hand cannot cross it, so
+a start on its far side from the target goes around the base the other way.
 """
 
 from __future__ import annotations
@@ -62,9 +62,19 @@ def main() -> None:
     print(f"Wrote {args.output}")
 
 
-def target_postures(skeleton: Skeleton, target: np.ndarray) -> np.ndarray:
-    """The postures that put the hand at ``target`` (deg), found from seeds all over the joint space, each once."""
+def shown_range_deg(skeleton: Skeleton) -> tuple[np.ndarray, np.ndarray]:
+    """Each joint's range to show (deg): its limits, or one turn from -180 to 180 deg where they are wider."""
     lower, upper = joint_limits_deg(skeleton)
+    return np.maximum(lower, -WHOLE_TURN_DEG / 2), np.minimum(upper, WHOLE_TURN_DEG / 2)
+
+
+def target_postures(skeleton: Skeleton, target: np.ndarray) -> np.ndarray:
+    """The postures that put the hand at ``target`` (deg), found from seeds all over the joint space, each once.
+
+    Of an arm whose joints turn further than a whole turn, those within one turn, from
+    -180 to 180 deg: the others are these, whole turns away.
+    """
+    lower, upper = shown_range_deg(skeleton)
     found: list[np.ndarray] = []
     rng = np.random.default_rng(0)
     for _ in range(60):
@@ -74,6 +84,7 @@ def target_postures(skeleton: Skeleton, target: np.ndarray) -> np.ndarray:
             q = np.degrees(compute_inverse_kinematics(arm, tuple(target)).q)
         except (ValueError, RuntimeError):
             continue
+        q = np.where(upper - lower >= WHOLE_TURN_DEG - 1e-9, (q + 180.0) % WHOLE_TURN_DEG - 180.0, q)
         reached = np.linalg.norm(endpoint_positions(skeleton, np.radians(q)[np.newaxis])[0] - target) < 1e-4
         if reached and not any(np.abs(q - other).max() < 1.0 for other in found):
             found.append(q)
@@ -88,7 +99,7 @@ def joint_1_wall(skeleton: Skeleton, starts: np.ndarray) -> np.ndarray | None:
     the workspace.
     """
     lower, upper = joint_limits_deg(skeleton)
-    if len(lower) != 2 or upper[0] - lower[0] < WHOLE_TURN_DEG - 1e-9:
+    if len(lower) != 2 or abs(upper[0] - lower[0] - WHOLE_TURN_DEG) > 1e-9:
         return None
     elbow = np.sign(np.median(starts[:, 1]))
     bend = elbow * np.linspace(0.0, min(abs(lower[1]), abs(upper[1])), 91)
@@ -108,7 +119,7 @@ def plot_starts(
     hands = endpoint_positions(skeleton, starts)
     lengths = [link.prop.length for link in skeleton.links[1:]]
     reach, inner = sum(lengths), max(2 * max(lengths) - sum(lengths), 0.0)
-    lower, upper = joint_limits_deg(skeleton)
+    lower, upper = shown_range_deg(skeleton)
 
     fig = Figure(figsize=(13, 6.5), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(f"Start postures: {title}", color="#0b0b0b")

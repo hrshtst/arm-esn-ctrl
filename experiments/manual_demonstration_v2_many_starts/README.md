@@ -2,23 +2,29 @@
 
 Reports 017 to 020 taught one reach from one start posture. This experiment is the
 first stage of extending them to more tasks: one target, reached from many start
-postures, taught by one take from each. Its ESNs have 800 neurons.
+postures, taught by one take from each, on v2's arm with no joint limits. Its ESNs
+have 800 neurons.
 
 **Status.** The ESN's setting is being tuned by hand first, with the configurations
 below. The search, its rule, and the claims of this stage will be fixed here before
 any run of the search; nothing here is a result yet.
 
-## The takes
+## The robot and the takes
 
-[`reach_manual_v2_starts.toml`](../demonstrations/reach_manual_v2_starts.toml) holds the
-arm and the target of reports 005 to 020 and nine start postures. The take from
-(30°, 30°) is the one of reports 005 to 020; the other eight are recorded with
-skelarm's recorder, as its header says, and all nine are imported into one
-demonstration run:
+[`reach_manual_v2_no_limits.toml`](../demonstrations/reach_manual_v2_no_limits.toml)
+holds the robot, the target, and the nine start postures. The robot is the arm of
+reports 005 to 020 (v2: its links and its target) with no joint limits: neither joint
+has a range to stay in (the limits are ten turns each way, which nothing comes near).
+With v2's limits of ±180°, joint 1's stop is a line across the workspace that the hand
+cannot cross, so some hands would have to go around the base the long way; without
+it, the hand goes to the target either way around.
+
+All nine takes are recorded with skelarm's recorder, as the configuration's header
+says, and imported into one demonstration run:
 
 ```bash
-uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_starts.toml --output starts.png
-uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_v2_starts.toml
+uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_no_limits.toml --output starts.png
+uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_v2_no_limits.toml
 ```
 
 `starts_figure.py` draws the start postures in the workspace and in joint space, to
@@ -38,29 +44,23 @@ the hands of the ring outside it. [`tools/tip_starts.py`](../../tools/tip_starts
 turns them into postures, rounded to whole degrees, which moves a hand less than
 1 cm:
 
-| Starts | Rings (hands, distance from the base) | Elbow | Command |
-| --- | --- | --- | --- |
-| the nine takes' | 6 at 0.74 m, 3 at 0.38 m | the side of reports 005 to 020's take (joint 2 positive) | `tools/tip_starts.py <takes> --counts 6 3 --first-angle 43.3` |
-| 36 untaught | 18 at 0.78 m, 12 at 0.53 m, 6 at 0.28 m | the takes' side | `tools/tip_starts.py <takes> --counts 18 12 6 --first-angle 53.3` |
-| 36 untaught, other elbow | the same hand positions | the other side (joint 2 negative) | the same with `--elbow -1` |
+| Starts | Rings (hands, distance from the base) | Command |
+| --- | --- | --- |
+| the nine takes' | 6 at 0.74 m, 3 at 0.38 m | `tools/tip_starts.py <takes> --counts 6 3 --first-angle 43.3` |
+| 36 untaught | 18 at 0.78 m, 12 at 0.53 m, 6 at 0.28 m | `tools/tip_starts.py <takes> --counts 18 12 6 --first-angle 53.3` |
 
-- **The take of reports 005 to 020** starts with its hand 43.3° from the x axis and
-  0.87 m from the base. The takes' outer ring begins in that direction, and that take
-  stands in the place of the ring's first hand, so eight takes are new.
+- **The first hand** is in the direction of the start of reports 005 to 020's take,
+  43.3° from the x axis.
 - **The untaught hands** are turned 10° from the takes' rings: none is nearer than
   0.10 m to a take's start or to the target.
-- **The elbow.** A hand position has two postures. Every take has the elbow on one
-  side, as the take of reports 005 to 020 has from its start to its end: dragging the
-  hand never changes the side, so all nine takes end in one posture. The untaught
-  starts with the elbow on the other side are where no take goes, and are counted
-  apart.
-- **Joint 1's limit.** Joint 1 cannot turn past ±180°. With the elbow on the takes'
-  side, the hand then lies on the lower half of the circle of 0.4 m around
-  (−0.5, 0) m, which the hand cannot cross (the dashed line of the figure). The
-  target lies above it. A hand that starts below it cannot go straight to the
-  target, and goes around the base the other way, through the right side: take 03,
-  from (−167°, 71°), would turn joint 1 by 79° if it could cross, and turns it by
-  281° instead. Takes 04 and 08 turn it by 221° and 213°.
+- **The elbow.** A hand position has two postures. Every start, taught or not, has
+  joint 2 positive, the elbow on the side of reports 005 to 020's take.
+- **Two rest postures.** Without limits, a take that goes around the base clockwise
+  ends with joint 1 a whole turn below one that goes counterclockwise: at −246°
+  instead of 114°, the hand at the same place. Dragged straight, the hands of takes
+  03 and 04 go clockwise; that of take 08 would pass 0.06 m from the base, inside
+  the ring the hand cannot enter, so it goes around the base on either side. The
+  ESN reads joint angles, so it is taught two rest postures for the one target.
 
 ## Tuning an ESN by hand
 
@@ -68,23 +68,23 @@ turns them into postures, rounded to whole degrees, which moves a hand less than
 2. **Edit `[esn]`** in `hand_esn.toml`: the leak rate, the spectral radius, the input
    scaling, the ridge, the seed, and the rest. Leave takes out of `train` to train
    on fewer.
-3. **Train**, about a minute:
+3. **Train**, about half a minute:
 
    ```bash
    uv run python experiments/autonomous_esn.py experiments/manual_demonstration_v2_many_starts/hand_esn.toml
    ```
 
    The run trains the ESN and runs it on its own from each take's start and from the
-   72 start postures no take starts from. It prints how many arrive and stay, for
-   the takes' starts, the untaught ones, and the untaught ones with the other elbow
-   apart, writes each run's measures to `metrics.csv` (among them `first_step_m`,
-   `detour_ratio`, and `off_line_m`), and draws `autonomous.png`.
+   36 start postures no take starts from. It prints how many arrive and stay, for
+   the takes' starts and the untaught ones apart, writes each run's measures to
+   `metrics.csv` (among them `first_step_m`, `detour_ratio`, and `off_line_m`), and
+   draws `autonomous.png`.
 4. **Watch it live.** The run ends by printing the two commands, with its own
    `esn.toml`:
 
    ```bash
-   uv run python tools/esn_reference_app.py experiments/demonstrations/reach_manual_v2_starts.toml --model <run directory>/esn.toml
-   uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2_starts.toml \
+   uv run python tools/esn_reference_app.py experiments/demonstrations/reach_manual_v2_no_limits.toml --model <run directory>/esn.toml
+   uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
        --law pd --omega 20 --damping 0.4 --control-period 0.01 \
        --gains-from reports/005-tuned-on-the-robot/data/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz \
        --model <run directory>/esn.toml
@@ -108,6 +108,6 @@ Each training is its own run directory, so earlier ESNs stay; to keep a setting,
 
 | Configurations | What they run |
 | --- | --- |
-| `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from, with the elbow on either side |
-| `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (162 runs, about a quarter of an hour) |
+| `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from |
+| `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (90 runs, about 8 minutes) |
 | `hand_pushes_robot.toml` | that ESN on the robot under report 007's three pushes, the first two placed along each take, from each take's start, against the replays of that take (about 2 minutes) |
