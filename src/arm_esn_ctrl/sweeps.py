@@ -72,3 +72,57 @@ def _finite_median(values: list[float]) -> float:
     array = np.array(values, dtype=np.float64)
     finite = array[np.isfinite(array)]
     return float(np.median(finite)) if finite.size else float("nan")
+
+
+def score_settings(runs: list[dict[str, Any]], names: list[str]) -> list[dict[str, Any]]:
+    """Score each setting of a sweep by how many of its runs arrive and hold, then by how directly they arrive.
+
+    ``runs`` are the rows of a sweep's ``runs.csv``: each holds its swept values,
+    whether it failed (``failed``: it never arrives, or does not hold), and its
+    detour ratio (``detour_ratio``, NaN for a run that never arrives; see
+    :func:`arm_esn_ctrl.metrics.directness`). A setting is a combination of the
+    values of ``names``, the swept keys other than ``seed``; its runs are those of
+    all its seeds.
+
+    Returns one row per setting, the best first: its values, then ``runs`` (how
+    many), ``holding_runs`` (those that arrive and hold), and
+    ``median_detour_ratio`` (over its runs that arrive; NaN if none does). The
+    settings with the most holding runs come first, and among equals, the smallest
+    median detour ratio; a NaN comes last, and settings equal in both keep the
+    sweep's order.
+
+    With ``seed`` in the runs, each row also holds ``seeds`` (how many) and
+    ``typical_seed``: of the setting's seeds with the most holding runs, the one
+    whose own median detour ratio is nearest the setting's (the first, if none of
+    them arrives).
+    """
+    settings: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for run in runs:
+        settings.setdefault(tuple(run[name] for name in names), []).append(run)
+    scores = []
+    for values, group in settings.items():
+        median = _finite_median([run["detour_ratio"] for run in group])
+        score = dict(zip(names, values, strict=True)) | {
+            "runs": len(group),
+            "holding_runs": sum(not run["failed"] for run in group),
+            "median_detour_ratio": median,
+        }
+        if "seed" in group[0]:
+            seeds: dict[Any, list[dict[str, Any]]] = {}
+            for run in group:
+                seeds.setdefault(run["seed"], []).append(run)
+            holding = {seed: sum(not run["failed"] for run in each) for seed, each in seeds.items()}
+            gaps = {
+                seed: abs(_finite_median([run["detour_ratio"] for run in each]) - median)
+                for seed, each in seeds.items()
+                if holding[seed] == max(holding.values())
+            }
+            typical = min(gaps, key=lambda seed: _nan_last(gaps[seed]))
+            score |= {"seeds": len(seeds), "typical_seed": typical}
+        scores.append(score)
+    return sorted(scores, key=lambda score: (-score["holding_runs"], _nan_last(score["median_detour_ratio"])))
+
+
+def _nan_last(value: float) -> float:
+    """``value``, or infinity for a NaN, so that it sorts last."""
+    return value if np.isfinite(value) else float("inf")

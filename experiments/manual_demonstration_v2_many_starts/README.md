@@ -5,9 +5,10 @@ first stage of extending them to more tasks: one target, reached from many start
 postures, taught by one take from each, on v2's arm with no joint limits. Its ESNs
 have 800 neurons.
 
-**Status.** The ESN's setting is being tuned by hand first, with the configurations
-below. The search, its rule, and the claims of this stage will be fixed here before
-any run of the search; nothing here is a result yet.
+**Status.** The ESN's setting was tuned by hand first, with the configurations
+below. The search's rule, [below](#the-search), was fixed on 2026-11-17 before any
+run of the search. The claims of this stage are not fixed yet, and nothing here is a
+result yet.
 
 ## The robot and the takes
 
@@ -106,8 +107,61 @@ turns them into postures, rounded to whole degrees, which moves a hand less than
 Each training is its own run directory, so earlier ESNs stay; to keep a setting, copy
 `hand_esn.toml` under a name of its own.
 
+## The search
+
+The search chooses two ESNs by how reliably the hand arrives and holds from the
+takes' starts, and then by how directly it goes there.
+
+1. **The runs.** Each ESN is trained on the nine takes and generates the reference
+   of the simulated robot, undisturbed, from each take's start: nine runs of 24 s,
+   with the consistent search's tracker (report 017's), as `hand_robot.toml`'s.
+2. **A run holds** if the hand arrives within 20 mm of the target and stays within
+   it for the 2 s after it arrives. Nothing later is required: a hand that leaves
+   after those 2 s still holds.
+3. **The detour ratio** of a run that arrives is the length of the hand's path until
+   it arrives, over the straight distance from its start to the goal: 1 for a
+   straight reach, never less.
+4. **A setting's score** is how many of its runs hold, the most first; then the
+   median detour ratio of its runs that arrive, the smallest first.
+5. **The coarse search:** 108 settings with one reservoir each (seed 0):
+
+   | Parameter | Values |
+   | --- | --- |
+   | leak rate | 0.01, 0.03, 0.1, 0.3 |
+   | spectral radius | 0.9, 1.2, 1.5 |
+   | input scaling | 0.1, 0.5, 2 |
+   | ridge | 10⁻⁴, 10⁻², 1 |
+
+   The rest is `coarse_search.toml`'s `[esn]`: 800 neurons, sparsity 0.05, a bias,
+   a warm-up of 1 s, 10 ms.
+6. **The center** is the coarse setting with the best score.
+7. **The fine search:** 81 settings around the center, with five reservoirs each
+   (seeds 1 to 5). Each parameter takes three values: the center's, and the one
+   halfway to its coarse neighbor on each side, rounded to two digits. Halfway is
+   in ratio for the leak rate, the input scaling, and the ridge, whose coarse values
+   step in ratio, and in difference for the spectral radius. Where the center is at
+   an edge of the coarse grid, the value beyond the edge is as far from the center
+   as the one on the other side. A setting's runs are the 45 of its five seeds.
+8. **ESN #1 and ESN #2** are the typical seeds of the two fine settings with the
+   best scores. A setting's typical seed is, of its seeds with the most runs that
+   hold, the one whose own median detour ratio is nearest the setting's.
+
+The search leaves out the start postures no take starts from, pushes, held-out
+seeds, and an ESN trained on one take; the one-take search waits until a good ESN of
+the nine takes is found. Before the rule was fixed, the 36 coarse settings with a
+ridge of 10⁻² were run once to measure the search's time; that run was not kept.
+
+```bash
+uv run python experiments/sweep_robot_esn.py \
+    experiments/manual_demonstration_v2_many_starts/coarse_search.toml --workers 30
+```
+
+The run writes every setting's score to `scores.csv`, the best first, and every
+run's measures to `runs.csv`.
+
 | Configurations | What they run |
 | --- | --- |
+| `coarse_search.toml` | the coarse search: 108 settings, seed 0, each on the robot from each take's start (about 7 minutes with 30 workers) |
 | `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (90 runs, about 8 minutes) |
 | `hand_pushes_robot.toml` | that ESN on the robot under report 007's three pushes, the first two placed along each take, from each take's start, against the replays of that take (about 2 minutes) |

@@ -1,14 +1,14 @@
 # Copyright (C) 2026 Hiroshi Atsuta <atsuta@ieee.org>
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Tests for the summaries of ESN sweeps over seeds."""
+"""Tests for the summaries of ESN sweeps over seeds, and for the settings' scores."""
 
 import math
 
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.sweeps import summarize_seeds
+from arm_esn_ctrl.sweeps import score_settings, summarize_seeds
 
 
 def row(scaling, radius, seed, rmse, *, failures=0, arrival=10.0, final=0.001):
@@ -82,3 +82,67 @@ def test_an_undisturbed_sweep_has_no_returns():
     (summary,) = summarize_seeds([row(2.0, 0.99, 0, 0.001)], ["input_scaling", "spectral_radius"])
 
     assert "unreturned_seeds" not in summary
+
+
+def run(leak, seed, ratio, *, failed=False):
+    return {"leak_rate": leak, "seed": seed, "failed": failed, "detour_ratio": ratio}
+
+
+def test_settings_are_scored_by_their_holding_runs_then_by_their_median_detour_ratio():
+    runs = [
+        run(0.01, 0, 1.30),
+        run(0.01, 0, 1.10),
+        run(0.03, 0, 1.05),
+        run(0.03, 0, math.nan, failed=True),  # never arrives
+        run(0.1, 0, 1.02),
+        run(0.1, 0, 1.08, failed=True),  # arrives, and leaves the goal: its detour ratio counts
+        run(0.3, 0, 1.04),
+        run(0.3, 0, 1.06),
+    ]
+
+    scores = score_settings(runs, ["leak_rate"])
+
+    assert [score["leak_rate"] for score in scores] == [0.3, 0.01, 0.03, 0.1]
+    assert [score["holding_runs"] for score in scores] == [2, 2, 1, 1]
+    assert [score["runs"] for score in scores] == [2] * 4
+    assert [score["median_detour_ratio"] for score in scores] == pytest.approx([1.05, 1.20, 1.05, 1.05])
+
+
+def test_a_setting_whose_runs_never_arrive_comes_last_and_equal_settings_keep_the_sweeps_order():
+    runs = [
+        run(0.01, 0, math.nan, failed=True),
+        run(0.03, 0, 1.5, failed=True),
+        run(0.1, 0, 1.5, failed=True),
+    ]
+
+    scores = score_settings(runs, ["leak_rate"])
+
+    assert [score["leak_rate"] for score in scores] == [0.03, 0.1, 0.01]
+    assert math.isnan(scores[-1]["median_detour_ratio"])
+
+
+def test_a_settings_runs_are_those_of_all_its_seeds_and_its_typical_seed_is_nearest_its_median():
+    runs = [
+        *(run(0.03, 1, ratio) for ratio in (1.00, 1.02, 1.04)),
+        *(run(0.03, 2, ratio) for ratio in (1.10, 1.12, 1.14)),
+        *(run(0.03, 3, ratio) for ratio in (1.30, 1.32, 1.34)),
+        # The seed nearest the median does not count: one of its runs does not hold.
+        run(0.03, 4, 1.11),
+        run(0.03, 4, 1.11),
+        run(0.03, 4, 1.11, failed=True),
+    ]
+
+    (score,) = score_settings(runs, ["leak_rate"])
+
+    assert (score["seeds"], score["runs"], score["holding_runs"]) == (4, 12, 11)
+    assert score["median_detour_ratio"] == pytest.approx(1.11)
+    assert score["typical_seed"] == 2
+
+
+def test_without_seeds_a_setting_has_no_typical_seed():
+    runs = [{"leak_rate": 0.03, "failed": False, "detour_ratio": 1.1}]
+
+    (score,) = score_settings(runs, ["leak_rate"])
+
+    assert "typical_seed" not in score
+    assert "seeds" not in score

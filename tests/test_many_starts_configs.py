@@ -90,6 +90,26 @@ def test_the_untaught_starts_are_36_hands_over_the_workspace_with_the_takes_elbo
     assert load(EXPERIMENT / "hand_robot.toml")["evaluation"]["extra_starts"] == extra
 
 
+def test_the_coarse_search_runs_108_settings_of_one_seed_from_each_takes_start():
+    coarse, hand = load(EXPERIMENT / "coarse_search.toml"), load(EXPERIMENT / "hand_esn.toml")
+
+    assert coarse["demonstrations"]["train"] == hand["demonstrations"]["train"]
+    assert coarse["sweep"] == {
+        "leak_rate": [0.01, 0.03, 0.1, 0.3],
+        "spectral_radius": [0.9, 1.2, 1.5],
+        "input_scaling": [0.1, 0.5, 2.0],
+        "ridge": [1e-4, 1e-2, 1.0],
+    }
+    esn = EsnConfig(**coarse["esn"])
+    assert (esn.n_neurons, esn.seed) == (800, 0)
+    assert (esn.dt, esn.warmup, esn.sparsity, esn.bias) == (0.01, 1.0, 0.05, True)
+    assert coarse["ranking"] == {"by": "detour_ratio"}
+    # Undisturbed, from each take's own start and no other.
+    assert coarse["evaluation"] == {"duration": 24.0, "hold": 2.0, "start_offsets_deg": [[0.0, 0.0]]}
+    assert "disturbance" not in coarse
+    assert coarse["tracker"] == load(EXPERIMENT / "hand_robot.toml")["tracker"]
+
+
 @pytest.mark.parametrize("name", ["hand_robot.toml", "hand_pushes_robot.toml"])
 def test_the_robot_runs_use_the_consistent_searchs_tracker_with_its_takes_gains(name):
     tracker, v2 = load(EXPERIMENT / name)["tracker"], load(V2_PUSHES)["tracker"]

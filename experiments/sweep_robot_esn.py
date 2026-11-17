@@ -9,7 +9,8 @@ The configuration holds the ``[demonstrations]`` and ``[esn]`` tables of
 ``experiments/autonomous_esn.py``; a ``[sweep]`` table, which lists values for one
 to three of the ``[esn]`` hyperparameters, as in ``experiments/sweep_esn.py``; the
 ``[tracker]`` table of ``experiments/robot_esn.py``; and an ``[evaluation]`` table:
-the run's duration, the hold, and the start postures. Every combination of the
+the run's duration, the hold, and the start postures. ``[sweep]`` may list more
+hyperparameters than three; the heatmaps are then left out. Every combination of the
 swept values is trained on the demonstrations and generates the reference of the
 simulated arm from every start posture, with every tracker setting, as the ESN arm
 of ``robot_esn.py`` does: undisturbed, or pushed and blocked by the optional
@@ -60,6 +61,14 @@ run directory also receives:
   worst path RMSE, the seeds with a failed run, the largest final distance, and
   the median latest arrival.
 
+With a ``[ranking]`` table of ``by = "detour_ratio"``, the settings are scored
+instead by how many of their runs arrive and hold, the most first, then by the
+median detour ratio of their runs that arrive, the smallest first (see
+:func:`arm_esn_ctrl.sweeps.score_settings`): how directly the hand goes to the
+goal, whatever the take's path. The run directory then also receives
+``scores.csv``: one row per setting, the best first, with its typical seed when
+the seed is swept; and ``sweep.csv`` gives each combination's median detour ratio.
+
 With ``--workers``, the combinations are spread over that many processes, each
 computing with one thread; their results are the same as in one process.
 
@@ -108,7 +117,7 @@ from arm_esn_ctrl.disturbances import (
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import resolve_run_path, start_run
-from arm_esn_ctrl.sweeps import summarize_seeds
+from arm_esn_ctrl.sweeps import score_settings, summarize_seeds
 from arm_esn_ctrl.tracking import (
     EsnSource,
     TrackerConfig,
@@ -142,6 +151,7 @@ SEED_DISTURBANCE_MAPS = [
     ("unreturned_seeds", "Seeds with a run not back on the path (of {seeds})", 1.0, False),
     ("median_latest_return_s", "Median over the seeds of the latest return (s)", 1.0, False),
 ]
+MAPPED = (2, 3)  # how many swept hyperparameters the heatmaps can show
 # What sweep.csv gives for each tracker setting, from the first start posture: its column, and the run's metric.
 PER_SETTING = {
     "path_rmse_m": "taught_path_rmse_m",
@@ -187,8 +197,9 @@ def main() -> None:
 
     config, run_dir = start_run(args.config)
     sweep: dict[str, list[Any]] = config["sweep"]
-    if len(sweep) not in (1, 2, 3):
-        msg = f"[sweep] must list one to three hyperparameters, not {len(sweep)}"
+    ranking = config.get("ranking", {}).get("by")
+    if ranking not in (None, "detour_ratio"):
+        msg = f'[ranking] by must be "detour_ratio", not {ranking!r}'
         raise ValueError(msg)
     context = sweep_context(config)
     disturbance = config.get("disturbance")
@@ -233,13 +244,17 @@ def main() -> None:
     names = [name for name in sweep if name != "seed"]  # the settings, each tried with every seed
     if "seed" in sweep:
         tables["seeds.csv"] = summarize_seeds(rows, names)
+    if ranking:
+        tables["scores.csv"] = score_settings(run_rows, names)
     for name, table in tables.items():
         with (run_dir / name).open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=list(table[0]))
             writer.writeheader()
             writer.writerows(table)
     print_ranking(rows, list(sweep), settings)
-    if len(sweep) > 1:
+    if ranking:
+        print_scores(tables["scores.csv"], names)
+    if len(sweep) in MAPPED:
         maps = [
             (metric, label.format(runs=rows[0]["runs"]), factor, log)
             for metric, label, factor, log in MAPS + (DISTURBANCE_MAPS if spans else [])
@@ -249,7 +264,7 @@ def main() -> None:
         plot_sweep(rows, sweep, maps, title, tops).savefig(run_dir / "sweep.png", dpi=150)
     if "seed" in sweep:
         print_seed_ranking(tables["seeds.csv"], names)
-        if len(names) > 1:
+        if len(names) in MAPPED:
             seeds = len(sweep["seed"])
             maps = [
                 (metric, label.format(seeds=seeds), factor, log)
@@ -390,7 +405,10 @@ def detour(hand: NDArray[np.float64], taught_hand: NDArray[np.float64], every: i
 
 
 def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances: int) -> dict[str, Any]:
-    """A combination's failed runs, worst and mean path RMSE, and latest arrival; then each setting's first run.
+    """A combination's failed runs, path RMSE, latest arrival, and median detour ratio; then each setting's first run.
+
+    The path RMSE is the worst and the mean over its runs, and the detour ratio's
+    median is over its runs that arrive (NaN if none does).
 
     With ``disturbances`` (how many), also its runs not back on the path after one,
     the latest return, and the farthest from the path, and each setting's first run
@@ -398,6 +416,7 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances:
     """
     path_rmse = [run["taught_path_rmse_m"] for run in runs]
     arrivals = [run["arrival_time_s"] for run in runs]
+    ratios = [run["detour_ratio"] for run in runs]  # NaN for a run that never arrives
     summary: dict[str, Any] = {
         "runs": len(runs),
         "failures": sum(run["failed"] for run in runs),
@@ -405,6 +424,7 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances:
         "mean_path_rmse_m": float(np.mean(path_rmse)),
         "latest_arrival_s": float(np.max(arrivals)) if np.all(np.isfinite(arrivals)) else float("nan"),
         "worst_final_distance_m": float(np.max([run["final_distance_m"] for run in runs])),
+        "median_detour_ratio": float(np.nanmedian(ratios)) if np.any(np.isfinite(ratios)) else float("nan"),
     }
     columns = dict(PER_SETTING)
     if disturbances:
@@ -442,6 +462,18 @@ def print_ranking(rows: list[dict[str, Any]], names: list[str], settings: list[S
         print(
             f"  {values}: {r['failures']} of {r['runs']} fail, worst path RMSE {1000 * r['worst_path_rmse_m']:.1f} mm"
             f" | {details}"
+        )
+
+
+def print_scores(scores: list[dict[str, Any]], names: list[str], count: int = 10) -> None:
+    """Print the settings with the most runs that arrive and hold, then the smallest median detour ratio."""
+    print("\nThe most runs that arrive and hold, then the smallest median detour ratio of the runs that arrive:")
+    for score in scores[:count]:
+        values = ", ".join(f"{name}={score[name]:g}" for name in names)
+        seed = f"; typical seed {score['typical_seed']}" if "typical_seed" in score else ""
+        print(
+            f"  {values}: {score['holding_runs']} of {score['runs']} hold,"
+            f" median detour ratio {score['median_detour_ratio']:.4f}{seed}"
         )
 
 
