@@ -136,6 +136,32 @@ def test_the_fine_search_runs_81_settings_around_the_center_with_seeds_1_to_5():
     }
 
 
+@pytest.mark.parametrize(
+    ("name", "values"),
+    [
+        ("esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml", (0.1, 1.2, 1.0, 1.0, 2)),
+        ("esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml", (0.055, 1.2, 1.0, 0.1, 4)),
+    ],
+)
+def test_the_chosen_esns_are_settings_and_seeds_of_the_fine_search_run_as_the_hand_tuned_one(name, values):
+    chosen, fine, hand = (
+        load(EXPERIMENT / name),
+        load(EXPERIMENT / "fine_search.toml"),
+        load(EXPERIMENT / "hand_esn.toml"),
+    )
+    swept = ("leak_rate", "spectral_radius", "input_scaling", "ridge", "seed")
+
+    assert tuple(chosen["esn"][key] for key in swept) == values
+    for key, value in zip(swept, values, strict=True):
+        assert value in fine["sweep"][key]
+    assert {k: v for k, v in chosen["esn"].items() if k not in swept} == {
+        k: v for k, v in fine["esn"].items() if k not in swept
+    }
+    assert chosen["demonstrations"] == fine["demonstrations"]
+    assert chosen["evaluation"] == hand["evaluation"]
+    assert chosen["apps"] == hand["apps"]
+
+
 @pytest.mark.parametrize("name", ["hand_robot.toml", "hand_pushes_robot.toml"])
 def test_the_robot_runs_use_the_consistent_searchs_tracker_with_its_takes_gains(name):
     tracker, v2 = load(EXPERIMENT / name)["tracker"], load(V2_PUSHES)["tracker"]

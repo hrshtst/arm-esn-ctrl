@@ -175,10 +175,31 @@ it:
 The center's ridge is the coarse grid's largest, so the fine search goes as far
 above it as below.
 
+**The chosen ESNs.** Of the fine search's 81 settings, 20 hold in all 45 runs of
+their five seeds. The two with the smallest median detour ratios, and their typical
+seeds:
+
+| ESN | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold | Median detour ratio of the setting |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| #1 | 0.1 | 1.2 | 1 | 1 | 2 | 45 of 45 | 1.0068 |
+| #2 | 0.055 | 1.2 | 1 | 0.1 | 4 | 45 of 45 | 1.0082 |
+
+Their configurations train them, run them on their own from the takes' starts and
+from the 36 start postures no take starts from, and save `esn.toml` for the apps, as
+`hand_esn.toml` does:
+
+```bash
+uv run python experiments/autonomous_esn.py \
+    experiments/manual_demonstration_v2_many_starts/esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml
+uv run python experiments/autonomous_esn.py \
+    experiments/manual_demonstration_v2_many_starts/esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml
+```
+
 | Configurations | What they run |
 | --- | --- |
 | `coarse_search.toml` | the coarse search: 108 settings, seed 0, each on the robot from each take's start (about 7 minutes with 30 workers) |
 | `fine_search.toml` | the fine search: 81 settings around the coarse search's best, seeds 1 to 5, alike (about 25 minutes) |
+| `esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml`, `esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml` | ESN #1 and ESN #2, trained and run on their own as `hand_esn.toml`'s |
 | `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (90 runs, about 8 minutes) |
 | `hand_pushes_robot.toml` | that ESN on the robot under report 007's three pushes, the first two placed along each take, from each take's start, against the replays of that take (about 2 minutes) |
