@@ -163,6 +163,8 @@ def test_the_untaught_search_runs_20_of_the_fine_searchs_settings_from_the_untau
     [
         ("esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml", (0.1, 1.2, 1.0, 1.0, 2)),
         ("esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml", (0.055, 1.2, 1.0, 0.1, 4)),
+        ("rescored1_lr0.055_sr1.2_is1_ridge1_seed4.toml", (0.055, 1.2, 1.0, 1.0, 4)),
+        ("rescored2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml", (0.1, 1.05, 0.5, 10.0, 3)),
     ],
 )
 def test_the_chosen_esns_are_settings_and_seeds_of_the_fine_search_run_as_the_hand_tuned_one(name, values):

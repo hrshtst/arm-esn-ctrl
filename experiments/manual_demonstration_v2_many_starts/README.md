@@ -218,12 +218,26 @@ uv run python experiments/sweep_robot_esn.py \
     experiments/manual_demonstration_v2_many_starts/untaught_search.toml --workers 30
 ```
 
+**The outcome.** No run from a take's start fails. Three of the 20 settings hold in
+all 225 runs; the settings of ESN #1 and ESN #2 hold in 215 and 203, and the worst
+setting in 168. The two best, and their typical seeds:
+
+| | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold | Median detour ratio of the setting |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| first | 0.055 | 1.2 | 1 | 1 | 4 | 225 of 225 | 1.054 |
+| second | 0.1 | 1.05 | 0.5 | 10 | 3 | 225 of 225 | 1.063 |
+
+`rescored1_lr0.055_sr1.2_is1_ridge1_seed4.toml` and
+`rescored2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml` train them and run them on their
+own, as ESN #1's and ESN #2's configurations do.
+
 | Configurations | What they run |
 | --- | --- |
 | `coarse_search.toml` | the coarse search: 108 settings, seed 0, each on the robot from each take's start (about 7 minutes with 30 workers) |
 | `fine_search.toml` | the fine search: 81 settings around the coarse search's best, seeds 1 to 5, alike (about 25 minutes) |
 | `untaught_search.toml` | the fine search's 20 settings that hold in every run, seeds 1 to 5, each on the robot from each take's start and from the 36 untaught ones (about 30 minutes) |
 | `esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml`, `esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml` | ESN #1 and ESN #2, trained and run on their own as `hand_esn.toml`'s |
+| `rescored1_lr0.055_sr1.2_is1_ridge1_seed4.toml`, `rescored2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml` | the typical seeds of the two best settings of `untaught_search.toml`, trained and run on their own alike |
 | `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (90 runs, about 8 minutes) |
 | `hand_pushes_robot.toml` | that ESN on the robot under report 007's three pushes, the first two placed along each take, from each take's start, against the replays of that take (about 2 minutes) |
