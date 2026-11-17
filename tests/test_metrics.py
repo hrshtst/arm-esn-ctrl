@@ -7,6 +7,10 @@ import numpy as np
 import pytest
 
 from arm_esn_ctrl.metrics import (
+    directness,
+    loop_periods,
+    loop_phase,
+    mean_loop,
     arrival_index,
     count_speed_peaks,
     disturbance_following,
@@ -397,3 +401,96 @@ def test_pressing_without_moving_costs_torque_but_no_work():
     assert torque > 0.0
     assert squared > 0.0
     assert work == 0.0
+
+
+def test_a_straight_reach_has_a_detour_ratio_of_one_and_stays_on_the_line():
+    hand = np.column_stack([np.linspace(0.0, 1.0, 101), np.zeros(101)])
+
+    ratio, off_line = directness(hand, target=[1.0, 0.0], radius=0.02)
+
+    assert ratio == pytest.approx(1.0)
+    assert off_line == pytest.approx(0.0, abs=1e-12)
+
+
+def test_a_detour_lengthens_the_path_and_leaves_the_line():
+    angle = np.linspace(np.pi, 0.0, 2001)  # half a circle from (0, 0) to (1, 0), over the line
+    hand = np.column_stack([0.5 + 0.5 * np.cos(angle), 0.5 * np.sin(angle)])
+
+    ratio, off_line = directness(hand, target=[1.0, 0.0], radius=0.02)
+
+    assert ratio == pytest.approx(np.pi / 2, rel=0.03)  # the arc, less its end within the goal
+    assert ratio > 1.5
+    assert off_line == pytest.approx(0.5, abs=1e-3)
+
+
+def test_the_detour_ratio_stops_at_the_arrival():
+    out = np.column_stack([np.linspace(0.0, 1.0, 101), np.zeros(101)])
+    hand = np.vstack([out, out[::-1]])  # to the target, and all the way back
+
+    ratio, off_line = directness(hand, target=[1.0, 0.0], radius=0.02)
+
+    assert ratio == pytest.approx(1.0)
+    assert off_line == pytest.approx(0.0, abs=1e-12)
+
+
+def test_a_hand_that_never_arrives_has_no_detour_ratio():
+    hand = np.column_stack([np.linspace(0.0, 0.5, 51), np.linspace(0.0, 0.2, 51)])
+
+    ratio, off_line = directness(hand, target=[1.0, 0.0], radius=0.02)
+
+    assert np.isnan(ratio)
+    assert off_line == pytest.approx(0.2, abs=1e-9)
+    assert np.isnan(directness(hand, target=[0.0, 0.01], radius=0.02)[0])  # it starts within the goal
+
+
+def circles(turns: float, period: float = 2.0, dt: float = 0.01, clockwise: bool = False):
+    """A hand going around (0.3, 0.1) at a radius of 0.2 m, ``period`` seconds a turn."""
+    times = np.arange(0.0, turns * period + dt / 2, dt)
+    angle = (-1 if clockwise else 1) * 2 * np.pi * times / period + 0.4
+    return times, np.array([0.3, 0.1]) + 0.2 * np.column_stack([np.cos(angle), np.sin(angle)])
+
+
+@pytest.mark.parametrize("clockwise", [False, True])
+def test_each_whole_loop_takes_its_period(clockwise):
+    times, hand = circles(3.6, period=2.0, clockwise=clockwise)
+
+    periods = loop_periods(times, hand, center=[0.3, 0.1])
+
+    assert periods == pytest.approx([2.0, 2.0, 2.0], abs=1e-6)
+    turned = loop_phase(hand, [0.3, 0.1])
+    assert turned[-1] - turned[0] == pytest.approx((-1 if clockwise else 1) * 3.6 * 2 * np.pi, abs=1e-6)
+
+
+def test_less_than_a_loop_has_no_period():
+    times, hand = circles(0.8)
+
+    assert len(loop_periods(times, hand, center=[0.3, 0.1])) == 0
+
+
+def test_the_mean_loop_of_a_circle_is_the_circle():
+    _, hand = circles(3.0)
+
+    loop, spread = mean_loop(hand, center=[0.3, 0.1])
+
+    assert loop.shape == (361, 2)
+    assert loop[0] == pytest.approx(loop[-1])
+    assert np.linalg.norm(loop - [0.3, 0.1], axis=1) == pytest.approx(0.2, abs=1e-9)
+    assert spread == pytest.approx(0.0, abs=1e-5)  # the loop is a polygon of 360 sides
+
+
+def test_the_spread_is_how_much_the_loops_differ():
+    _, small = circles(1.0)
+    large = np.array([0.3, 0.1]) + 1.1 * (small - [0.3, 0.1])  # a second loop 20 mm wider
+
+    loop, spread = mean_loop(np.vstack([small, large]), center=[0.3, 0.1])
+
+    assert np.linalg.norm(loop - [0.3, 0.1], axis=1) == pytest.approx(0.21, abs=1e-3)
+    assert spread == pytest.approx(0.01, abs=1e-3)
+
+
+def test_the_mean_loop_fills_in_the_angles_no_point_falls_at():
+    _, hand = circles(1.0, dt=0.05)  # 40 points a turn, for 360 angles
+
+    loop, _ = mean_loop(hand, center=[0.3, 0.1])
+
+    assert np.linalg.norm(loop - [0.3, 0.1], axis=1) == pytest.approx(0.2, abs=1e-9)

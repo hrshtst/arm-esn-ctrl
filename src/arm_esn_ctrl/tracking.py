@@ -224,17 +224,34 @@ class EsnSource:
 class ReplaySource:
     """A demonstration ``q_demo``, sampled every reference period, replayed by time.
 
-    After its last sample, the demonstration's final posture is held.
+    After its last sample, the demonstration's final posture is held. A periodic
+    demonstration is replayed without end instead, given the samples of its
+    ``loop``, the first and one past the last (see :func:`loop_sample`): after the
+    loop's last sample, the replay goes on from its first, where the taught motion
+    came back to after one or several turns.
     """
 
-    def __init__(self, q_demo: NDArray[np.float64]) -> None:
+    def __init__(self, q_demo: NDArray[np.float64], loop: tuple[int, int] | None = None) -> None:
         self.q_demo = q_demo
+        self.loop = loop
 
     def reset(self, start_q: NDArray[np.float64]) -> None:
         pass
 
     def next_posture(self, k: int, q: NDArray[np.float64]) -> NDArray[np.float64]:
+        if self.loop is not None:
+            return self.q_demo[loop_sample(max(k + 1, 0), self.loop)]
         return self.q_demo[min(max(k + 1, 0), len(self.q_demo) - 1)]
+
+
+def loop_sample(index: int, loop: tuple[int, int]) -> int:
+    """The sample of a periodic demonstration at ``index``, counted on without end through its ``loop``.
+
+    ``loop`` is the loop's first sample and one past its last: up to the last, the
+    sample is ``index`` itself; beyond, the samples of the loop again and again.
+    """
+    first, end = loop
+    return index if index < end else first + (index - first) % (end - first)
 
 
 class ProgressReplaySource:
@@ -251,15 +268,23 @@ class ProgressReplaySource:
     rests, its path does not lengthen, so the replayed sample passes through the
     rest as the replay's does. After its last sample, the demonstration's final
     posture is held.
+
+    A periodic demonstration is replayed without end, given its ``loop`` (see
+    :class:`ReplaySource`): its samples are counted on through the loop, and the
+    path goes on from the loop's last sample to its first, so that the progress and
+    the lead carry over from one turn to the next.
     """
 
-    def __init__(self, q_demo: NDArray[np.float64], lead: float, window: int) -> None:
+    def __init__(
+        self, q_demo: NDArray[np.float64], lead: float, window: int, loop: tuple[int, int] | None = None
+    ) -> None:
         if lead <= 0.0 or window < 1:
             msg = f"the lead ({lead} rad) and the window ({window} samples) must be positive"
             raise ValueError(msg)
         self.q_demo = q_demo
         self.lead = lead
         self.window = window
+        self.loop = loop
         # The length of the joint path up to each sample.
         self.length = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(q_demo, axis=0), axis=1))])
         self._nearest = 0
@@ -272,6 +297,8 @@ class ProgressReplaySource:
     def next_posture(self, k: int, q: NDArray[np.float64]) -> NDArray[np.float64]:
         if k < 0:
             return self.q_demo[0]
+        if self.loop is not None:
+            return self._next_in_loop(q, self.loop)
         low = max(self._nearest - self.window, 0)
         high = min(self._nearest + self.window + 1, len(self.q_demo))
         self._nearest = low + int(np.argmin(np.linalg.norm(self.q_demo[low:high] - q, axis=1)))
@@ -279,6 +306,28 @@ class ProgressReplaySource:
         allowed = int(np.searchsorted(self.length, self.length[self._nearest] + self.lead, side="right")) - 1
         self._index = max(min(self._index + 1, allowed, len(self.q_demo) - 1), self._index - 1)
         return self.q_demo[self._index]
+
+    def _next_in_loop(self, q: NDArray[np.float64], loop: tuple[int, int]) -> NDArray[np.float64]:
+        """As :meth:`next_posture`, with the samples counted on without end through the loop."""
+        candidates = np.arange(max(self._nearest - self.window, 0), self._nearest + self.window + 1)
+        samples = np.array([loop_sample(int(i), loop) for i in candidates])
+        self._nearest = int(candidates[np.argmin(np.linalg.norm(self.q_demo[samples] - q, axis=1))])
+        limit = self._length_at(self._nearest, loop) + self.lead
+        allowed = self._nearest
+        while self._length_at(allowed + 1, loop) <= limit:
+            allowed += 1
+        self._index = max(min(self._index + 1, allowed), self._index - 1, 0)
+        return self.q_demo[loop_sample(self._index, loop)]
+
+    def _length_at(self, index: int, loop: tuple[int, int]) -> float:
+        """The length of the joint path up to the sample counted ``index``, each turn of the loop adding its own."""
+        first, end = loop
+        if index < end:
+            return float(self.length[index])
+        closing = float(np.linalg.norm(self.q_demo[first] - self.q_demo[end - 1]))  # from the last sample to the first
+        turn = float(self.length[end - 1] - self.length[first]) + closing
+        turns, within = divmod(index - first, end - first)
+        return float(self.length[first + within]) + turns * turn
 
 
 class _CurrentReference:

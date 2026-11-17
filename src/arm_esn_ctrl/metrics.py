@@ -373,6 +373,89 @@ def _nearest_on_path(
     return k, fraction[rows, k], distance[rows, k]
 
 
+def directness(hand: NDArray[np.float64], target: ArrayLike, radius: float) -> tuple[float, float]:
+    """Return how direct the hand's path to the goal is: its detour ratio, and how far it strays from the straight line.
+
+    - The detour ratio is the length of the hand's path until it arrives within
+      ``radius`` of the ``target``, over the straight distance from its start to the
+      goal (to the target, less the radius): 1 for a straight reach, never less, and
+      NaN for a hand that never arrives or that starts within the goal. The path's
+      last step ends where it crosses into the goal, between its two samples.
+    - The other is the hand's largest distance, until it arrives (or to the end of
+      a path that never does), from the straight line between its start and the
+      target (m).
+
+    Neither needs a demonstration: they say how the hand gets to the goal, not
+    whether it moves as taught. An arm cannot always go straight, as when its elbow
+    has to change sides.
+    """
+    target = np.asarray(target, dtype=np.float64)
+    arrival = arrival_index(hand, target, radius)
+    reach = hand if arrival is None else hand[: arrival + 1]
+    off_line = float(distances_to_path(reach, np.vstack([hand[0], target])).max())
+    straight = float(np.linalg.norm(target - hand[0])) - radius
+    if arrival is None or arrival == 0 or straight <= 0.0:
+        return float("nan"), off_line
+    steps = np.linalg.norm(np.diff(reach, axis=0), axis=1)
+    before, after = (float(np.linalg.norm(target - point)) for point in reach[-2:])
+    steps[-1] *= (before - radius) / (before - after)  # the last step, up to the goal's edge
+    return float(steps.sum()) / straight, off_line
+
+
+def loop_phase(points: NDArray[np.float64], center: ArrayLike) -> NDArray[np.float64]:
+    """Return the angle of each of ``points`` about ``center`` (rad), unwrapped: it grows by 2 pi with each loop.
+
+    For a periodic motion around ``center``, such as the hand's along an ellipse,
+    counterclockwise loops make it grow and clockwise ones shrink.
+    """
+    offset = points - np.asarray(center, dtype=np.float64)
+    return np.unwrap(np.arctan2(offset[:, 1], offset[:, 0]))
+
+
+def loop_periods(times: NDArray[np.float64], points: NDArray[np.float64], center: ArrayLike) -> NDArray[np.float64]:
+    """Return how long each whole loop of ``points`` around ``center`` takes (s), from the first point on.
+
+    A loop is complete when the angle about the center (:func:`loop_phase`) is first a
+    whole turn past where the last one ended, in the direction of the motion; its time
+    is interpolated between the two samples. Fewer than one loop gives nothing.
+    """
+    phase = loop_phase(points, center)
+    turned = np.sign(phase[-1] - phase[0]) * (phase - phase[0])
+    ends = []
+    for k in range(1, int(turned.max() // (2 * np.pi)) + 1):
+        i = int(np.argmax(turned >= 2 * np.pi * k))
+        fraction = (2 * np.pi * k - turned[i - 1]) / (turned[i] - turned[i - 1])
+        ends.append(times[i - 1] + fraction * (times[i] - times[i - 1]))
+    return np.diff(np.concatenate([[times[0]], ends]))
+
+
+def mean_loop(points: NDArray[np.float64], center: ArrayLike, n: int = 360) -> tuple[NDArray[np.float64], float]:
+    """Return the mean loop of ``points`` around ``center``, a closed path, and how far the points spread from it.
+
+    The mean loop has ``n + 1`` points, the last the first again: at each of ``n``
+    angles about the center, the mean distance from it of the points near that angle
+    (within half a step), filled in from the angles beside it where no point falls.
+    It suits loops that go once around the center, each angle met once, as a circle
+    or an ellipse. The spread is the RMS distance of the points from the mean loop
+    (m): of a taught motion, how much its loops differ from each other.
+    """
+    center = np.asarray(center, dtype=np.float64)
+    offset = points - center
+    angle = np.arctan2(offset[:, 1], offset[:, 0])
+    radius = np.linalg.norm(offset, axis=1)
+    bins = np.round(angle / (2 * np.pi / n)).astype(int) % n
+    total = np.bincount(bins, weights=radius, minlength=n)
+    count = np.bincount(bins, minlength=n)
+    filled = np.flatnonzero(count)
+    mean = total[filled] / count[filled]
+    grid = np.arange(n + 1)
+    # Around the circle: the filled angles a turn before and after bound the empty ones at its ends.
+    radii = np.interp(grid, np.concatenate([filled - n, filled, filled + n]), np.tile(mean, 3))
+    angles = grid * (2 * np.pi / n)
+    loop = center + radii[:, np.newaxis] * np.column_stack([np.cos(angles), np.sin(angles)])
+    return loop, float(np.sqrt(np.mean(distances_to_path(points, loop) ** 2)))
+
+
 def arrival_index(hand: NDArray[np.float64], target: ArrayLike, radius: float) -> int | None:
     """Return the first sample index where the hand is within ``radius`` of the target, or None if never."""
     inside = np.linalg.norm(hand - np.asarray(target, dtype=np.float64), axis=1) <= radius

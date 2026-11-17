@@ -14,6 +14,16 @@ two phases).
 A demonstration taught by hand has no demonstrator to simulate: its run's
 configuration has no ``[controller]``. The setup then holds no demonstrator's
 reaches, and the runs are measured against the taught motion and the target only.
+
+An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) is trained on the
+demonstrations of each: the configuration then has one ``[[demonstrations]]`` table
+per task, each naming a demonstration run, its ``train`` files, and the task's name
+as its ``context``. :func:`load_setups` loads one setup per task, each as that of a
+single task, with its own target; :func:`training_set` gathers their demonstrations
+and each one's task for :meth:`arm_esn_ctrl.esn.ReachingEsn.fit`. A task without a
+target, such as a periodic motion, has a setup whose target and goal radius are NaN:
+no run arrives, and its own measures are those of
+:func:`arm_esn_ctrl.metrics.loop_periods` and :func:`arm_esn_ctrl.metrics.mean_loop`.
 """
 
 from __future__ import annotations
@@ -33,6 +43,7 @@ from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import (
     arrival_index,
     count_speed_peaks,
+    directness,
     distances_to_path,
     hold_metrics,
     jitter,
@@ -155,11 +166,50 @@ class Run:
     hand_ref: NDArray[np.float64] | None  # the demonstrator's hand positions
 
 
+def demonstration_tables(demonstrations: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The ``[demonstrations]`` table of a single task, or the ``[[demonstrations]]`` tables of several tasks.
+
+    Raises
+    ------
+    ValueError
+        If the tables of several tasks do not each name their task, a different
+        ``context`` each.
+    """
+    if isinstance(demonstrations, dict):
+        return [demonstrations]
+    names = [table.get("context") for table in demonstrations]
+    if None in names or len(set(names)) != len(names):
+        msg = "each [[demonstrations]] table needs a context, its task's name, different from the others'"
+        raise ValueError(msg)
+    return list(demonstrations)
+
+
+def task_names(demonstrations: dict[str, Any] | list[dict[str, Any]]) -> tuple[str, ...]:
+    """The names of the tasks of ``[[demonstrations]]`` tables, in their order; none for one ``[demonstrations]``."""
+    if isinstance(demonstrations, dict):
+        return ()
+    return tuple(table["context"] for table in demonstration_tables(demonstrations))
+
+
+def load_setups(config: dict[str, Any]) -> list[Setup]:
+    """One setup per task (see :func:`load_setup`): one for a single ``[demonstrations]`` table."""
+    return [load_setup(config | {"demonstrations": table}) for table in demonstration_tables(config["demonstrations"])]
+
+
+def training_set(setups: list[Setup], names: tuple[str, ...]) -> tuple[list[NDArray[np.float64]], list[int] | None]:
+    """The demonstrations of every task's setup, and each one's task index; no tasks without ``names``."""
+    trajectories = [q for setup in setups for q in setup.demos.values()]
+    if not names:
+        return trajectories, None
+    return trajectories, [task for task, setup in enumerate(setups) for _ in setup.demos]
+
+
 def load_setup(config: dict[str, Any]) -> Setup:
     """Load the demonstrations and simulate the demonstrator from every start posture.
 
     Demonstrations whose configuration has no ``[controller]``, as one taught by
-    hand, have no demonstrator: nothing is simulated.
+    hand, have no demonstrator: nothing is simulated. A task without a target has a
+    target and a goal radius of NaN.
     """
     dt = config["esn"]["dt"]
     evaluation = config["evaluation"]
@@ -179,7 +229,7 @@ def load_setup(config: dict[str, Any]) -> Setup:
         hand_refs = [endpoint_positions(skeleton, q) for q in q_refs]
     n_steps = round(evaluation["duration"] / dt)
     task = Task.from_dict(demo_config["task"])
-    if task.tolerance is None:
+    if task.target is not None and task.tolerance is None:
         msg = "the demonstrations' [task] target needs a tolerance, which is the goal radius"
         raise ValueError(msg)
     return Setup(
@@ -191,8 +241,8 @@ def load_setup(config: dict[str, Any]) -> Setup:
         hand_refs=hand_refs,
         skeleton=skeleton,
         task=demo_config["task"],
-        target=task.require_target(),
-        radius=task.tolerance,
+        target=np.full(2, np.nan) if task.target is None else task.target,
+        radius=float("nan") if task.tolerance is None else task.tolerance,
         hold=evaluation["hold"],
         times=dt * np.arange(n_steps + 1),
     )
@@ -298,6 +348,11 @@ def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
         ``first_step_m``: how far the hand moves in the run's first step; a jump
         shows that the ESN snaps back to a trajectory it learned.
 
+        ``detour_ratio`` and ``off_line_m``: how direct the hand's path to the goal
+        is, whatever was taught: its length until it arrives over the straight
+        distance from its start to the goal, and how far it strays from the straight
+        line to the target (see :func:`arm_esn_ctrl.metrics.directness`).
+
         Hold, which needs no reference: ``arrived``, ``arrival_time_s``,
         ``left_goal``, ``hold_error_m``, ``hold_observed_s``, and ``success``
         (see :func:`arm_esn_ctrl.metrics.hold_metrics`), and ``final_distance_m``,
@@ -369,8 +424,10 @@ def run_metrics(run: Run, setup: Setup) -> dict[str, float | bool]:
             "training_path_ratio": ratio,
         }
     retained = from_training / start_distance if start_distance >= _ON_TRAINING_PATH else float("nan")
+    detour_ratio, off_line = directness(run.hand, setup.target, setup.radius)
     return (
         {"first_step_m": float(np.linalg.norm(run.hand[1] - run.hand[0]))}
+        | {"detour_ratio": detour_ratio, "off_line_m": off_line}
         | reach
         | hold
         | {"final_distance_m": float(np.linalg.norm(run.hand[-1] - setup.target))}

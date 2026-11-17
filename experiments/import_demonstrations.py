@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Hiroshi Atsuta <atsuta@ieee.org>
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Import a reaching demonstration taught by hand into a demonstration run.
+"""Import demonstrations taught by hand into a demonstration run.
 
     uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_single.toml
 
@@ -11,6 +11,12 @@ The take recorded with skelarm's ``tools/trajectory_recorder.py`` (``take`` in
 configuration's arm, begin at the start posture, arrive at the target and hold
 there, and never jump. A take that fails a check is not imported: the problems are
 printed, no run is created, and the take must be recorded again.
+
+Several takes of one task, each from its own start posture, are listed as ``takes``
+instead, in the order of the start postures of ``[demonstrations]`` ``start_q``.
+They are imported together, as ``demo_00``, ``demo_01``, ..., each with its filtered
+copy, only if every one passes; the figure then draws them together. A task without
+a target, such as a periodic motion, has no arrival to check or to measure.
 
 A take that passes is imported, its pause before moving included, into a new run
 directory, as two demonstrations that a configuration's ``[demonstrations]`` names
@@ -59,6 +65,8 @@ TAKE_COLOR = "#2a78d6"
 RECORDED_COLOR = "#a3a29d"
 # Color, line width, and legend label of each demonstration: the take as recorded, under the filtered one.
 DEMO_STYLES = {"demo_00": (RECORDED_COLOR, 2.2, "as recorded"), "demo_00_filtered": (TAKE_COLOR, 1.2, "filtered")}
+# The colors of several takes, one each, in turn.
+TAKE_COLORS = ["#2a78d6", "#eb6834", "#2e8b57", "#8b5fbf", "#c2185b", "#00838f", "#9e7b00", "#5d6d7e", "#6d4c41"]
 JITTER_WINDOW = 5  # samples of the moving average the jitter is measured from, as in the autonomous runs
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
@@ -76,25 +84,36 @@ def main() -> None:
     with args.config.open("rb") as f:
         config = tomllib.load(f)
     recording = config["recording"]
-    take = resolve_run_path(recording["take"])
+    if ("take" in recording) == ("takes" in recording):
+        msg = "[recording] names one take, or lists several takes, not both"
+        raise ValueError(msg)
+    takes = [resolve_run_path(path) for path in recording.get("takes", [recording.get("take")])]
+    starts_deg = config["demonstrations"]["start_q"]
+    if len(starts_deg) != len(takes):
+        msg = f"[demonstrations] start_q lists {len(starts_deg)} start postures for {len(takes)} takes"
+        raise ValueError(msg)
     skeleton = Skeleton.from_toml(args.config)
     task = Task.from_dict(config["task"])
-    if task.tolerance is None:
+    if task.target is not None and task.tolerance is None:
         msg = "the [task] target needs a tolerance, which is the goal radius"
         raise ValueError(msg)
-    (start_deg,) = config["demonstrations"]["start_q"]  # one take, from one start posture
-    recorded = StateLog.load(take)
-    demos = {
-        "demo_00": recorded,
-        "demo_00_filtered": smooth_take(recorded, skeleton, config["task"], recording["filter"]),
-    }
+    demos: dict[str, StateLog] = {}
+    start_of: dict[str, list[float]] = {}
+    take_of: dict[str, Path] = {}
+    for i, (take, start_deg) in enumerate(zip(takes, starts_deg, strict=True)):
+        recorded = StateLog.load(take)
+        for name, log in (
+            (f"demo_{i:02d}", recorded),
+            (f"demo_{i:02d}_filtered", smooth_take(recorded, skeleton, config["task"], recording["filter"])),
+        ):
+            demos[name], start_of[name], take_of[name] = log, start_deg, take
     problems = {
         name: check_take(
             log,
             skeleton,
-            start_q=np.radians(start_deg),
-            target=task.require_target(),
-            radius=task.tolerance,
+            start_q=np.radians(start_of[name]),
+            target=task.target,
+            radius=task.tolerance or 0.0,
             hold=recording["hold"],
             start_tolerance=float(np.radians(recording["start_tolerance_deg"])),
             max_tip_speed=recording["max_tip_speed"],
@@ -102,19 +121,24 @@ def main() -> None:
         for name, log in demos.items()
     }
     if any(problems.values()):
-        print(f"Not imported: {take}")
+        print("Not imported: " + ", ".join(str(take) for take in takes))
         for name, found in problems.items():
             for problem in found:
-                print(f"  - {name}: {problem}")
+                print(f"  - {name} ({take_of[name].name}): {problem}")
         raise SystemExit(1)
 
     _, run_dir = start_run(args.config)
-    shutil.copy2(take, run_dir / "demo_00.sklog.npz")
-    demos["demo_00_filtered"].save(run_dir / "demo_00_filtered.sklog.npz")
-    sampling = sampling_metrics(recorded) | {"take_sha256": sha256_of(take)}
+    for name, log in demos.items():
+        if name.endswith("_filtered"):
+            log.save(run_dir / f"{name}.sklog.npz")
+        else:
+            shutil.copy2(take_of[name], run_dir / f"{name}.sklog.npz")
     hands = {name: endpoint_positions(skeleton, joint_angles(log)) for name, log in demos.items()}
     rows = [
-        {"demo": name} | demo_metrics(log, hands[name], start_deg, task, recording["hold"]) | sampling
+        {"demo": name}
+        | demo_metrics(log, hands[name], start_of[name], task, recording["hold"])
+        | sampling_metrics(demos[name.removesuffix("_filtered")])
+        | {"take_sha256": sha256_of(take_of[name])}
         for name, log in demos.items()
     ]
     with (run_dir / "metrics.csv").open("w", newline="") as f:
@@ -124,7 +148,7 @@ def main() -> None:
     print_metrics(rows)
     plot_take(demos, hands, task, rows, title=args.config.stem).savefig(run_dir / "demonstrations.png", dpi=150)
 
-    print(f"\nImported {take} to {run_dir}")
+    print(f"\nImported {len(takes)} take{'s' if len(takes) > 1 else ''} to {run_dir}")
     player = (REPO_ROOT / "third_party/skelarm/tools/player.py").relative_to(REPO_ROOT)
     print(f"Replay them with:\n  uv run python {player} {run_dir / 'demo_00.sklog.npz'}")
     print(f"  uv run python {player} {run_dir / 'demo_00_filtered.sklog.npz'}")
@@ -138,16 +162,23 @@ def joint_angles(log: StateLog) -> NDArray[np.float64]:
 def demo_metrics(
     log: StateLog, hand: NDArray[np.float64], start_deg: list[float], task: Task, hold: float
 ) -> dict[str, Any]:
-    """A demonstration's start, reach metrics, onset and arrival, and joint jitter (5 samples)."""
+    """A demonstration's start, reach metrics, onset and arrival, and joint jitter (5 samples).
+
+    A task without a target has no reach to measure: only the start, the onset, and the jitter.
+    """
     times = log.times
-    target = task.require_target()
     onset = onset_index(hand)
+    reach: dict[str, Any] = {}
+    arrival = float("nan")
+    if task.target is not None:
+        reach = reach_metrics(times, hand, task.target)
+        arrival = hold_metrics(times, hand, task.target, task.tolerance or 0.0, hold)["arrival_time_s"]
     return (
         joint_columns("start_q{j}_deg", start_deg)
-        | reach_metrics(times, hand, target)
+        | reach
         | {
             "onset_time_s": float("nan") if onset is None else float(times[onset]),
-            "arrival_time_s": hold_metrics(times, hand, target, task.tolerance or 0.0, hold)["arrival_time_s"],
+            "arrival_time_s": arrival,
             "jitter_deg": float(np.degrees(jitter(joint_angles(log), JITTER_WINDOW))),
         }
     )
@@ -172,8 +203,14 @@ def sha256_of(path: Path) -> str:
 
 
 def print_metrics(rows: list[dict[str, Any]]) -> None:
-    """Print each demonstration's timing and reach metrics, then how the take was sampled."""
+    """Print each demonstration's timing and reach metrics, then how each take was sampled."""
     for row in rows:
+        if "movement_time" not in row:  # a task without a target
+            print(
+                f"{row['demo']}: moves at {row['onset_time_s']:.2f} s of {row['length_s']:.2f} s;"
+                f" joint jitter {row['jitter_deg']:.3f} deg"
+            )
+            continue
         print(
             f"{row['demo']}: moves at {row['onset_time_s']:.2f} s and arrives at {row['arrival_time_s']:.2f} s"
             f" of {row['length_s']:.2f} s; movement {row['movement_time']:.2f} s, peak speed"
@@ -181,11 +218,13 @@ def print_metrics(rows: list[dict[str, Any]]) -> None:
             f" {row['jitter_deg']:.3f} deg, path deviation {row['path_deviation']:.1%},"
             f" final error {1000 * row['final_error']:.1f} mm"
         )
-    row = rows[0]
-    print(
-        f"The take: {row['samples']} samples at {row['achieved_rate_hz']:.1f} Hz of {row['requested_rate_hz']:g} Hz"
-        f" requested; longest interval {1000 * row['longest_interval_s']:.1f} ms"
-    )
+    recorded = [row for row in rows if not row["demo"].endswith("_filtered")]
+    for row in recorded:
+        name = "The take" if len(recorded) == 1 else f"The take of {row['demo']}"
+        print(
+            f"{name}: {row['samples']} samples at {row['achieved_rate_hz']:.1f} Hz of {row['requested_rate_hz']:g} Hz"
+            f" requested; longest interval {1000 * row['longest_interval_s']:.1f} ms"
+        )
 
 
 def style(ax: Axes) -> None:
@@ -203,54 +242,72 @@ def plot_take(
     rows: list[dict[str, Any]],
     title: str,
 ) -> Figure:
-    """The hand path, the joint angles and hand speed over time of each demonstration, and the take's sampling.
+    """The hand path, the joint angles and hand speed over time of each demonstration, and the takes' sampling.
 
-    The dotted lines mark when the recorded take's hand starts to move and when it arrives.
+    With one take, the dotted lines mark when its hand starts to move and when it
+    arrives. With several, each take has its own color, its recorded hand path
+    gray under the filtered one, and only the filtered joint angles and speeds are
+    drawn.
     """
-    target = task.require_target()
+    several = len(demos) > 2
     fig = Figure(figsize=(12, 8.5), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle(f"Demonstration taught by hand: {title}", color="#0b0b0b")
+    fig.suptitle(f"Demonstration{'s' if several else ''} taught by hand: {title}", color="#0b0b0b")
     ax_hand, ax_joint, ax_speed, ax_interval = fig.subplots(2, 2).flat
     for ax in (ax_hand, ax_joint, ax_speed, ax_interval):
         style(ax)
 
     for name, log in demos.items():
         times, hand = log.times, hands[name]
-        color, width, label = DEMO_STYLES[name]
+        filtered = name.endswith("_filtered")
+        take = int(name.split("_")[1])
+        if several:
+            color = TAKE_COLORS[take % len(TAKE_COLORS)] if filtered else RECORDED_COLOR
+            width = 1.2 if filtered else 2.2
+            label = f"take {take:02d}" if filtered else None
+        else:
+            color, width, label = DEMO_STYLES[name]
         q = np.degrees(joint_angles(log))
         ax_hand.plot(hand[:, 0], hand[:, 1], color=color, linewidth=width, label=label)
+        if several and not filtered:
+            ax_hand.plot(*hand[0], marker="o", markersize=5, color="#0b0b0b")
+            ax_interval.plot(times[1:], 1000 * np.diff(times), color=TAKE_COLORS[take % len(TAKE_COLORS)], linewidth=1)
+            continue
         for j, (linestyle, _) in zip(range(q.shape[1]), JOINT_STYLES, strict=False):
             ax_joint.plot(times, q[:, j], color=color, linestyle=linestyle, linewidth=width)
         ax_speed.plot(times, hand_speed(times, hand), color=color, linewidth=width)
-    start = hands["demo_00"][0]
-    ax_hand.plot(*start, marker="o", markersize=6, color="#0b0b0b")
-    ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
-    if task.tolerance is not None:
+    if not several:
+        ax_hand.plot(*hands["demo_00"][0], marker="o", markersize=6, color="#0b0b0b")
+    if task.target is not None:
+        ax_hand.plot(*task.target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
+    if task.target is not None and task.tolerance is not None:
         ring = np.linspace(0.0, 2 * np.pi, 100)
         ax_hand.plot(
-            target[0] + task.tolerance * np.cos(ring),
-            target[1] + task.tolerance * np.sin(ring),
+            task.target[0] + task.tolerance * np.cos(ring),
+            task.target[1] + task.tolerance * np.sin(ring),
             color="#0b0b0b",
             linewidth=0.8,
         )
-    ax_hand.set(title="Hand path (circle: start; cross: target)", xlabel="x (m)", ylabel="y (m)", aspect="equal")
-    ax_hand.legend(frameon=False, labelcolor=TEXT_COLOR)
+    marks = "circle: start; cross: target" if task.target is not None else "circle: start"
+    ax_hand.set(title=f"Hand path ({marks})", xlabel="x (m)", ylabel="y (m)", aspect="equal")
+    ax_hand.legend(frameon=False, labelcolor=TEXT_COLOR, fontsize=7 if several else None)
     n_joints = joint_angles(demos["demo_00"]).shape[1]
     styles = ", ".join(name for _, name in JOINT_STYLES[:n_joints])
     ax_joint.set(title=f"Joint angles (joints 1 to {n_joints}: {styles})", xlabel="time (s)", ylabel="angle (deg)")
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)")
-    for ax in (ax_joint, ax_speed):
-        for key in ("onset_time_s", "arrival_time_s"):
-            if np.isfinite(rows[0][key]):
-                ax.axvline(rows[0][key], color=TEXT_COLOR, linewidth=0.8, linestyle=":")
-
-    times = demos["demo_00"].times
-    ax_interval.plot(times[1:], 1000 * np.diff(times), color=TAKE_COLOR, linewidth=1.0)
+    if not several:
+        for ax in (ax_joint, ax_speed):
+            for key in ("onset_time_s", "arrival_time_s"):
+                if np.isfinite(rows[0][key]):
+                    ax.axvline(rows[0][key], color=TEXT_COLOR, linewidth=0.8, linestyle=":")
+        times = demos["demo_00"].times
+        ax_interval.plot(times[1:], 1000 * np.diff(times), color=TAKE_COLOR, linewidth=1.0)
     requested = rows[0]["requested_rate_hz"]
     if np.isfinite(requested):
         ax_interval.axhline(1000 / requested, color=TEXT_COLOR, linewidth=0.8, linestyle=":")
     ax_interval.set(
-        title="Sampling interval of the take (dotted: requested)", xlabel="time (s)", ylabel="interval (ms)"
+        title=f"Sampling interval of the take{'s' if several else ''} (dotted: requested)",
+        xlabel="time (s)",
+        ylabel="interval (ms)",
     )
     return fig
 

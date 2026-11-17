@@ -396,3 +396,58 @@ def test_without_a_schedule_the_esn_keeps_its_context(demos, task_esn):
 def test_a_schedule_must_be_in_the_order_of_its_times(task_esn):
     with pytest.raises(ValueError, match="order of its times"):
         EsnSource(task_esn, [(1.0, "six"), (0.5, "seven")])
+
+
+# A periodic demonstration: 10 samples of approach along joint 1, then a circle in joint space of 40 samples a turn,
+# gone around twice and a little more.
+_TURN = 0.2 * np.column_stack([np.cos(2 * np.pi * np.arange(90) / 40), np.sin(2 * np.pi * np.arange(90) / 40)])
+PERIODIC = np.vstack([np.column_stack([np.linspace(0.0, 0.18, 10), np.zeros(10)]), _TURN]).astype(np.float64)
+LOOP = (10, 50)  # one turn: its first sample, and one past its last
+
+
+def test_a_periodic_replay_goes_around_its_loop_without_end():
+    source = ReplaySource(PERIODIC, loop=LOOP)
+
+    given = np.vstack([source.next_posture(k, PERIODIC[0]) for k in range(-2, 200)])
+
+    assert given[:2] == pytest.approx(PERIODIC[[0, 0]])  # the warm-up
+    assert given[2:51] == pytest.approx(PERIODIC[1:50])  # the approach and the first turn
+    assert given[51:91] == pytest.approx(PERIODIC[10:50])  # the loop again
+    assert given[171:202] == pytest.approx(PERIODIC[10:41])  # and again
+
+
+def test_the_periodic_progress_replay_is_the_periodic_replay_for_an_arm_that_keeps_up():
+    progress = ProgressReplaySource(PERIODIC, lead=0.1, window=10, loop=LOOP)
+    replay = ReplaySource(PERIODIC, loop=LOOP)
+    progress.reset(PERIODIC[0])
+
+    q = PERIODIC[0]
+    for k in range(-3, 200):
+        given = progress.next_posture(k, q)
+        assert given == pytest.approx(replay.next_posture(k, q))
+        q = given  # the arm is where the reference was
+
+
+def test_the_periodic_progress_replay_waits_for_a_held_arm_in_a_later_turn():
+    source = ProgressReplaySource(PERIODIC, lead=0.07, window=10, loop=LOOP)
+    source.reset(PERIODIC[0])
+    q = PERIODIC[0]
+    for k in range(70):  # into the second turn, the arm keeping up
+        q = source.next_posture(k, q)
+    held = q
+
+    given = [source.next_posture(k, held) for k in range(70, 120)]
+
+    # A sample is 0.2 * 2 pi / 40 = 0.0314 rad of the path: the reference stops two samples past the arm.
+    ahead = np.linalg.norm(given[-1] - held)
+    assert 0.05 < ahead < 0.07
+    assert given[-1] == pytest.approx(given[-2])
+
+
+def test_the_loops_path_goes_on_from_its_last_sample_to_its_first():
+    source = ProgressReplaySource(PERIODIC, lead=0.07, window=10, loop=LOOP)
+
+    turn = source._length_at(50, LOOP) - source._length_at(10, LOOP)
+
+    assert turn == pytest.approx(40 * np.linalg.norm(PERIODIC[11] - PERIODIC[10]))
+    assert source._length_at(95, LOOP) == pytest.approx(source._length_at(15, LOOP) + 2 * turn)

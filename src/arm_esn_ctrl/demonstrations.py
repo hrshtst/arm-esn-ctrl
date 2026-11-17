@@ -89,17 +89,27 @@ def load_joint_angles(path: str | Path, dt: float) -> tuple[NDArray[np.float64],
     return resample_joint_angles(StateLog.load(path), dt)
 
 
-def training_demonstrations(demonstrations: dict[str, Any], dt: float) -> dict[str, NDArray[np.float64]]:
+def training_demonstrations(
+    demonstrations: dict[str, Any] | list[dict[str, Any]], dt: float
+) -> dict[str, NDArray[np.float64]]:
     """The joint angles, every ``dt``, of the demonstrations a ``[demonstrations]`` table names.
 
     The table names a ``run`` of ``experiments/import_demonstrations.py`` or of the
     scripted demonstrations, under the storage root, and the files of its ``train``
     list, as an ESN's run configuration does; each is resampled as
-    :func:`resample_joint_angles` does.
+    :func:`resample_joint_angles` does. The ``[[demonstrations]]`` tables of an ESN
+    of several tasks give every task's, each named ``<context>/<file's name>``.
     """
-    run = resolve_run_path(demonstrations["run"])
+    if isinstance(demonstrations, dict):
+        run = resolve_run_path(demonstrations["run"])
+        return {
+            name.split(".")[0]: resample_joint_angles(StateLog.load(run / name), dt)[1]
+            for name in demonstrations["train"]
+        }
     return {
-        name.split(".")[0]: resample_joint_angles(StateLog.load(run / name), dt)[1] for name in demonstrations["train"]
+        f"{table['context']}/{name}": q
+        for table in demonstrations
+        for name, q in training_demonstrations(table, dt).items()
     }
 
 
@@ -171,7 +181,7 @@ def check_take(
     skeleton: Skeleton,
     *,
     start_q: ArrayLike,
-    target: ArrayLike,
+    target: ArrayLike | None,
     radius: float,
     hold: float,
     start_tolerance: float,
@@ -184,7 +194,8 @@ def check_take(
     - it was recorded with the arm ``skeleton`` (the same link properties);
     - it begins at the start posture ``start_q`` (rad), within ``start_tolerance`` in every joint;
     - the hand arrives within ``radius`` of the ``target`` and stays there for
-      ``hold`` seconds, before the take ends;
+      ``hold`` seconds, before the take ends; a task without a target, such as a
+      periodic motion, has no arrival to check (``target`` is None);
     - the hand never moves faster than ``max_tip_speed`` (m/s) between two samples,
       which would be a jump rather than a reach.
     """
@@ -200,16 +211,17 @@ def check_take(
     if offset.max() > np.degrees(start_tolerance):
         problems.append(f"the take begins {offset.max():.3g} deg away from the start posture")
     hand = endpoint_positions(skeleton, q)
-    held = hold_metrics(times, hand, target, radius, hold)
-    if not held["arrived"]:
-        problems.append(f"the hand never comes within {radius:g} m of the target")
-    elif held["left_goal"]:
-        problems.append(f"the hand leaves the goal within {hold:g} s of arriving")
-    elif times[-1] - held["arrival_time_s"] < hold:  # the take must run past the whole hold window
-        problems.append(
-            f"the take ends {times[-1] - held['arrival_time_s']:.2f} s after the hand arrives,"
-            f" before {hold:g} s of holding"
-        )
+    if target is not None:
+        held = hold_metrics(times, hand, target, radius, hold)
+        if not held["arrived"]:
+            problems.append(f"the hand never comes within {radius:g} m of the target")
+        elif held["left_goal"]:
+            problems.append(f"the hand leaves the goal within {hold:g} s of arriving")
+        elif times[-1] - held["arrival_time_s"] < hold:  # the take must run past the whole hold window
+            problems.append(
+                f"the take ends {times[-1] - held['arrival_time_s']:.2f} s after the hand arrives,"
+                f" before {hold:g} s of holding"
+            )
     speed = np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(times)
     if speed.max() > max_tip_speed:
         k = int(np.argmax(speed))
