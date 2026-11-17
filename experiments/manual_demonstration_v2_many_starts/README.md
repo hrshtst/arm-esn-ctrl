@@ -7,8 +7,7 @@ have 800 neurons.
 
 **Status.** The ESN's setting was tuned by hand first, with the configurations
 below. The search's rule, [below](#the-search), was fixed on 2026-11-17 before any
-run of the search. The claims of this stage are not fixed yet, and nothing here is a
-result yet.
+run of the search. The claims of this stage are not fixed yet.
 
 ## The robot and the takes
 
@@ -137,9 +136,9 @@ takes' starts, and then by how directly it goes there.
 6. **The center** is the coarse setting with the best score.
 7. **The fine search:** 81 settings around the center, with five reservoirs each
    (seeds 1 to 5). Each parameter takes three values: the center's, and the one
-   halfway to its coarse neighbor on each side, rounded to two digits. Halfway is
-   in ratio for the leak rate, the input scaling, and the ridge, whose coarse values
-   step in ratio, and in difference for the spectral radius. Where the center is at
+   halfway to its coarse neighbor on each side. Halfway is in ratio for the leak
+   rate, the input scaling, and the ridge, whose coarse values step in ratio (rounded
+   to two digits), and in difference for the spectral radius. Where the center is at
    an edge of the coarse grid, the value beyond the edge is as far from the center
    as the one on the other side. A setting's runs are the 45 of its five seeds.
 8. **ESN #1 and ESN #2** are the typical seeds of the two fine settings with the
@@ -154,14 +153,32 @@ ridge of 10⁻² were run once to measure the search's time; that run was not ke
 ```bash
 uv run python experiments/sweep_robot_esn.py \
     experiments/manual_demonstration_v2_many_starts/coarse_search.toml --workers 30
+uv run python experiments/sweep_robot_esn.py \
+    experiments/manual_demonstration_v2_many_starts/fine_search.toml --workers 30
 ```
 
-The run writes every setting's score to `scores.csv`, the best first, and every
+Each run writes every setting's score to `scores.csv`, the best first, and every
 run's measures to `runs.csv`.
+
+**The center.** Of the coarse search's 108 settings, 30 hold from all nine starts;
+the smallest median detour ratio among them, 1.0096, is that of leak rate 0.1,
+spectral radius 1.2, input scaling 0.5, and ridge 1. The fine search's values around
+it:
+
+| Parameter | Values |
+| --- | --- |
+| leak rate | 0.055, 0.1, 0.17 |
+| spectral radius | 1.05, 1.2, 1.35 |
+| input scaling | 0.22, 0.5, 1 |
+| ridge | 0.1, 1, 10 |
+
+The center's ridge is the coarse grid's largest, so the fine search goes as far
+above it as below.
 
 | Configurations | What they run |
 | --- | --- |
 | `coarse_search.toml` | the coarse search: 108 settings, seed 0, each on the robot from each take's start (about 7 minutes with 30 workers) |
+| `fine_search.toml` | the fine search: 81 settings around the coarse search's best, seeds 1 to 5, alike (about 25 minutes) |
 | `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (90 runs, about 8 minutes) |
 | `hand_pushes_robot.toml` | that ESN on the robot under report 007's three pushes, the first two placed along each take, from each take's start, against the replays of that take (about 2 minutes) |

@@ -110,6 +110,32 @@ def test_the_coarse_search_runs_108_settings_of_one_seed_from_each_takes_start()
     assert coarse["tracker"] == load(EXPERIMENT / "hand_robot.toml")["tracker"]
 
 
+def test_the_fine_search_runs_81_settings_around_the_center_with_seeds_1_to_5():
+    coarse, fine = load(EXPERIMENT / "coarse_search.toml"), load(EXPERIMENT / "fine_search.toml")
+    center = {"leak_rate": 0.1, "spectral_radius": 1.2, "input_scaling": 0.5, "ridge": 1.0}
+
+    sweep = dict(fine["sweep"])
+    assert sweep.pop("seed") == [1, 2, 3, 4, 5]
+    for name, values in sweep.items():
+        grid = coarse["sweep"][name]
+        below, middle, above = values
+        assert middle == center[name] == fine["esn"][name]
+        k = grid.index(middle)
+        if name == "spectral_radius":  # halfway in difference
+            assert (below, above) == pytest.approx(((grid[k - 1] + middle) / 2, (middle + grid[k + 1]) / 2))
+        else:  # halfway in ratio, to two digits; beyond the grid's edge, as far as on the other side
+            assert below == pytest.approx(np.sqrt(grid[k - 1] * middle), rel=0.03)
+            beyond = grid[k + 1] if k + 1 < len(grid) else middle**2 / grid[k - 1]
+            assert above == pytest.approx(np.sqrt(middle * beyond), rel=0.03)
+    # The same takes, ESN, tracker, runs, and score as the coarse search's.
+    for table in ("demonstrations", "tracker", "evaluation", "ranking"):
+        assert fine[table] == coarse[table]
+    swept = {*fine["sweep"]}
+    assert {k: v for k, v in fine["esn"].items() if k not in swept} == {
+        k: v for k, v in coarse["esn"].items() if k not in swept
+    }
+
+
 @pytest.mark.parametrize("name", ["hand_robot.toml", "hand_pushes_robot.toml"])
 def test_the_robot_runs_use_the_consistent_searchs_tracker_with_its_takes_gains(name):
     tracker, v2 = load(EXPERIMENT / name)["tracker"], load(V2_PUSHES)["tracker"]
