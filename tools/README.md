@@ -100,12 +100,27 @@ uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2.toml
     --forces <storage root>/data/recorded_forces/<log>.sklog.npz
 ```
 
-## Seeing the start postures before recording
+## Laying out and seeing the start postures before recording
+
+`tools/tip_starts.py` gives start postures of a two-link arm whose hands are spread
+evenly over the workspace, as rows of a configuration's `start_q` or
+`[evaluation.extra_starts]`. `--counts` is the number of hands on each ring around the
+base, from the outermost inward: the rings' areas are as their numbers of hands, so
+that every hand stands for the same area. `--first-angle` is the direction of the
+outermost ring's first hand, and `--elbow` the sign of joint 2. The postures are
+rounded to whole degrees:
+
+```bash
+uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_starts.toml \
+    --counts 6 3 --first-angle 43.3
+```
 
 `tools/starts_figure.py` draws the start postures of a demonstration configuration, in
 the workspace and in joint space, with the target and the postures that put the hand
 on it; `--starts` adds the start postures no take starts from that another
-configuration lists (`[evaluation.extra_starts]`):
+configuration lists (`[evaluation.extra_starts]`), a shape for each group. For a
+two-link arm whose joint 1 turns a whole turn, a dashed line shows where the hand is
+with joint 1 at its limit, which the hand cannot cross:
 
 ```bash
 uv run python tools/starts_figure.py experiments/demonstrations/reach_manual_v2_starts.toml --output starts.png \

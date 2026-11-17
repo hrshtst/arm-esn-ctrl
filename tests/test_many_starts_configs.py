@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from skelarm import Skeleton
 
+from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.disturbances import same_arm
 from arm_esn_ctrl.esn import EsnConfig
 from arm_esn_ctrl.storage import REPO_ROOT
@@ -19,7 +20,8 @@ sys.path.insert(0, str(REPO_ROOT / "experiments"))
 from robot_esn import tracker_settings
 
 sys.path.insert(0, str(REPO_ROOT))
-from tools.starts_figure import plot_starts, target_postures
+from tools.starts_figure import joint_1_wall, plot_starts, target_postures
+from tools.tip_starts import hand_postures, ring_hands
 
 TAKES = REPO_ROOT / "experiments/demonstrations/reach_manual_v2_starts.toml"
 V2 = REPO_ROOT / "experiments/demonstrations/reach_manual_v2.toml"
@@ -34,7 +36,7 @@ def load(path):
         return tomllib.load(f)
 
 
-def test_the_takes_are_of_v2s_arm_and_target_one_per_start_of_the_lattice():
+def test_the_takes_are_of_v2s_arm_and_target_their_starts_laid_out_by_the_hand():
     takes, v2 = load(TAKES), load(V2)
 
     assert same_arm(Skeleton.from_toml(TAKES), Skeleton.from_toml(V2))
@@ -45,8 +47,14 @@ def test_the_takes_are_of_v2s_arm_and_target_one_per_start_of_the_lattice():
     assert len(takes["recording"]["takes"]) == len(starts) == 9
     assert takes["recording"]["takes"][0] == v2["recording"]["take"]  # the take of reports 005 to 020
     assert starts[0] == v2["demonstrations"]["start_q"][0]
-    lattice = {(q1, q2) for q1 in (-60.0, 30.0, 120.0) for q2 in (30.0, 90.0, 150.0)}
-    assert {tuple(start) for start in starts} == lattice
+    # An outer ring of six hands and an inner one of three; the take of reports 005 to 020
+    # stands in the outer ring's first place, where its hand's direction begins the ring.
+    skeleton = Skeleton.from_toml(TAKES)
+    rings = hand_postures(skeleton, ring_hands(skeleton, [6, 3], 43.3), 1)
+    assert starts[1:] == rings[1:].tolist()
+    first_hand = endpoint_positions(skeleton, np.radians(starts[:1]))[0]
+    assert np.degrees(np.arctan2(first_hand[1], first_hand[0])) == pytest.approx(43.3, abs=0.05)
+    assert all(start[1] > 0 for start in starts)  # the elbow on one side
 
 
 def test_the_hand_esn_trains_on_every_take_with_800_neurons():
@@ -58,19 +66,24 @@ def test_the_hand_esn_trains_on_every_take_with_800_neurons():
     assert (esn.dt, esn.warmup, esn.sparsity, esn.bias) == (0.01, 1.0, 0.05, True)
 
 
-def test_no_untaught_start_is_a_taught_one_and_all_lie_within_the_joint_limits():
-    taught = np.array(load(TAKES)["demonstrations"]["start_q"])
-    for name in ("hand_esn.toml", "hand_robot.toml"):
-        untaught = np.array(load(EXPERIMENT / name)["evaluation"]["extra_starts"]["untaught"])
-        assert untaught.shape == (36, 2)
-        assert len({tuple(q) for q in untaught}) == 36
-        distance = np.abs(untaught[:, np.newaxis, :] - taught[np.newaxis, :, :]).max(axis=2)
-        assert distance.min() >= 15.0
-        assert np.abs(untaught).max() <= 180.0
-    assert (
-        load(EXPERIMENT / "hand_esn.toml")["evaluation"]["extra_starts"]
-        == (load(EXPERIMENT / "hand_robot.toml")["evaluation"]["extra_starts"])
-    )
+def test_the_untaught_starts_are_36_hands_over_the_workspace_with_the_elbow_on_either_side():
+    skeleton = Skeleton.from_toml(TAKES)
+    taught = endpoint_positions(skeleton, np.radians(load(TAKES)["demonstrations"]["start_q"]))
+    hands = ring_hands(skeleton, [18, 12, 6], 53.3)
+    extra = load(EXPERIMENT / "hand_esn.toml")["evaluation"]["extra_starts"]
+
+    assert list(extra) == ["untaught", "untaught_other_elbow"]
+    assert extra["untaught"] == hand_postures(skeleton, hands, 1).tolist()
+    assert extra["untaught_other_elbow"] == hand_postures(skeleton, hands, -1).tolist()
+    for postures in extra.values():
+        assert np.abs(postures).max() <= 180.0
+        untaught = endpoint_positions(skeleton, np.radians(postures))
+        # Whole degrees move a hand less than 1 cm from its place on the ring.
+        assert np.linalg.norm(untaught - hands, axis=1).max() < 0.01
+        # No hand starts where a take does, nor at the target.
+        assert np.linalg.norm(untaught[:, np.newaxis] - taught[np.newaxis], axis=2).min() >= 0.10
+        assert np.linalg.norm(untaught - load(TAKES)["task"]["target"]["pos"], axis=1).min() >= 0.10
+    assert load(EXPERIMENT / "hand_robot.toml")["evaluation"]["extra_starts"] == extra
 
 
 @pytest.mark.parametrize("name", ["hand_robot.toml", "hand_pushes_robot.toml"])
@@ -110,9 +123,27 @@ def test_the_starts_figure_draws_the_takes_starts_and_the_untaught_ones():
     figure = plot_starts(skeleton, takes["task"], takes["demonstrations"]["start_q"], extra, "test")
 
     workspace, joint_space = figure.axes
-    assert len(workspace.collections) == 2  # the taught starts' hands, and the untaught
-    assert len(joint_space.collections) == 2
+    assert len(workspace.collections) == 3  # the taught starts' hands, and the untaught of either elbow
+    assert len(joint_space.collections) == 3
+    assert "joint 1 at its limit" in [line.get_label() for line in workspace.lines]
     # The hand is at the target with the elbow on either side.
     postures = target_postures(skeleton, np.array(takes["task"]["target"]["pos"]))
     assert len(postures) == 2
     assert sorted(np.round(postures[:, 1])) == [-74.0, 74.0]
+
+
+def test_joint_1s_limit_crosses_the_workspace_below_the_base_on_the_takes_elbow_side():
+    skeleton = Skeleton.from_toml(TAKES)
+    starts = np.radians(load(TAKES)["demonstrations"]["start_q"])
+
+    wall = joint_1_wall(skeleton, starts)
+
+    assert wall is not None
+    np.testing.assert_allclose(wall[0], [-0.9, 0.0], atol=1e-9)  # straight
+    np.testing.assert_allclose(wall[-1], [-0.1, 0.0], atol=1e-9)  # folded
+    np.testing.assert_allclose(np.linalg.norm(wall - [-0.5, 0.0], axis=1), 0.4)
+    assert wall[1:-1, 1].max() < 0.0
+    # With the elbow on the other side, it crosses above the base.
+    other = joint_1_wall(skeleton, -starts)
+    assert other is not None
+    assert other[1:-1, 1].min() > 0.0

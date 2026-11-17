@@ -11,8 +11,13 @@ target and its goal radius, and the ring the hand can reach. The right panel sho
 the same starts in joint space, within the joint limits, with the postures that put
 the hand at the target (stars). ``--starts`` adds the start postures no take
 starts from that another configuration lists, such as an ESN's
-``[evaluation.extra_starts]``, as hollow markers. A task without a target, such as
-a periodic motion, shows its curve instead.
+``[evaluation.extra_starts]``, as hollow markers, a shape for each group. A task
+without a target, such as a periodic motion, shows its curve instead.
+
+Where joint 1 of a two-link arm turns a whole turn and no further, the workspace
+panel also shows where the hand is with joint 1 at its limit and the elbow on the
+takes' side (dashed): the hand cannot cross it, so a start on its far side from the
+target goes around the base the other way.
 """
 
 from __future__ import annotations
@@ -27,13 +32,14 @@ from skelarm import Skeleton, Task, compute_inverse_kinematics
 
 from arm_esn_ctrl.demonstrations import endpoint_positions, task_path
 from arm_esn_ctrl.drawing import draw_postures
-from arm_esn_ctrl.postures import joint_limits_deg
+from arm_esn_ctrl.postures import WHOLE_TURN_DEG, joint_limits_deg
 
 TAUGHT_COLOR = "#2a78d6"
 UNTAUGHT_COLOR = "#eb6834"
 TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
+GROUP_MARKERS = ("o", "s", "^", "D")  # one shape for each group of untaught starts
 
 
 def main() -> None:
@@ -74,6 +80,21 @@ def target_postures(skeleton: Skeleton, target: np.ndarray) -> np.ndarray:
     return np.array(found)
 
 
+def joint_1_wall(skeleton: Skeleton, starts: np.ndarray) -> np.ndarray | None:
+    """Where the hand is with joint 1 at its limit and the elbow on the side of ``starts`` (rad).
+
+    From the straight arm to the folded one. None unless the arm has two joints and
+    joint 1 turns a whole turn and no further: only then is the limit one line across
+    the workspace.
+    """
+    lower, upper = joint_limits_deg(skeleton)
+    if len(lower) != 2 or upper[0] - lower[0] < WHOLE_TURN_DEG - 1e-9:
+        return None
+    elbow = np.sign(np.median(starts[:, 1]))
+    bend = elbow * np.linspace(0.0, min(abs(lower[1]), abs(upper[1])), 91)
+    return endpoint_positions(skeleton, np.radians(np.column_stack((np.full_like(bend, upper[0]), bend))))
+
+
 def plot_starts(
     skeleton: Skeleton,
     task_table: dict,
@@ -106,10 +127,22 @@ def plot_starts(
     ax_work.scatter(hands[:, 0], hands[:, 1], color=TAUGHT_COLOR, s=45, zorder=3, label="taught starts (hand)")
     for i, hand in enumerate(hands):
         ax_work.annotate(f"{i:02d}", hand, textcoords="offset points", xytext=(6, 6), color=TAUGHT_COLOR, fontsize=9)
-    for group, postures in extra.items():
+    for marker, (group, postures) in zip(GROUP_MARKERS, extra.items(), strict=False):
         untaught = endpoint_positions(skeleton, np.radians(postures))
         ax_work.scatter(
-            untaught[:, 0], untaught[:, 1], facecolors="none", edgecolors=UNTAUGHT_COLOR, s=30, zorder=2, label=group
+            untaught[:, 0],
+            untaught[:, 1],
+            facecolors="none",
+            edgecolors=UNTAUGHT_COLOR,
+            s=30 if marker == "o" else 70,
+            marker=marker,
+            zorder=2,
+            label=group,
+        )
+    wall = joint_1_wall(skeleton, starts)
+    if wall is not None:
+        ax_work.plot(
+            wall[:, 0], wall[:, 1], color=TEXT_COLOR, linewidth=1.2, linestyle="--", label="joint 1 at its limit"
         )
     path = task_path(task_table)
     if path is not None:
@@ -132,9 +165,9 @@ def plot_starts(
     ax_joint.scatter(taught[:, 0], taught[:, 1], color=TAUGHT_COLOR, s=45, zorder=3)
     for i, q in enumerate(taught):
         ax_joint.annotate(f"{i:02d}", q[:2], textcoords="offset points", xytext=(6, 6), color=TAUGHT_COLOR, fontsize=9)
-    for postures in extra.values():
+    for marker, postures in zip(GROUP_MARKERS, extra.values(), strict=False):
         q = np.asarray(postures, dtype=np.float64)
-        ax_joint.scatter(q[:, 0], q[:, 1], facecolors="none", edgecolors=UNTAUGHT_COLOR, s=30, zorder=2)
+        ax_joint.scatter(q[:, 0], q[:, 1], facecolors="none", edgecolors=UNTAUGHT_COLOR, s=30, marker=marker, zorder=2)
     if task.target is not None:
         at_target = target_postures(skeleton, task.target)
         if len(at_target):

@@ -54,8 +54,9 @@ start posture, and target of `examples/reach_four_dof_robot.toml`) each describe
 take taught by hand: their headers give the commands to record it and to import it
 into a demonstration run with `experiments/import_demonstrations.py`.
 
-`reach_manual_v2_starts.toml` lists nine takes of one reach instead, one from each
-start posture of a lattice in joint space, the first `reach_manual_v2.toml`'s own
+`reach_manual_v2_starts.toml` lists nine takes of one reach instead, from start
+postures whose hands are spread evenly over the workspace (`tools/tip_starts.py`),
+the first `reach_manual_v2.toml`'s own
 (`[recording]` `takes`, in the order of `[demonstrations]` `start_q`). Its header gives
 the recorder's command for each, with `--pose` for the start posture, and they are
 imported together into one run, `demo_00` to `demo_08`.
