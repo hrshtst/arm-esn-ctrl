@@ -331,9 +331,9 @@ def test_the_context_can_change_while_the_esn_runs():
     esn.set_context(0)
     kept = np.array(list(itertools.islice(esn.stream(start), switch + 100)))
     stream = esn.stream(start)
-    changed = [next(stream) for _ in range(switch)]
+    before = [next(stream) for _ in range(switch)]
     esn.set_context(1)  # from the next step on; the reservoir keeps its state
-    changed = np.array(changed + [next(stream) for _ in range(100)])
+    changed = np.array(before + [next(stream) for _ in range(100)])
 
     assert changed[:switch] == pytest.approx(kept[:switch], abs=1e-12)
     assert np.degrees(np.abs(changed[switch:] - kept[switch:]).max()) > 1.0

@@ -7,18 +7,18 @@ import numpy as np
 import pytest
 
 from arm_esn_ctrl.metrics import (
-    directness,
-    loop_periods,
-    loop_phase,
-    mean_loop,
     arrival_index,
     count_speed_peaks,
+    directness,
     disturbance_following,
     disturbance_returns,
     disturbance_ringing,
     hold_metrics,
     jitter,
     join_index,
+    loop_periods,
+    loop_phase,
+    mean_loop,
     motor_effort,
     onset_index,
     path_distance,
