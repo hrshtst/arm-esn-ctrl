@@ -32,6 +32,17 @@ directory receives:
   main metrics over the grid of start offsets around the first demonstration, and
   where those starts put the hand.
 
+An ESN of several tasks is trained on the demonstrations of each, named by one
+``[[demonstrations]]`` table per task with the task's name as its ``context`` (see
+:mod:`arm_esn_ctrl.autonomous`), and given each task's context for the runs from
+that task's start postures. The metrics then have a ``task`` column, and each task
+has its own figures, ``autonomous_<task>.png`` and ``grid_<task>.png``.
+
+The commands that run the trained ESN live in the apps of ``tools/`` are printed at
+the end. An optional ``[apps]`` table gives the robot app's other arguments as
+``robot_app``, such as its tracker: ``"--law pd --omega 20 --damping 0.4
+--control-period 0.01"``.
+
 Replay a trajectory with ``uv run python third_party/skelarm/tools/player.py <file>``.
 """
 
@@ -39,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -53,17 +65,20 @@ from arm_esn_ctrl.autonomous import (
     Run,
     Setup,
     Start,
-    load_setup,
+    demonstration_tables,
+    load_setups,
     rms_degrees,
     run_autonomously,
     run_metrics,
+    task_names,
+    training_set,
 )
 from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log
 from arm_esn_ctrl.drawing import OffsetMap
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed
 from arm_esn_ctrl.postures import joint_columns, joint_values
-from arm_esn_ctrl.storage import start_run
+from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, start_run
 
 ESN_COLOR = "#2a78d6"
 TRAINING_COLOR = "#eb6834"
@@ -83,45 +98,83 @@ def main() -> None:
     args = parser.parse_args()
 
     config, run_dir = start_run(args.config)
-    setup = load_setup(config)
+    names = task_names(config["demonstrations"])
+    setups = load_setups(config)
 
-    # Train on the demonstrations.
+    # Train on the demonstrations: of an ESN of several tasks, each with its task's context.
     esn = ReachingEsn(EsnConfig(**config["esn"]))
-    esn.fit(list(setup.demos.values()))
+    trajectories, contexts = training_set(setups, names)
+    esn.fit(trajectories, contexts, names or None)
     esn.save(run_dir / "esn.toml")
-    one_step_error = rms_degrees(np.vstack([esn.one_step_predictions(q) - q[1:] for q in setup.demos.values()]))
-    n_samples = sum(len(q) for q in setup.demos.values())
-    print(f"Trained on {len(setup.demos)} demonstrations ({n_samples} samples)")
-    print(f"One-step prediction error {one_step_error:.4f} deg RMS")
+    errors = [
+        esn.one_step_predictions(q, context=task if names else None) - q[1:]
+        for task, setup in enumerate(setups)
+        for q in setup.demos.values()
+    ]
+    n_samples = sum(len(q) for q in trajectories)
+    tasks = f" of {len(names)} tasks ({', '.join(names)})" if names else ""
+    print(f"Trained on {len(trajectories)} demonstrations{tasks} ({n_samples} samples)")
+    print(f"One-step prediction error {rms_degrees(np.vstack(errors)):.4f} deg RMS")
 
     # Run autonomously from each start posture and compare with the demonstrator's reach from it, if any.
-    runs = run_autonomously(esn, setup)
-    rows = []
-    for i, run in enumerate(runs):
-        joint_trajectory_log(setup.skeleton, setup.times, run.q, setup.task, producer="autonomous ESN").save(
-            run_dir / f"esn_{i:02d}.sklog.npz"
+    rows: list[dict[str, Any]] = []
+    for task, setup in enumerate(setups):
+        if names:
+            esn.set_context(task)
+            print(f"\nTask {names[task]}")
+        runs = run_autonomously(esn, setup)
+        task_rows = []
+        for run in runs:
+            i = len(rows) + len(task_rows)
+            joint_trajectory_log(setup.skeleton, setup.times, run.q, setup.task, producer="autonomous ESN").save(
+                run_dir / f"esn_{i:02d}.sklog.npz"
+            )
+            if setup.demonstrator_logs:
+                setup.demonstrator_logs[len(task_rows)].save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
+            task_rows.append(
+                ({"task": names[task]} if names else {})
+                | {"start": i, "origin": run.start.origin}
+                | joint_columns("start_q{j}_deg", np.degrees(run.start.q))
+                | run_metrics(run, setup)
+            )
+        rows += task_rows
+        print_metrics(task_rows, setup.starts, setup.reference)
+
+        suffix = f"_{names[task]}" if names else ""
+        title = f"Autonomous ESN: {args.config.stem}" + (f", task {names[task]}" if names else "")
+        training = [(q, endpoint_positions(setup.skeleton, q)) for q in setup.demos.values()]
+        plot_runs(setup.times, runs, training, setup.target, title).savefig(
+            run_dir / f"autonomous{suffix}.png", dpi=150
         )
-        if setup.demonstrator_logs:
-            setup.demonstrator_logs[i].save(run_dir / f"demonstrator_{i:02d}.sklog.npz")
-        rows.append(
-            {"start": i, "origin": run.start.origin}
-            | joint_columns("start_q{j}_deg", np.degrees(run.start.q))
-            | run_metrics(run, setup)
-        )
+        if "start_grid" in config["evaluation"]:
+            plot_grid(task_rows, setup, title).savefig(run_dir / f"grid{suffix}.png", dpi=150)
 
     with (run_dir / "metrics.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    print_metrics(rows, setup.starts, setup.reference)
-
-    title = f"Autonomous ESN: {args.config.stem}"
-    training = [(q, endpoint_positions(setup.skeleton, q)) for q in setup.demos.values()]
-    plot_runs(setup.times, runs, training, setup.target, title).savefig(run_dir / "autonomous.png", dpi=150)
-    if "start_grid" in config["evaluation"]:
-        plot_grid(rows, setup, title).savefig(run_dir / "grid.png", dpi=150)
     print(f"\nWrote the results to {run_dir}")
     print("Replay with:\n  uv run python third_party/skelarm/tools/player.py " + str(run_dir / "esn_00.sklog.npz"))
+    print_app_commands(config, run_dir)
+
+
+def print_app_commands(config: dict[str, Any], run_dir: Path) -> None:
+    """Print the commands that run the trained ESN live in the apps of ``tools/``.
+
+    The apps load the robot and the task from the configuration that made the
+    first task's demonstrations, as its run records it. The robot app also needs
+    its tracker, which ``[apps]``'s ``robot_app`` gives with any other arguments.
+    """
+    demonstration_run = resolve_run_path(demonstration_tables(config["demonstrations"])[0]["run"])
+    with (demonstration_run / "run.toml").open("rb") as f:
+        demonstration_config = tomllib.load(f)["config"]
+    if not (REPO_ROOT / demonstration_config).exists():
+        return  # the demonstrations' configuration has moved: the apps have nothing to load
+    model = run_dir / "esn.toml"
+    print(f"Run it live with:\n  uv run python tools/esn_reference_app.py {demonstration_config} --model {model}")
+    robot_app = config.get("apps", {}).get("robot_app")
+    if robot_app:
+        print(f"  uv run python tools/robot_app.py {demonstration_config} {robot_app} --model {model}")
 
 
 def print_metrics(rows: list[dict[str, Any]], starts: list[Start], reference: Reference) -> None:

@@ -19,6 +19,7 @@ smoothed with :func:`smooth_take`: a mouse moves the tip in whole screen pixels.
 from __future__ import annotations
 
 import dataclasses
+import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ from numpy.typing import ArrayLike, NDArray
 from skelarm import (
     Skeleton,
     StateLog,
+    build_curve,
     compute_forward_kinematics,
     run_scenario,
     scenario_from_config,
@@ -111,6 +113,35 @@ def training_demonstrations(
         for table in demonstrations
         for name, q in training_demonstrations(table, dt).items()
     }
+
+
+def trained_tasks(model: str | Path) -> dict[str, dict[str, Any]]:
+    """The skelarm ``[task]`` table of each task a saved ESN was trained on, by the task's name.
+
+    ``model`` is the ESN's ``esn.toml`` in its run directory, whose configuration
+    names the demonstration runs of its tasks (``[[demonstrations]]``, each with its
+    ``context``), read from the storage root: each run's configuration holds its
+    task. An ESN of a single task gives it under the name ``""``.
+    """
+    with (Path(model).parent / "config.toml").open("rb") as f:
+        demonstrations = tomllib.load(f)["demonstrations"]
+    tables = [demonstrations] if isinstance(demonstrations, dict) else demonstrations
+    tasks = {}
+    for table in tables:
+        with (resolve_run_path(table["run"]) / "config.toml").open("rb") as f:
+            tasks[table.get("context", "")] = tomllib.load(f)["task"]
+    return tasks
+
+
+def task_path(task: dict[str, Any], n: int = 200) -> NDArray[np.float64] | None:
+    """The closed curve of a periodic task (a ``[task]`` table of type ``periodic_curve``), as ``n + 1`` points.
+
+    None for any other task, which has no curve to draw.
+    """
+    if task.get("type") != "periodic_curve":
+        return None
+    curve = build_curve(task["curve"], task)
+    return np.array([curve(theta) for theta in np.linspace(0.0, 2 * np.pi, n + 1)])
 
 
 def resample_joint_angles(log: StateLog, dt: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:

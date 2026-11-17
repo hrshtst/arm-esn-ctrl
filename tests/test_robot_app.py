@@ -16,7 +16,7 @@ from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
-from skelarm import RecordedForce, Skeleton, StateLog
+from skelarm import RecordedForce, Skeleton, StateLog, Task
 
 from arm_esn_ctrl.demonstrations import resample_joint_angles, simulate_reaches
 from arm_esn_ctrl.disturbances import same_arm
@@ -624,3 +624,59 @@ def test_a_log_names_the_commit_of_the_code_launched(qapp, demo_config, esn, mon
 
     extra = app.saved_log().extra["robot_app"]
     assert (extra["commit"], extra["uncommitted_changes"]) == ("launched", False)
+
+
+@pytest.fixture(scope="module")
+def task_esn(demo_config):
+    """An ESN of two tasks: demonstration 6 as the first, demonstration 7 as the second."""
+    trained = ReachingEsn(ESN_CONFIG)
+    demos = [resample_joint_angles(log, ESN_CONFIG.dt)[1] for log in simulate_reaches(demo_config)]
+    trained.fit(demos, contexts=[0, 1], names=["six", "seven"])
+    return trained
+
+
+def two_tasks(demo_config):
+    """The demonstrations' task, and the same with another target."""
+    other = demo_config["task"] | {"target": {"pos": [0.5, 0.9], "tolerance": 0.02}}
+    return [Task.from_dict(demo_config["task"]), Task.from_dict(other)]
+
+
+def test_an_esn_of_several_tasks_has_a_button_and_a_target_for_each(qapp, demo_config, task_esn):
+    app = make_app(demo_config, esn=task_esn, tasks=two_tasks(demo_config))
+
+    assert [button.text() for button in app.task_buttons.buttons()] == ["1: six", "2: seven"]
+    assert task_esn.context == pytest.approx([1.0, 0.0])
+    assert [bool(active) for *_, active in app.canvas.overlay_targets] == [True, False]
+    assert make_app(demo_config, esn=None, take=None).task_buttons.buttons() == []
+
+
+def test_a_task_button_changes_the_context_during_a_run_and_the_log_records_it(qapp, demo_config, task_esn):
+    app = make_app(demo_config, esn=task_esn, tasks=two_tasks(demo_config))
+    app.play()
+    app.pause()
+    steps(app, 30)
+    assert app.run is not None
+    state = task_esn.state()
+
+    app.task_buttons.button(1).click()
+
+    assert task_esn.context == pytest.approx([0.0, 1.0])
+    assert task_esn.state() == pytest.approx(state)  # the reservoir keeps its state
+    assert app.run.target == pytest.approx([0.5, 0.9])
+    assert app.run.arrival_time is None
+    assert "Task: seven" in app.metrics_label.text()
+    steps(app, 20)
+    log = app.saved_log()
+    context = log.channel("context")
+    task_time = log.times >= 0.0
+    assert context[task_time][0] == pytest.approx([1.0, 0.0])
+    assert context[-1] == pytest.approx([0.0, 1.0])
+    changed = log.times[np.argmax(context[:, 1] > 0.5)]
+    assert changed == pytest.approx(0.3, abs=0.011)
+    assert log.extra["robot_app"]["tasks"] == ["six", "seven"]
+    app.close()
+
+
+def test_the_tasks_must_be_the_esns(qapp, demo_config, task_esn):
+    with pytest.raises(ValueError, match="2 tasks"):
+        make_app(demo_config, esn=task_esn, tasks=two_tasks(demo_config)[:1])

@@ -303,3 +303,112 @@ def test_space_plays_while_the_speed_box_has_the_focus(qapp, demo_config, esn):
     assert app.is_playing
     app.pause()
     app.close()
+
+
+@pytest.fixture(scope="module")
+def task_esn(demo_config):
+    """An ESN of two tasks: demonstration 6 as the first, demonstration 7 as the second."""
+    trained = ReachingEsn(ESN_CONFIG)
+    demos = [resample_joint_angles(log, ESN_CONFIG.dt)[1] for log in simulate_reaches(demo_config)]
+    trained.fit(demos, contexts=[0, 1], names=["six", "seven"])
+    return trained
+
+
+def two_tasks(demo_config):
+    """The demonstrations' task, and the same with another target."""
+    other = demo_config["task"] | {"target": {"pos": [0.5, 0.9], "tolerance": 0.02}}
+    return [Task.from_dict(demo_config["task"]), Task.from_dict(other)]
+
+
+def make_task_app(demo_config, task_esn, tasks=None):
+    skeleton = Skeleton.from_toml(CONFIG)
+    skeleton.q = np.radians(demo_config["demonstrations"]["start_q"][1])
+    tasks = two_tasks(demo_config) if tasks is None else tasks
+    return EsnReferenceApp(skeleton, tasks[0], task_esn, hold=1.0, tasks=tasks)
+
+
+def test_an_esn_of_one_task_has_no_task_buttons(qapp, demo_config, esn):
+    app = make_app(demo_config, esn, demonstrator=False)
+
+    assert app.task_buttons.buttons() == []
+    with pytest.raises(ValueError, match="one task"):
+        app.set_task(0)
+
+
+def test_an_esn_of_several_tasks_has_a_button_and_a_target_for_each(qapp, demo_config, task_esn):
+    app = make_task_app(demo_config, task_esn)
+
+    assert [button.text() for button in app.task_buttons.buttons()] == ["1: six", "2: seven"]
+    assert task_esn.context == pytest.approx([1.0, 0.0])  # the first task's, at the start
+    targets = app.canvas.overlay_targets
+    assert [bool(active) for *_, active in targets] == [True, False]
+    assert targets[1][0] == pytest.approx([0.5, 0.9])
+
+
+def test_a_task_button_changes_the_context_and_the_target_while_the_esn_runs(qapp, demo_config, task_esn):
+    app = make_task_app(demo_config, task_esn)
+    start = app.skeleton.q.copy()
+    app.play()
+    app.pause()
+    for _ in range(40):
+        app.step()
+    assert app.run is not None
+    state = task_esn.state()
+
+    app.task_buttons.button(1).click()
+
+    assert task_esn.context == pytest.approx([0.0, 1.0])
+    assert task_esn.state() == pytest.approx(state)  # the reservoir keeps its state
+    assert app.target == pytest.approx([0.5, 0.9])
+    assert app.run.target == pytest.approx([0.5, 0.9])
+    assert app.run.arrival_time is None
+    assert [bool(active) for *_, active in app.canvas.overlay_targets] == [False, True]
+    assert "Task: seven" in app.metrics_label.text()
+    # The run goes on from where it was, now with the second task's context.
+    for _ in range(10):
+        app.step()
+    task_esn.set_context(0)
+    kept = task_esn.generate(start, 50)
+    assert np.degrees(np.abs(np.array(app.run.q)[-1] - kept[-1]).max()) > 0.01
+    app.close()
+
+
+def test_the_arrival_is_measured_anew_after_a_change_of_task(qapp, demo_config, task_esn):
+    app = make_task_app(demo_config, task_esn)
+    app.play()
+    app.pause()
+    assert app.run is not None
+    app.run.arrival_time, app.run.left_goal, app.run.hold_error, app.run.hold_observed = 0.5, True, 0.1, 0.3
+
+    app.set_task(1)
+
+    assert (app.run.arrival_time, app.run.left_goal, app.run.hold_error, app.run.hold_observed) == (
+        None,
+        False,
+        None,
+        0,
+    )
+    app.close()
+
+
+def test_a_periodic_task_has_a_curve_and_no_target(qapp, demo_config, task_esn):
+    ellipse = Task.from_dict({"type": "periodic_curve", "curve": "ellipse", "center": [0.4, 0.9], "a": 0.2, "b": 0.1})
+    app = make_task_app(demo_config, task_esn, [two_tasks(demo_config)[0], ellipse])
+
+    assert len(app.canvas.overlay_targets) == 1
+    assert app.canvas.overlay_path is not None
+    assert app.canvas.overlay_path[0] == pytest.approx([0.6, 0.9])
+    app.set_task(1)
+    assert np.isnan(app.radius)
+    app.play()
+    app.pause()
+    for _ in range(5):
+        app.step()
+    assert app.run is not None and app.run.arrival_time is None
+    assert "the task has no target" in app.metrics_label.text()
+    app.close()
+
+
+def test_the_tasks_must_be_the_esns(qapp, demo_config, task_esn):
+    with pytest.raises(ValueError, match="2 tasks"):
+        make_task_app(demo_config, task_esn, two_tasks(demo_config)[:1])

@@ -25,6 +25,13 @@ demonstrator's path is drawn under the ESN's and the panel compares the two, inc
 the steps already taken. With the checkbox off (``--no-demonstrator``), nothing is
 simulated.
 
+An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) is given the context of one
+task at a time: the side panel has a button for each, and the keys ``1``, ``2``, ...
+choose them, before a run or while the ESN runs, its reservoir keeping its state.
+Each task's target is drawn, the chosen one's filled, and the arrival and the hold
+are measured at the chosen task's target, anew from each change of task. The tasks
+are read from the demonstration runs the ESN was trained on, in the storage.
+
 Keys, as in skelarm's player: ``Space`` play/pause, ``Right``/``F`` one step while
 paused, ``R`` or ``Home`` reset, ``Q`` quit.
 
@@ -40,7 +47,7 @@ import argparse
 import contextlib
 import sys
 import tomllib
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,10 +59,12 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QColor, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -71,7 +80,13 @@ from skelarm import (
 )
 from skelarm.canvas import TrailOverlay
 
-from arm_esn_ctrl.demonstrations import endpoint_positions, resample_joint_angles, simulate_reaches
+from arm_esn_ctrl.demonstrations import (
+    endpoint_positions,
+    resample_joint_angles,
+    simulate_reaches,
+    task_path,
+    trained_tasks,
+)
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import arrival_index, path_distance
 
@@ -165,6 +180,14 @@ class LiveRun:
         if self.demonstrator is not None:
             self._compare_with_demonstrator(self.demonstrator, time, q, hand)
 
+    def retarget(self, target: NDArray[np.float64], radius: float) -> None:
+        """Measure the arrival and the hold at another ``target`` from now on, as after a change of task."""
+        self.target, self.radius = target, radius
+        self.arrival_time = None
+        self.left_goal = False
+        self.hold_error = None
+        self.hold_observed = 0.0
+
     def attach_demonstrator(self, demonstrator: Demonstrator) -> None:
         """Compare with ``demonstrator`` from now on, and catch up on the steps already taken."""
         self.demonstrator = demonstrator
@@ -246,6 +269,9 @@ class EsnReferenceApp(QMainWindow):
         Initial playback speed (task seconds per real second).
     name : str, optional
         The model's name, shown in the side panel and the title.
+    tasks : Sequence[Task], optional
+        The tasks of an ESN of several tasks, in the order of its contexts; ``task``
+        is then unused. The side panel chooses the task the ESN does.
     """
 
     # A demonstrator simulated in the background, or the error that stopped it, for a run.
@@ -263,19 +289,24 @@ class EsnReferenceApp(QMainWindow):
         show_warmup: bool = False,
         speed: float = 1.0,
         name: str | None = None,
+        tasks: Sequence[Task] | None = None,
     ) -> None:
         super().__init__()
-        if task.tolerance is None:
+        self.tasks = [task] if tasks is None else list(tasks)
+        if any(each.target is not None and each.tolerance is None for each in self.tasks):
             msg = "the task's target needs a tolerance, which is the goal radius"
             raise ValueError(msg)
         if len(esn.center) != skeleton.num_joints:
             msg = f"the ESN generates {len(esn.center)} joint angles, but the robot has {skeleton.num_joints} joints"
             raise ValueError(msg)
+        if esn.contexts and len(self.tasks) != len(esn.contexts):
+            msg = f"the ESN has {len(esn.contexts)} tasks ({', '.join(esn.contexts)}), but {len(self.tasks)} were given"
+            raise ValueError(msg)
         self.skeleton = skeleton
-        self.task = task
-        self.target = task.require_target()
-        self.radius = task.tolerance
+        self.task_index = 0
         self.esn = esn
+        if esn.contexts:
+            esn.set_context(0)
         self.hold = hold
         self.demonstrator_config = demonstrator_config
         self.run: LiveRun | None = None
@@ -289,7 +320,7 @@ class EsnReferenceApp(QMainWindow):
         self.setWindowTitle("ESN reference generator" + (f" - {name}" if name else ""))
         self.resize(1100, 780)
         self.canvas = SkelarmCanvas(skeleton)
-        self.canvas.overlay_targets = [(self.target, QColor(task.color), self.radius, True)]
+        self._show_tasks()
         self.canvas.pose_changed.connect(self._on_posed)
 
         central = QWidget()
@@ -352,6 +383,25 @@ class EsnReferenceApp(QMainWindow):
         self.com_checkbox.toggled.connect(self._on_overlays_toggled)
         controls.addWidget(self.com_checkbox)
 
+        # An ESN of several tasks: a button and a number key for each, to choose the task the ESN does.
+        self.task_buttons = QButtonGroup(self)
+        self.task_shortcuts = []
+        if esn.contexts:
+            controls.addWidget(QLabel("Task (the ESN's context)"))
+            row = QHBoxLayout()
+            for index, context in enumerate(esn.contexts):
+                button = QPushButton(f"{index + 1}: {context}")
+                button.setCheckable(True)
+                button.setChecked(index == 0)
+                button.setToolTip(f"Give the ESN the context of the task {context} (key {index + 1})")
+                self.task_buttons.addButton(button, index)
+                row.addWidget(button)
+                shortcut = QShortcut(QKeySequence(str(index + 1)), self)
+                shortcut.activated.connect(button.click)
+                self.task_shortcuts.append(shortcut)
+            self.task_buttons.idClicked.connect(self.set_task)
+            controls.addLayout(row)
+
         self.metrics_label = QLabel()
         self.metrics_label.setWordWrap(True)
         controls.addWidget(self.metrics_label)
@@ -361,6 +411,50 @@ class EsnReferenceApp(QMainWindow):
         self.clock = PlaybackClock(self, speed=speed)
         self.clock.ticked.connect(self._advance_timeline)
         self._refresh()
+
+    @property
+    def task(self) -> Task:
+        """The task the ESN does now."""
+        return self.tasks[self.task_index]
+
+    @property
+    def target(self) -> NDArray[np.float64]:
+        """The current task's target; NaN for a task without one, such as a periodic motion."""
+        return np.full(2, np.nan) if self.task.target is None else self.task.target
+
+    @property
+    def radius(self) -> float:
+        """The current task's goal radius; NaN for a task without a target."""
+        return float("nan") if self.task.tolerance is None else self.task.tolerance
+
+    def set_task(self, index: int) -> None:
+        """Give the ESN the context of its task ``index`` from its next step on; the reservoir keeps its state.
+
+        The arrival and the hold are measured at that task's target from now on.
+        """
+        if not self.esn.contexts:
+            msg = "the ESN was trained without contexts: it has one task"
+            raise ValueError(msg)
+        self.esn.set_context(index)
+        self.task_index = index
+        button = self.task_buttons.button(index)
+        if button is not None:
+            button.setChecked(True)
+        if self.run is not None:
+            self.run.retarget(self.target, self.radius)
+        self._show_tasks()
+        self._refresh()
+
+    def _show_tasks(self) -> None:
+        """Draw every task's target, the current task's filled, and the curve of a periodic task."""
+        self.canvas.overlay_targets = [
+            (each.target, QColor(each.color), each.tolerance, index == self.task_index)
+            for index, each in enumerate(self.tasks)
+            if each.target is not None
+        ]
+        paths = [task_path({"type": each.type} | each.params) for each in self.tasks]
+        current = paths[self.task_index]
+        self.canvas.overlay_path = current if current is not None else next((p for p in paths if p is not None), None)
 
     @property
     def is_playing(self) -> bool:
@@ -504,12 +598,15 @@ class EsnReferenceApp(QMainWindow):
         hand_xy = np.array([hand.xe, hand.ye])
         distance = float(np.linalg.norm(hand_xy - self.target))
         q_deg = np.degrees(self.skeleton.q)
+        from_target = f", {1000 * distance:.1f} mm from the target" if np.isfinite(distance) else ""
         lines = [
             f"Joint angles: ({q_deg[0]:.1f}, {q_deg[1]:.1f}) deg"
             if len(q_deg) == 2
             else f"Joint angles: {np.round(q_deg, 1).tolist()} deg",
-            f"Hand: ({hand_xy[0]:.3f}, {hand_xy[1]:.3f}) m, {1000 * distance:.1f} mm from the target",
+            f"Hand: ({hand_xy[0]:.3f}, {hand_xy[1]:.3f}) m{from_target}",
         ]
+        if self.esn.contexts:
+            lines.insert(0, f"Task: {self.esn.contexts[self.task_index]}")
         if run is None:
             self.time_label.setText("Posing")
             self.phase_label.setText("Drag the arm tip to choose a start posture, then press Play (Space).")
@@ -526,7 +623,10 @@ class EsnReferenceApp(QMainWindow):
         first_step = run.first_step
         lines.append(f"  First step: {'-' if first_step is None else f'{1000 * first_step:.1f} mm'}")
         arrival = "not yet" if run.arrival_time is None else f"{run.arrival_time:.2f} s"
-        lines.append(f"  Arrival (within {1000 * self.radius:g} mm): {arrival}")
+        if np.isfinite(self.radius):
+            lines.append(f"  Arrival (within {1000 * self.radius:g} mm): {arrival}")
+        else:
+            lines.append("  Arrival: the task has no target")
         demonstrator = run.demonstrator if self.demonstrator_checkbox.isChecked() else None
         if self.demonstrator_checkbox.isChecked() and run.demonstrator_pending:
             lines.append("  Demonstrator: simulating...")
@@ -649,19 +749,28 @@ def main() -> None:
             parser.error(f"--pose has {len(pose)} values but the arm has {skeleton.num_joints} joints")
         skeleton.q = pose
     has_demonstrator = all(name in config for name in _DEMONSTRATOR_TABLES)
+    esn = ReachingEsn.load(args.model)
+    tasks = None
+    if esn.contexts:  # each task of the ESN, from the demonstration runs it was trained on
+        try:
+            trained = trained_tasks(args.model)
+        except OSError as error:
+            parser.error(f"the ESN has several tasks, whose demonstration runs must be in the storage: {error}")
+        tasks = [Task.from_dict(trained[context]) for context in esn.contexts]
 
     app = QApplication(sys.argv)
     try:
         window = EsnReferenceApp(
             skeleton,
             Task.from_dict(config["task"]),
-            ReachingEsn.load(args.model),
+            esn,
             hold=args.hold,
-            demonstrator_config=config if has_demonstrator else None,
+            demonstrator_config=config if has_demonstrator and tasks is None else None,
             compare=not args.no_demonstrator,
             show_warmup=args.show_warmup,
             speed=args.speed,
             name=str(args.model),
+            tasks=tasks,
         )
     except ValueError as error:
         parser.error(str(error))

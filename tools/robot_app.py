@@ -46,6 +46,16 @@ inertia, as for an arm whose joints couple strongly. ``--control-period`` comput
 only that often and holds it between, as ``control_period`` in
 ``experiments/robot_esn.py``; the arm is still simulated every step.
 
+An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) is given the context of one
+task at a time: the side panel has a button for each, and the keys ``1``, ``2``, ...
+choose them, before a run or during it, the reservoir keeping its state. Each task's
+target is drawn, the chosen one's filled, and the arrival and the hold are measured at
+the chosen task's target, anew from each change of task. The tasks are read from the
+demonstration runs the ESN was trained on, in the storage; a saved log records the
+context at every step as ``context``. With such an ESN, give joint PD's gains by
+``--gains-from`` or ``--kp`` and ``--kd``: by default they are set at the mean of the
+postures where every task's demonstrations end.
+
 External forces never act during the warm-up. The faint gray arm is the initial
 posture: the given posture, or else the start posture of the last run. When the
 arm tracks a reference, a faint colored arm shows the reference posture.
@@ -83,6 +93,7 @@ from __future__ import annotations
 import argparse
 import sys
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -93,6 +104,7 @@ from numpy.typing import NDArray
 from PyQt6.QtGui import QCloseEvent, QColor, QKeySequence, QMouseEvent, QPainter, QPaintEvent, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QFileDialog,
     QHBoxLayout,
@@ -129,6 +141,8 @@ from arm_esn_ctrl.demonstrations import (
     load_joint_angles,
     resample_joint_angles,
     simulate_reaches,
+    task_path,
+    trained_tasks,
     training_demonstrations,
 )
 from arm_esn_ctrl.disturbances import same_arm
@@ -266,6 +280,14 @@ class RobotRun:
     def warming_up(self) -> bool:
         return self.steps < self.warmup_steps
 
+    def retarget(self, target: NDArray[np.float64], radius: float) -> None:
+        """Measure the arrival and the hold at another ``target`` from now on, as after a change of task."""
+        self.target, self.radius = target, radius
+        self.arrival_time = None
+        self.left_goal = False
+        self.hold_error = None
+        self.hold_observed = 0.0
+
     def record(
         self,
         dt: float,
@@ -367,6 +389,9 @@ class RobotApp(QMainWindow):
     provenance : dict, optional
         Where the reference and the forces come from (such as the model's path), saved
         in each log's metadata.
+    tasks : Sequence[Task], optional
+        The tasks of an ESN of several tasks, in the order of its contexts, in place
+        of the configuration's task. The side panel chooses the task the ESN does.
     """
 
     def __init__(
@@ -388,12 +413,20 @@ class RobotApp(QMainWindow):
         forces: StateLog | None = None,
         provenance: dict[str, Any] | None = None,
         gains_at: NDArray[np.float64] | None = None,
+        tasks: Sequence[Task] | None = None,
     ) -> None:
         super().__init__()
-        task = Task.from_dict(config["task"])
-        if task.tolerance is None:
+        self.tasks = [Task.from_dict(config["task"])] if tasks is None else list(tasks)
+        if any(each.target is not None and each.tolerance is None for each in self.tasks):
             msg = "the task's target needs a tolerance, which is the goal radius"
             raise ValueError(msg)
+        contexts = () if esn is None else esn.contexts
+        if contexts and len(self.tasks) != len(contexts):
+            msg = f"the ESN has {len(contexts)} tasks ({', '.join(contexts)}), but {len(self.tasks)} were given"
+            raise ValueError(msg)
+        self.task_index = 0
+        if esn is not None and contexts:
+            esn.set_context(0)
         if esn is not None and demonstrator:
             msg = "an ESN and the demonstrator's own controller cannot both drive the arm"
             raise ValueError(msg)
@@ -423,8 +456,6 @@ class RobotApp(QMainWindow):
         self.provenance = {} if provenance is None else dict(provenance)
         # The code that runs is the code at launch: its commit, and whether the repository had uncommitted changes.
         self._repository = git_state()
-        self.target = task.require_target()
-        self.radius = task.tolerance
         self.tracker_config = tracker
         self.esn = esn
         self.given_q = None if given_q is None else np.asarray(given_q, dtype=np.float64).copy()
@@ -490,7 +521,7 @@ class RobotApp(QMainWindow):
         self.resize(1150, 800)
         self.canvas = RobotCanvas(skeleton)
         self.canvas.locked = forces is not None
-        self.canvas.overlay_targets = [(self.target, QColor(task.color), self.radius, True)]
+        self._show_tasks()
         self.canvas.pose_changed.connect(self._on_posed)
 
         central = QWidget()
@@ -562,6 +593,25 @@ class RobotApp(QMainWindow):
             checkbox.toggled.connect(self._on_overlays_toggled)
             controls.addWidget(checkbox)
 
+        # An ESN of several tasks: a button and a number key for each, to choose the task the ESN does.
+        self.task_buttons = QButtonGroup(self)
+        self.task_shortcuts = []
+        if contexts:
+            controls.addWidget(QLabel("Task (the ESN's context)"))
+            row = QHBoxLayout()
+            for index, context in enumerate(contexts):
+                button = QPushButton(f"{index + 1}: {context}")
+                button.setCheckable(True)
+                button.setChecked(index == 0)
+                button.setToolTip(f"Give the ESN the context of the task {context} (key {index + 1})")
+                self.task_buttons.addButton(button, index)
+                row.addWidget(button)
+                shortcut = QShortcut(QKeySequence(str(index + 1)), self)
+                shortcut.activated.connect(button.click)
+                self.task_shortcuts.append(shortcut)
+            self.task_buttons.idClicked.connect(self.set_task)
+            controls.addLayout(row)
+
         self.metrics_label = QLabel()
         self.metrics_label.setWordWrap(True)
         controls.addWidget(self.metrics_label)
@@ -572,6 +622,50 @@ class RobotApp(QMainWindow):
         self.clock.ticked.connect(self._advance_timeline)
         self._show_static_overlays()
         self._refresh()
+
+    @property
+    def task(self) -> Task:
+        """The task the arm does now."""
+        return self.tasks[self.task_index]
+
+    @property
+    def target(self) -> NDArray[np.float64]:
+        """The current task's target; NaN for a task without one, such as a periodic motion."""
+        return np.full(2, np.nan) if self.task.target is None else self.task.target
+
+    @property
+    def radius(self) -> float:
+        """The current task's goal radius; NaN for a task without a target."""
+        return float("nan") if self.task.tolerance is None else self.task.tolerance
+
+    def set_task(self, index: int) -> None:
+        """Give the ESN the context of its task ``index`` from its next step on; the reservoir keeps its state.
+
+        The arrival and the hold are measured at that task's target from now on.
+        """
+        if self.esn is None or not self.esn.contexts:
+            msg = "only an ESN trained with contexts has several tasks"
+            raise ValueError(msg)
+        self.esn.set_context(index)
+        self.task_index = index
+        button = self.task_buttons.button(index)
+        if button is not None:
+            button.setChecked(True)
+        if self.run is not None:
+            self.run.retarget(self.target, self.radius)
+        self._show_tasks()
+        self._refresh()
+
+    def _show_tasks(self) -> None:
+        """Draw every task's target, the current task's filled, and the curve of a periodic task."""
+        self.canvas.overlay_targets = [
+            (each.target, QColor(each.color), each.tolerance, index == self.task_index)
+            for index, each in enumerate(self.tasks)
+            if each.target is not None
+        ]
+        paths = [task_path({"type": each.type} | each.params) for each in self.tasks]
+        current = paths[self.task_index]
+        self.canvas.overlay_path = current if current is not None else next((p for p in paths if p is not None), None)
 
     @property
     def is_playing(self) -> bool:
@@ -707,6 +801,7 @@ class RobotApp(QMainWindow):
                 tau=torque,
                 ext_force=force,
                 **run.controller.log_channels(),
+                **self._context_channel(),
             )
             tip = self.skeleton.links[-1]
             run.record(self.dt, self.skeleton.q.copy(), np.array([tip.xe, tip.ye]), torque, force)
@@ -750,6 +845,8 @@ class RobotApp(QMainWindow):
             "commit": commit,
             "uncommitted_changes": uncommitted_changes,
         } | {key: str(value) for key, value in self.provenance.items() if value is not None}
+        if self.esn is not None and self.esn.contexts:
+            app["tasks"] = list(self.esn.contexts)  # the columns of the log's context
         return {"playback": {"task": self.config["task"]}, "tracking": tracking, "robot_app": app}
 
     def saved_log(self) -> StateLog:
@@ -775,8 +872,15 @@ class RobotApp(QMainWindow):
             tau=run.torque,
             ext_force=self._external_force(run),
             **run.controller.log_channels(),
+            **self._context_channel(),
         )
         return log
+
+    def _context_channel(self) -> dict[str, NDArray[np.float64]]:
+        """The context of an ESN of several tasks now, for the log: one weight per task; nothing otherwise."""
+        if self.esn is None or not self.esn.contexts:
+            return {}
+        return {"context": self.esn.context.copy()}
 
     def default_log_path(self) -> Path:
         """Where a run's log is saved by default: under :data:`RECORDED_FORCES` in the storage, named by time."""
@@ -812,8 +916,13 @@ class RobotApp(QMainWindow):
         return resample_joint_angles(simulate_reaches(config)[0], self.period)[1]
 
     def _target_posture(self) -> NDArray[np.float64]:
-        """The posture with the hand at the target, near the first start posture, for gains without demonstrations."""
+        """The posture with the hand at the target, near the first start posture, for gains without demonstrations.
+
+        A task without a target has none: the gains are then set at the first start posture.
+        """
         model = self.skeleton.clone()
+        if not np.all(np.isfinite(self.target)):
+            return model.q.copy()
         return compute_inverse_kinematics(model, tuple(self.target)).q
 
     def _set_state(self, q: NDArray[np.float64]) -> None:
@@ -906,10 +1015,13 @@ class RobotApp(QMainWindow):
         hand_xy = np.array([hand.xe, hand.ye])
         distance = float(np.linalg.norm(hand_xy - self.target))
         q_deg = np.degrees(self.skeleton.q)
+        from_target = f", {1000 * distance:.1f} mm from the target" if np.isfinite(distance) else ""
         lines = [
             f"Joint angles: {', '.join(f'{angle:.1f}' for angle in q_deg)} deg",
-            f"Hand: ({hand_xy[0]:.3f}, {hand_xy[1]:.3f}) m, {1000 * distance:.1f} mm from the target",
+            f"Hand: ({hand_xy[0]:.3f}, {hand_xy[1]:.3f}) m{from_target}",
         ]
+        if self.esn is not None and self.esn.contexts:
+            lines.insert(0, f"Task: {self.esn.contexts[self.task_index]}")
         if run is None:
             self.time_label.setText("Posing" if self.forces is None else "Ready")
             self.phase_label.setText(
@@ -926,7 +1038,10 @@ class RobotApp(QMainWindow):
         lines.append(f"Hand speed: {run.hand_speed:.2f} m/s")
         lines.append("")
         arrival = "not yet" if run.arrival_time is None else f"{run.arrival_time:.2f} s"
-        lines.append(f"Arrival (within {1000 * self.radius:g} mm): {arrival}")
+        if np.isfinite(self.radius):
+            lines.append(f"Arrival (within {1000 * self.radius:g} mm): {arrival}")
+        else:
+            lines.append("Arrival: the task has no target")
         lines.append(f"Hold ({self.hold:g} s after arrival)")
         if run.arrival_time is None:
             lines.append("  waiting for the arrival")
@@ -1210,6 +1325,13 @@ def main() -> None:
             joint_values(parser, "--kd", args.kd, skeleton.num_joints),
         )
 
+    tasks = None
+    if esn is not None and esn.contexts and args.model is not None:  # each task, from its demonstration run
+        try:
+            trained = trained_tasks(args.model)
+        except OSError as error:
+            parser.error(f"the ESN has several tasks, whose demonstration runs must be in the storage: {error}")
+        tasks = [Task.from_dict(trained[context]) for context in esn.contexts]
     name = args.model.parent.name if args.model is not None else None if args.replay is None else args.replay.name
     demonstrations = (
         []
@@ -1242,6 +1364,7 @@ def main() -> None:
                 "command": " ".join(sys.argv),
             },
             gains_at=gain_posture(demonstrations) if demonstrations else None,
+            tasks=tasks,
         )
     except ValueError as error:
         parser.error(str(error))
