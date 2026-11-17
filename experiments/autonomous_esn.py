@@ -266,10 +266,10 @@ def plot_runs(
         ref_label = "demonstrator, reaching from each start" if i == 0 else None
         if run.q_ref is not None and run.hand_ref is not None:  # without a demonstrator, nothing to draw
             ax_hand.plot(run.hand_ref[:, 0], run.hand_ref[:, 1], label=ref_label, **ref_line)
-            t_ref = times[: len(run.hand_ref)]
+            t_ref = times[1] * np.arange(len(run.hand_ref))
             ax_speed.plot(t_ref, hand_speed(t_ref, run.hand_ref), **ref_line)
             for j, ax in enumerate(joint_axes):
-                ax.plot(times[: len(run.q_ref)], np.degrees(run.q_ref[:, j]), **ref_line)
+                ax.plot(t_ref, np.degrees(run.q_ref[:, j]), **ref_line)
         ax_hand.plot(run.hand[:, 0], run.hand[:, 1], label=esn_label, **esn_line)
         face = ESN_COLOR if run.start.demonstrated else SURFACE_COLOR
         ax_hand.plot(*run.hand[0], marker="o", markersize=6, color=ESN_COLOR, markerfacecolor=face)
@@ -282,9 +282,9 @@ def plot_runs(
     handles, labels = ax_hand.get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)
     # A jump in the ESN's first step would squash the reach speeds, so the axis stops above them: the
-    # demonstrator's, or, without one, the training demonstrations'.
+    # demonstrator's, or, without one, the training demonstrations', which may be longer than the runs.
     references = [run.hand_ref for run in runs if run.hand_ref is not None] or [hand for _, hand in training]
-    reach_speed = max(hand_speed(times[: len(hand)], hand).max() for hand in references)
+    reach_speed = max(hand_speed(times[1] * np.arange(len(hand)), hand).max() for hand in references)
     first_step_speed = max(np.linalg.norm(run.hand[1] - run.hand[0]) / times[1] for run in runs)
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)", ylim=(0.0, 1.6 * reach_speed))
     if first_step_speed > 1.6 * reach_speed:
