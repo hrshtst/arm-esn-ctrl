@@ -169,18 +169,28 @@ def test_the_untaught_search_runs_20_of_the_fine_searchs_settings_from_the_untau
 
 
 @pytest.mark.parametrize(
-    ("name", "values"),
+    ("name", "values", "search"),
     [
-        ("esn1_lr0.055_sr1.2_is1_ridge1_seed4.toml", (0.055, 1.2, 1.0, 1.0, 4)),
-        ("esn2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml", (0.1, 1.05, 0.5, 10.0, 3)),
-        ("taught1_lr0.1_sr1.2_is1_ridge1_seed2.toml", (0.1, 1.2, 1.0, 1.0, 2)),
-        ("taught2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml", (0.055, 1.2, 1.0, 0.1, 4)),
+        ("esn1_lr0.055_sr1.2_is1_ridge1_seed4.toml", (0.055, 1.2, 1.0, 1.0, 4), "fine_search.toml"),
+        ("esn2_lr0.1_sr1.05_is0.5_ridge10_seed3.toml", (0.1, 1.05, 0.5, 10.0, 3), "fine_search.toml"),
+        ("taught1_lr0.1_sr1.2_is1_ridge1_seed2.toml", (0.1, 1.2, 1.0, 1.0, 2), "fine_search.toml"),
+        ("taught2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml", (0.055, 1.2, 1.0, 0.1, 4), "fine_search.toml"),
+        (
+            "one_take_esn1_lr0.017_sr1.05_is0.045_ridge0.1_seed5.toml",
+            (0.017, 1.05, 0.045, 0.1, 5),
+            "one_take_fine_search.toml",
+        ),
+        (
+            "one_take_esn2_lr0.055_sr0.75_is0.22_ridge1_seed3.toml",
+            (0.055, 0.75, 0.22, 1.0, 3),
+            "one_take_fine_search.toml",
+        ),
     ],
 )
-def test_the_chosen_esns_are_settings_and_seeds_of_the_fine_search_run_as_the_hand_tuned_one(name, values):
+def test_the_chosen_esns_are_settings_and_seeds_of_their_fine_search_run_as_the_hand_tuned_one(name, values, search):
     chosen, fine, hand = (
         load(EXPERIMENT / name),
-        load(EXPERIMENT / "fine_search.toml"),
+        load(EXPERIMENT / search),
         load(EXPERIMENT / "hand_esn.toml"),
     )
     swept = ("leak_rate", "spectral_radius", "input_scaling", "ridge", "seed")
