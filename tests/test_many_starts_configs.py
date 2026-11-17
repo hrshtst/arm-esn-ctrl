@@ -110,9 +110,15 @@ def test_the_coarse_search_runs_108_settings_of_one_seed_from_each_takes_start()
     assert coarse["tracker"] == load(EXPERIMENT / "hand_robot.toml")["tracker"]
 
 
-def test_the_fine_search_runs_81_settings_around_the_center_with_seeds_1_to_5():
-    coarse, fine = load(EXPERIMENT / "coarse_search.toml"), load(EXPERIMENT / "fine_search.toml")
-    center = {"leak_rate": 0.1, "spectral_radius": 1.2, "input_scaling": 0.5, "ridge": 1.0}
+@pytest.mark.parametrize(
+    ("prefix", "center"),
+    [
+        ("", {"leak_rate": 0.1, "spectral_radius": 1.2, "input_scaling": 0.5, "ridge": 1.0}),
+        ("one_take_", {"leak_rate": 0.03, "spectral_radius": 0.9, "input_scaling": 0.1, "ridge": 1.0}),
+    ],
+)
+def test_the_fine_search_runs_81_settings_around_the_center_with_seeds_1_to_5(prefix, center):
+    coarse, fine = load(EXPERIMENT / f"{prefix}coarse_search.toml"), load(EXPERIMENT / f"{prefix}fine_search.toml")
 
     sweep = dict(fine["sweep"])
     assert sweep.pop("seed") == [1, 2, 3, 4, 5]
@@ -121,12 +127,16 @@ def test_the_fine_search_runs_81_settings_around_the_center_with_seeds_1_to_5():
         below, middle, above = values
         assert middle == center[name] == fine["esn"][name]
         k = grid.index(middle)
+        # Beyond the grid's edge, as far from the center as the coarse neighbor on the other side.
         if name == "spectral_radius":  # halfway in difference
-            assert (below, above) == pytest.approx(((grid[k - 1] + middle) / 2, (middle + grid[k + 1]) / 2))
-        else:  # halfway in ratio, to two digits; beyond the grid's edge, as far as on the other side
-            assert below == pytest.approx(np.sqrt(grid[k - 1] * middle), rel=0.03)
-            beyond = grid[k + 1] if k + 1 < len(grid) else middle**2 / grid[k - 1]
-            assert above == pytest.approx(np.sqrt(middle * beyond), rel=0.03)
+            lower = grid[k - 1] if k > 0 else 2 * middle - grid[k + 1]
+            upper = grid[k + 1] if k + 1 < len(grid) else 2 * middle - grid[k - 1]
+            assert (below, above) == pytest.approx(((lower + middle) / 2, (middle + upper) / 2))
+        else:  # halfway in ratio, to two digits
+            lower = grid[k - 1] if k > 0 else middle**2 / grid[k + 1]
+            upper = grid[k + 1] if k + 1 < len(grid) else middle**2 / grid[k - 1]
+            assert below == pytest.approx(np.sqrt(lower * middle), rel=0.03)
+            assert above == pytest.approx(np.sqrt(middle * upper), rel=0.03)
     # The same takes, ESN, tracker, runs, and score as the coarse search's.
     for table in ("demonstrations", "tracker", "evaluation", "ranking"):
         assert fine[table] == coarse[table]
