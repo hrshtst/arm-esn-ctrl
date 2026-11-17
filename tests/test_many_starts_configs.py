@@ -336,3 +336,20 @@ def test_the_one_take_coarse_search_is_the_coarse_search_trained_on_take_00_alon
     assert one["demonstrations"].pop("train") == ["demo_00_filtered.sklog.npz"]
     coarse["demonstrations"].pop("train")
     assert one == coarse
+
+
+def test_the_one_take_untaught_search_scores_70_of_its_fine_searchs_settings_as_the_nine_take_one():
+    one, nine = load(EXPERIMENT / "one_take_untaught_search.toml"), load(EXPERIMENT / "untaught_search.toml")
+    fine = load(EXPERIMENT / "one_take_fine_search.toml")
+    names = ["leak_rate", "spectral_radius", "input_scaling", "ridge"]
+
+    settings = [tuple(setting[name] for name in names) for setting in one.pop("settings")]
+    assert len(set(settings)) == len(settings) == 70
+    assert all(value in fine["sweep"][name] for setting in settings for name, value in zip(names, setting, strict=True))
+    nine.pop("settings")
+    assert one["demonstrations"] == fine["demonstrations"]
+    for table in ("sweep", "ranking", "tracker", "evaluation"):
+        assert one[table] == nine[table]
+    assert {k: v for k, v in one["esn"].items() if k not in names} == {
+        k: v for k, v in nine["esn"].items() if k not in names
+    }
