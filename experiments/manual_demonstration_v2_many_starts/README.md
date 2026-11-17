@@ -404,6 +404,11 @@ unseen starts, at ESN #1's setting and at ESN #2's:
 From the starts of the takes an ESN is trained on, every run holds but two of the 30
 with six takes at ESN #1's setting.
 
+**A longer run, added after these outcomes (2026-11-18).** In the pushed runs most
+ESN hands are still moving when the run ends at 24 s, 9 s after the third push.
+`pushes1x_long_robot_esn1.toml` and `pushes1x_long_robot_esn2.toml` run the pushes at
+report 007's forces for 48 s, to see whether the hand comes back. They test no claim.
+
 ## The configurations
 
 | Configurations | What they run |
