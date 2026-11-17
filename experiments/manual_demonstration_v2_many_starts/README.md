@@ -195,10 +195,34 @@ uv run python experiments/autonomous_esn.py \
     experiments/manual_demonstration_v2_many_starts/esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml
 ```
 
+### Scoring again with the untaught starts
+
+On their own from the 36 start postures no take starts from, which the search did
+not see, the two chosen ESNs differ: ESN #1 arrives and stays from 27 of them and
+ends 1.61 m from the target from six; ESN #2 arrives and stays from 35, but its
+median detour ratio there is 1.19 and four of its runs exceed 2. The scores from the
+takes' starts did not tell the two apart. So a step was added on 2026-11-17, after
+those results were seen and before any run of it:
+
+1. **The settings:** the fine search's 20 whose 45 runs all hold, each with its
+   five reservoirs again (seeds 1 to 5).
+2. **The runs:** on the robot, undisturbed, as in the search, from each take's
+   start and from the 36 untaught ones of `hand_esn.toml`: 45 runs an ESN, 225 a
+   setting.
+3. **The score** is the search's, over all 225 runs: how many hold, the most first,
+   then the median detour ratio of the runs that arrive, the smallest first. A
+   setting's typical seed is chosen as in the search.
+
+```bash
+uv run python experiments/sweep_robot_esn.py \
+    experiments/manual_demonstration_v2_many_starts/untaught_search.toml --workers 30
+```
+
 | Configurations | What they run |
 | --- | --- |
 | `coarse_search.toml` | the coarse search: 108 settings, seed 0, each on the robot from each take's start (about 7 minutes with 30 workers) |
 | `fine_search.toml` | the fine search: 81 settings around the coarse search's best, seeds 1 to 5, alike (about 25 minutes) |
+| `untaught_search.toml` | the fine search's 20 settings that hold in every run, seeds 1 to 5, each on the robot from each take's start and from the 36 untaught ones (about 30 minutes) |
 | `esn1_lr0.1_sr1.2_is1_ridge1_seed2.toml`, `esn2_lr0.055_sr1.2_is1_ridge0.1_seed4.toml` | ESN #1 and ESN #2, trained and run on their own as `hand_esn.toml`'s |
 | `hand_esn.toml` | an ESN trained on the nine takes, run on its own from their starts and from 36 hand positions no take starts from |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay of the take that starts nearest (90 runs, about 8 minutes) |

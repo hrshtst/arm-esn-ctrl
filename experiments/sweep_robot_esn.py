@@ -10,7 +10,10 @@ The configuration holds the ``[demonstrations]`` and ``[esn]`` tables of
 to three of the ``[esn]`` hyperparameters, as in ``experiments/sweep_esn.py``; the
 ``[tracker]`` table of ``experiments/robot_esn.py``; and an ``[evaluation]`` table:
 the run's duration, the hold, and the start postures. ``[sweep]`` may list more
-hyperparameters than three; the heatmaps are then left out. Every combination of the
+hyperparameters than three; the heatmaps are then left out. With ``[[settings]]``
+tables, a list of chosen settings that each give the same other hyperparameters, each
+of them is tried with every combination of ``[sweep]``, such as with every seed, and
+no heatmap is drawn. Every combination of the
 swept values is trained on the demonstrations and generates the reference of the
 simulated arm from every start posture, with every tracker setting, as the ESN arm
 of ``robot_esn.py`` does: undisturbed, or pushed and blocked by the optional
@@ -80,7 +83,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import itertools
 import multiprocessing
 import os
 import tomllib
@@ -117,7 +119,7 @@ from arm_esn_ctrl.disturbances import (
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import resolve_run_path, start_run
-from arm_esn_ctrl.sweeps import score_settings, summarize_seeds
+from arm_esn_ctrl.sweeps import score_settings, summarize_seeds, sweep_combinations
 from arm_esn_ctrl.tracking import (
     EsnSource,
     TrackerConfig,
@@ -196,7 +198,9 @@ def main() -> None:
     args = parser.parse_args()
 
     config, run_dir = start_run(args.config)
-    sweep: dict[str, list[Any]] = config["sweep"]
+    sweep: dict[str, list[Any]] = config.get("sweep", {})
+    listed: list[dict[str, Any]] | None = config.get("settings")
+    swept = [*(listed[0] if listed else {}), *sweep]  # the hyperparameters that differ between combinations
     ranking = config.get("ranking", {}).get("by")
     if ranking not in (None, "detour_ratio"):
         msg = f'[ranking] by must be "detour_ratio", not {ranking!r}'
@@ -212,7 +216,7 @@ def main() -> None:
     )
     print(f"Disturbance: {disturbance or 'none'}")
 
-    combinations = [dict(zip(sweep, values, strict=True)) for values in itertools.product(*sweep.values())]
+    combinations = sweep_combinations(sweep, listed)
     rows, run_rows = [], []
     if args.workers == 1:
         results: Iterable[tuple[dict[str, Any], list[dict[str, Any]]]] = (
@@ -241,7 +245,7 @@ def main() -> None:
         pool.shutdown()
 
     tables = {"sweep.csv": rows, "runs.csv": run_rows}
-    names = [name for name in sweep if name != "seed"]  # the settings, each tried with every seed
+    names = [name for name in swept if name != "seed"]  # the settings, each tried with every seed
     if "seed" in sweep:
         tables["seeds.csv"] = summarize_seeds(rows, names)
     if ranking:
@@ -251,10 +255,10 @@ def main() -> None:
             writer = csv.DictWriter(f, fieldnames=list(table[0]))
             writer.writeheader()
             writer.writerows(table)
-    print_ranking(rows, list(sweep), settings)
+    print_ranking(rows, swept, settings)
     if ranking:
         print_scores(tables["scores.csv"], names)
-    if len(sweep) in MAPPED:
+    if len(sweep) in MAPPED and not listed:
         maps = [
             (metric, label.format(runs=rows[0]["runs"]), factor, log)
             for metric, label, factor, log in MAPS + (DISTURBANCE_MAPS if spans else [])
@@ -264,7 +268,7 @@ def main() -> None:
         plot_sweep(rows, sweep, maps, title, tops).savefig(run_dir / "sweep.png", dpi=150)
     if "seed" in sweep:
         print_seed_ranking(tables["seeds.csv"], names)
-        if len(names) in MAPPED:
+        if len(names) in MAPPED and not listed:
             seeds = len(sweep["seed"])
             maps = [
                 (metric, label.format(seeds=seeds), factor, log)

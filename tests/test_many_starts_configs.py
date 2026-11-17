@@ -136,6 +136,28 @@ def test_the_fine_search_runs_81_settings_around_the_center_with_seeds_1_to_5():
     }
 
 
+def test_the_untaught_search_runs_20_of_the_fine_searchs_settings_from_the_untaught_starts_too():
+    again, fine = load(EXPERIMENT / "untaught_search.toml"), load(EXPERIMENT / "fine_search.toml")
+    names = ["leak_rate", "spectral_radius", "input_scaling", "ridge"]
+
+    settings = [tuple(setting[name] for name in names) for setting in again["settings"]]
+    assert len(set(settings)) == len(settings) == 20
+    for setting in again["settings"]:
+        assert list(setting) == names
+        assert all(setting[name] in fine["sweep"][name] for name in names)
+    assert settings[:2] == [(0.1, 1.2, 1.0, 1.0), (0.055, 1.2, 1.0, 0.1)]  # ESN #1's and ESN #2's
+    assert again["sweep"] == {"seed": fine["sweep"]["seed"]}
+    # The same takes, ESN, tracker, and score as the fine search's, with the untaught starts added.
+    for table in ("demonstrations", "tracker", "ranking"):
+        assert again[table] == fine[table]
+    assert {k: v for k, v in again["esn"].items() if k not in names} == {
+        k: v for k, v in fine["esn"].items() if k not in names
+    }
+    extra = again["evaluation"].pop("extra_starts")
+    assert again["evaluation"] == fine["evaluation"]
+    assert extra == load(EXPERIMENT / "hand_esn.toml")["evaluation"]["extra_starts"]
+
+
 @pytest.mark.parametrize(
     ("name", "values"),
     [

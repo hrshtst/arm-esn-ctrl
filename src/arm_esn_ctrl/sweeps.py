@@ -12,9 +12,33 @@ shows how much its result depends on the draw.
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
 import numpy as np
+
+
+def sweep_combinations(
+    sweep: dict[str, list[Any]], settings: list[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
+    """The combinations of hyperparameters a sweep tries, in its order.
+
+    ``sweep`` lists values for some hyperparameters: every combination of them is
+    tried, the last one varying fastest. With ``settings``, a list of chosen
+    settings that each give the same other hyperparameters, each of them is tried
+    with every combination of ``sweep``, such as with every seed.
+    """
+    products = [dict(zip(sweep, values, strict=True)) for values in itertools.product(*sweep.values())]
+    if settings is None:
+        return products
+    names = set(settings[0])
+    if any(set(setting) != names for setting in settings):
+        msg = "[[settings]] must all give the same hyperparameters"
+        raise ValueError(msg)
+    if names & set(sweep):
+        msg = f"[[settings]] and [sweep] both give {sorted(names & set(sweep))}"
+        raise ValueError(msg)
+    return [setting | product for setting in settings for product in products]
 
 
 def summarize_seeds(rows: list[dict[str, Any]], names: list[str]) -> list[dict[str, Any]]:

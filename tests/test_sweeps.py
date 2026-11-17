@@ -8,7 +8,7 @@ import math
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.sweeps import score_settings, summarize_seeds
+from arm_esn_ctrl.sweeps import score_settings, summarize_seeds, sweep_combinations
 
 
 def row(scaling, radius, seed, rmse, *, failures=0, arrival=10.0, final=0.001):
@@ -146,3 +146,35 @@ def test_without_seeds_a_setting_has_no_typical_seed():
 
     assert "typical_seed" not in score
     assert "seeds" not in score
+
+
+def test_a_sweep_tries_every_combination_of_its_values_the_last_varying_fastest():
+    combinations = sweep_combinations({"leak_rate": [0.01, 0.03], "seed": [1, 2]})
+
+    assert combinations == [
+        {"leak_rate": 0.01, "seed": 1},
+        {"leak_rate": 0.01, "seed": 2},
+        {"leak_rate": 0.03, "seed": 1},
+        {"leak_rate": 0.03, "seed": 2},
+    ]
+
+
+def test_listed_settings_are_each_tried_with_every_combination_of_the_sweep():
+    settings = [{"leak_rate": 0.1, "ridge": 1.0}, {"leak_rate": 0.055, "ridge": 0.1}]
+
+    combinations = sweep_combinations({"seed": [1, 2]}, settings)
+
+    assert combinations == [
+        {"leak_rate": 0.1, "ridge": 1.0, "seed": 1},
+        {"leak_rate": 0.1, "ridge": 1.0, "seed": 2},
+        {"leak_rate": 0.055, "ridge": 0.1, "seed": 1},
+        {"leak_rate": 0.055, "ridge": 0.1, "seed": 2},
+    ]
+    assert sweep_combinations({}, settings) == settings
+
+
+def test_listed_settings_must_give_the_same_hyperparameters_and_none_that_is_swept():
+    with pytest.raises(ValueError, match="same hyperparameters"):
+        sweep_combinations({"seed": [1]}, [{"leak_rate": 0.1}, {"ridge": 1.0}])
+    with pytest.raises(ValueError, match="both give"):
+        sweep_combinations({"leak_rate": [0.1]}, [{"leak_rate": 0.1}])
