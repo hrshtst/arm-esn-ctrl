@@ -71,7 +71,12 @@ takes = [
   "data/reach_manual_v2_no_limits/take_08.sklog.npz",
 ]
 # What the import checks of each take (experiments/import_demonstrations.py):
-start_tolerance_deg = 0.01  # the take begins at its start posture within this, in every joint
+# The take begins at its start posture within start_tolerance_deg, in every joint. The
+# takes as recorded begin on it exactly; the filter moves the first sample of a take
+# whose hand moves within about half a second of its beginning, here by up to
+# 0.115 deg (0.7 mm at the hand), so the tolerance is wider than
+# reach_manual_v2.toml's 0.01 deg and still far below a wrong --pose.
+start_tolerance_deg = 0.2
 hold = 2.0                  # after arriving within the target tolerance, the hand stays this long (s)
 max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, not a reach
 
