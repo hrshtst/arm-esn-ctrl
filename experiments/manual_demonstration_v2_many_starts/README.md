@@ -8,7 +8,8 @@ have 800 neurons.
 **Status.** The ESN's setting was tuned by hand first, with the configurations
 below. The search's rule, [below](#the-search), was fixed on 2026-11-17 before any
 run of the search. The claims of this stage and the runs that test them,
-[below](#the-analysis), were fixed on 2026-11-18 before any of those runs.
+[below](#the-analysis), were fixed on 2026-11-18 before any of those runs. Claims 1
+to 4 hold; claims 5, 6, and 7 fail as stated ([the outcomes](#the-outcomes)).
 
 ## The robot and the takes
 
@@ -308,6 +309,102 @@ ring; the outer ring; and all nine.
 
 The pushes are `hand_pushes_robot.toml`'s: the first two placed along each take,
 where its hand is 18% and 62% of the way to the target, the third at 15 s.
+
+### The outcomes
+
+The runs are in the storage root under `results/manual_demonstration_v2_many_starts/`:
+`20261118-005826-robot_esn1` and `-robot_esn2`, `20261118-005826-pushes1x_robot_esn1`
+to `-pushes4x_robot_esn2`, `20261118-010620-takes1` to `20261118-012050-takes9`, the
+one-take search (`20261118-005826-one_take_coarse_search`,
+`20261118-012638-one_take_fine_search`, `20261118-012913-one_take_untaught_search`),
+and `20261118-024154-robot_one_take_esn1` and `20261118-024156-robot_one_take_esn2`.
+
+**Claims 1 to 4 hold, for ESN #1 and for ESN #2.** Undisturbed, both arrive and hold
+from all nine takes' starts and from all 36 unseen starts, as the replay does, and no
+run ends farther than 13 mm from the target. Medians over the 36 unseen starts (the
+largest in parentheses):
+
+| | ESN #1 | ESN #2 | Replay of the nearest take |
+| --- | --- | --- | --- |
+| Runs that hold | 36 | 36 | 36 |
+| Detour ratio | 1.08 (2.56) | 1.09 (3.16) | 1.59 (11.33) |
+| Reference's fastest joint speed (°/s) | 183 | 119 | 2,100 |
+| Largest joint torque (N m) | 9.6 (20.8) | 6.2 (33.2) | 99.4 (371.7) |
+| Arrival (s) | 7.78 | 9.37 | 7.82 |
+
+From the takes' starts, ESN #1 follows its take (median path RMSE 4.1 mm, arrival
+7.77 s against the replay's 7.82 s); ESN #2 is slower and farther off (33.2 mm,
+10.02 s).
+
+**Claim 5 fails, at every size and for both ESNs.** Runs that arrive and end within
+20 mm of the target, of nine:
+
+| Pushes | ESN #1 | ESN #2 | Replay | Progress replay |
+| --- | --- | --- | --- | --- |
+| at report 007's forces | 2 | 1 | 9 | 9 |
+| at twice | 1 | 2 | 9 | 9 |
+| at four times | 1 | 1 | 9 | 9 |
+
+The replays end within 13 mm in every run; ESN #1's worst runs end 0.94, 0.74, and
+0.70 m away at the three sizes, and ESN #2's 0.15, 0.45, and 0.46 m. At report 007's
+forces, the first push (3 N) already sends ESN #1's hand 0.03 to 0.82 m off the
+take's path, against 0.01 to 0.05 m for the replay, and the third, with the arm at
+rest at the target, sends it 0.11 to 1.16 m away; five of the nine runs then end
+0.74 to 0.94 m from the target. The search scored undisturbed runs only, while report
+017's required every ESN to pass the pushes; whether that is the cause is not tested.
+
+**Claim 6 fails as stated: one take is enough to arrive.** The one-take search's
+coarse step holds from take 00's start at 67 of 108 settings (best: leak rate 0.03,
+spectral radius 0.9, input scaling 0.1, ridge 1), its fine step in all five runs at
+70 of 81, and the rescoring gives one-take ESN #1 (leak rate 0.017, spectral radius
+1.05, input scaling 0.045, ridge 0.1, seed 5; 185 of 185 runs hold, median detour
+ratio 3.08) and one-take ESN #2 (leak rate 0.055, spectral radius 0.75, input scaling
+0.22, ridge 1, seed 3; 184 of 185, 1.37). From the 44 starts take 00 does not start
+from, all four ESNs hold from all 44, so ESN #1 and ESN #2 do not hold from more. The
+other half of the claim holds: their median detour ratios are smaller. Medians (the
+largest in parentheses):
+
+| | ESN #1 | ESN #2 | One-take ESN #1 | One-take ESN #2 | Replay of take 00 |
+| --- | --- | --- | --- | --- | --- |
+| Runs that hold, of 44 | 44 | 44 | 44 | 44 | 44 |
+| Detour ratio, the 44 | 1.05 (2.56) | 1.09 (3.16) | 3.19 (39.75) | 1.34 (4.25) | 4.76 (52.35) |
+| Detour ratio, the other eight takes' starts | 1.01 | 1.05 | 4.03 | 1.42 | 5.50 |
+| Detour ratio, the 36 unseen | 1.08 | 1.09 | 3.19 | 1.34 | 4.76 |
+| Fastest reference speed (°/s), the other eight | 40 | 89 | 6,742 | 606 | 11,599 |
+| Fastest reference speed (°/s), the 36 unseen | 183 | 119 | 5,466 | 629 | 9,000 |
+| Largest torque (N m), the other eight | 1.0 | 4.6 | 353 | 28.6 | 607 |
+| Largest torque (N m), the 36 unseen | 9.6 (20.8) | 6.2 (33.2) | 286 (597) | 26.9 (259) | 471 (1,000) |
+| Arrival (s), the 44 | 7.76 | 9.41 | 8.07 | 13.66 | 7.84 |
+
+One-take ESN #1 jumps toward its take's start and then goes as the take does, at a
+little over half the replay's speed and torque; one-take ESN #2 jumps much less but
+takes 13.7 s to arrive.
+
+**Claim 7 fails as stated, for the same reason.** Runs that hold from the 36 unseen
+starts, of 180 (five seeds):
+
+| Takes | ESN #1's setting | ESN #2's setting |
+| --- | --- | --- |
+| one | 176 | 179 |
+| three | 172 | 176 |
+| six | 173 | 176 |
+| nine | 179 | 178 |
+
+The counts neither rise step by step nor, at ESN #2's setting, end above one take's.
+What the takes change is how the hand gets there. Medians over the 180 runs from the
+unseen starts, at ESN #1's setting and at ESN #2's:
+
+| Takes | Detour ratio | Reference's fastest joint speed (°/s) | Largest torque (N m) |
+| --- | --- | --- | --- |
+| one | 1.52, 1.32 | 2,340, 1,645 | 122.5, 86.1 |
+| three | 1.17, 1.11 | 317, 182 | 15.7, 8.8 |
+| six | 1.08, 1.09 | 227, 129 | 10.6, 6.5 |
+| nine | 1.07, 1.07 | 127, 113 | 6.5, 5.2 |
+
+From the starts of the takes an ESN is trained on, every run holds but two of the 30
+with six takes at ESN #1's setting.
+
+## The configurations
 
 | Configurations | What they run |
 | --- | --- |
