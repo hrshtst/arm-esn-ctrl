@@ -51,6 +51,22 @@ follows the arm from the disturbance's onset to ``following_window`` seconds pas
 end (0.5 s by default).
 Start postures away from the demonstrated
 ones (``start_offsets_deg`` in ``[evaluation]``) make the initial-offset scenario.
+A push can be placed by its ``way`` along the taught motion each run starts from,
+instead of its ``onset`` (see :func:`arm_esn_ctrl.disturbances.placed`). With
+``gains_from`` in ``[tracker]``, a demonstration file under the storage root, joint
+PD's gains with ``omegas`` are set where that take ends rather than where the ESN's
+own demonstrations do, so that ESNs trained on other takes are tracked alike.
+
+An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) runs each task from that
+task's start postures with that task's context, against the replays of that task's
+demonstrations; the run directory then has a directory per task, named by it, with
+the runs and figures below, and ``metrics.csv`` has a ``task`` column. ``[[switch]]``
+tables change the ESN's task during every run: each gives a ``time`` on the task
+clock and the ``task``'s name. The runs' logs record the context at every step
+(``context``), and the metrics then say whether, after the last change, the hand
+arrives at the last task's target and holds there (``switch_arrived``,
+``switch_arrival_time_s`` from the change, ``switch_left_goal``, ``switch_success``,
+and ``switch_final_distance_m``; empty for the replays, which keep to their take).
 
 Every run is compared with the demonstrator's undisturbed reach from the same
 start posture, and the run directory receives:
@@ -88,6 +104,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -103,13 +120,23 @@ from matplotlib.patches import Patch
 from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog
 
-from arm_esn_ctrl.autonomous import Reference, Run, Setup, load_setup, rms_degrees, run_metrics
+from arm_esn_ctrl.autonomous import (
+    Reference,
+    Run,
+    Setup,
+    demonstration_tables,
+    load_setups,
+    rms_degrees,
+    run_metrics,
+    task_names,
+)
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach
 from arm_esn_ctrl.disturbances import (
     check_recorded_arm,
     disturbance_spans,
     keep_recorded_logs,
     make_disturbance,
+    placed,
     recorded_evaluation,
 )
 from arm_esn_ctrl.drawing import OffsetMap, draw_postures, spread_along_path
@@ -120,6 +147,7 @@ from arm_esn_ctrl.metrics import (
     disturbance_returns,
     disturbance_ringing,
     hand_speed,
+    hold_metrics,
     motor_effort,
     path_progress,
     path_rmse,
@@ -131,7 +159,7 @@ from arm_esn_ctrl.tracking import (
     ReferenceSource,
     ReplaySource,
     TrackerConfig,
-    gain_posture,
+    gains_posture,
     nearest_demonstration,
     task_joint_angles,
     track,
@@ -175,34 +203,141 @@ def main() -> None:
     config, run_dir = start_run(args.config)
     esn_path = resolve_run_path(config["esn"]["model"])
     esn = ReachingEsn.load(esn_path)
-    # The demonstrations the ESN was trained on, which the replay replays.
+    # The demonstrations the ESN was trained on, which the replay replays: of each of its tasks, if several.
     with (esn_path.parent / "config.toml").open("rb") as f:
         demonstrations = tomllib.load(f)["demonstrations"]
-    with (resolve_run_path(demonstrations["run"]) / "config.toml").open("rb") as f:
-        demo_config = tomllib.load(f)
+    names = task_names(demonstrations)
     disturbance = config.get("disturbance")
     # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
     evaluation = recorded_evaluation(config["evaluation"], disturbance)
-    setup = load_setup({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
-    check_recorded_arm(disturbance, setup.skeleton)
+    setups = load_setups({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
+    check_recorded_arm(disturbance, setups[0].skeleton)
     keep_recorded_logs(disturbance, run_dir)
-    spans = disturbance_spans(disturbance)
-    window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
-    tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
-    ringing = ringing_settings(evaluation)
-    following = evaluation.get("following_window", FOLLOWING_WINDOW)
-    print(f"ESN {config['esn']['model']}, trained on {len(setup.demos)} demonstrations")
-    print(f"Disturbance: {disturbance or 'none'}; {len(setup.starts)} start postures")
+    switches = switch_schedule(config.get("switch", []), names)
+    n_demos = sum(len(setup.demos) for setup in setups)
+    tasks = f" of {len(names)} tasks ({', '.join(names)})" if names else ""
+    print(f"ESN {config['esn']['model']}, trained on {n_demos} demonstrations{tasks}")
+    print(f"Disturbance: {disturbance or 'none'}; {sum(len(setup.starts) for setup in setups)} start postures")
+    if switches:
+        print("The ESN's task changes: " + ", ".join(f"to {names[task]} at {time:g} s" for time, task in switches))
     if not config["tracker"].get("reference_velocity", True):
         print("The tracking laws are given a zero reference velocity")
     if "control_period" in config["tracker"]:
         print(f"The tracking laws' torque is computed every {config['tracker']['control_period']} s and held between")
+    # Where joint PD's gains are set: the same for every task.
+    every_demo = [q for setup in setups for q in setup.demos.values()]
+    end_posture = gains_posture(config["tracker"], every_demo, esn.config.dt)
+
+    rows: list[dict[str, Any]] = []
+    for task, (table, setup) in enumerate(zip(demonstration_tables(demonstrations), setups, strict=True)):
+        with (resolve_run_path(table["run"]) / "config.toml").open("rb") as f:
+            demo_config = tomllib.load(f)
+        task_dir = run_dir
+        schedule = None
+        if names:
+            print(f"\nTask {names[task]}")
+            task_dir = run_dir / names[task]
+            task_dir.mkdir()
+            schedule = [(0.0, task), *switches]
+        final = setups[switches[-1][1]] if switches else None
+        task_rows = run_task(
+            config, evaluation, args.config.stem, task_dir, esn, setup, demo_config, end_posture, schedule, final
+        )
+        rows += [({"task": names[task]} if names else {}) | row for row in task_rows]
+
+    with (run_dir / "metrics.csv").open("w", newline="") as out:
+        writer = csv.DictWriter(out, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"\nWrote the results to {run_dir}")
+    first = (
+        (run_dir / names[0] if names else run_dir) / tracker_settings(config["tracker"])[0].name / "esn_00.sklog.npz"
+    )
+    print(f"Replay with:\n  uv run python third_party/skelarm/tools/player.py {first}")
+
+
+def switch_schedule(tables: list[dict[str, Any]], names: tuple[str, ...]) -> list[tuple[float, int]]:
+    """When the ESN's task changes during every run, from ``[[switch]]`` tables: each change's time and task index.
+
+    Raises
+    ------
+    ValueError
+        If the ESN has one task, a table lacks its ``time`` or names an unknown
+        ``task``, or the times are not in order.
+    """
+    if tables and not names:
+        msg = "[[switch]] changes the task of an ESN of several tasks: this ESN has one"
+        raise ValueError(msg)
+    schedule = []
+    for table in tables:
+        if set(table) != {"time", "task"} or table["task"] not in names:
+            msg = f"each [[switch]] gives a time and the task's name, one of {', '.join(names)}"
+            raise ValueError(msg)
+        schedule.append((float(table["time"]), names.index(table["task"])))
+    if any(later[0] < earlier[0] for earlier, later in itertools.pairwise(schedule)):
+        msg = "the [[switch]] tables must be in the order of their times"
+        raise ValueError(msg)
+    return schedule
+
+
+def switch_metrics(log: StateLog | None, setup: Setup, time: float, period: float) -> dict[str, Any]:
+    """Whether the hand arrives at ``setup``'s target and holds there after the task changed to it at ``time``.
+
+    The hold metrics (see :func:`arm_esn_ctrl.metrics.hold_metrics`) of the run's
+    part from ``time`` on, the arrival's time counted from it, as ``switch_arrived``,
+    ``switch_arrival_time_s``, ``switch_left_goal``, ``switch_hold_error_m``,
+    ``switch_hold_observed_s``, and ``switch_success``, and the hand's distance to
+    that target at the run's end, ``switch_final_distance_m``. Without a ``log``, as
+    for a replay, which keeps to its take, every one is empty.
+    """
+    keys = ["arrived", "arrival_time_s", "left_goal", "hold_error_m", "hold_observed_s", "success", "final_distance_m"]
+    if log is None:
+        return {f"switch_{key}": "" for key in keys}
+    hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1]))
+    after = setup.times >= time - 1e-9
+    held = hold_metrics(setup.times[after] - time, hand[after], setup.target, setup.radius, setup.hold)
+    held["final_distance_m"] = float(np.linalg.norm(hand[-1] - setup.target))
+    return {f"switch_{key}": held[key] for key in keys}
+
+
+def run_task(
+    config: dict[str, Any],
+    evaluation: dict[str, Any],
+    name: str,
+    run_dir: Path,
+    esn: ReachingEsn,
+    setup: Setup,
+    demo_config: dict[str, Any],
+    end_posture: NDArray[np.float64],
+    schedule: list[tuple[float, int]] | None,
+    final: Setup | None,
+) -> list[dict[str, Any]]:
+    """Run every arm from one task's start postures with every tracker setting, and draw that task's figures.
+
+    ``run_dir`` receives the runs and the figures; ``schedule`` gives an ESN of
+    several tasks its context, this task's from the warm-up on and then each change;
+    ``final`` is the setup of the task of the last change, if any. Returns the
+    metrics of every run.
+    """
+    disturbance = config.get("disturbance")
+    window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
+    tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
+    ringing = ringing_settings(evaluation)
+    following = evaluation.get("following_window", FOLLOWING_WINDOW)
+    period = esn.config.dt
+
+    def disturbance_of(i: int) -> Any:
+        """The disturbance's tables for a run from start posture ``i``, its pushes placed along the taught motion."""
+        taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
+        return placed(disturbance, taught_hand, setup.target, period)
 
     def disturbance_from(i: int) -> Any:
         """A fresh disturbance for a run from start posture ``i``."""
         start_hand = endpoint_positions(setup.skeleton, setup.starts[i].q[np.newaxis])[0]
-        return make_disturbance(disturbance, start_hand, setup.target, dt=demo_config["simulator"]["dt"])
+        return make_disturbance(disturbance_of(i), start_hand, setup.target, dt=demo_config["simulator"]["dt"])
 
+    spans = [disturbance_spans(disturbance_of(i)) for i in range(len(setup.starts))]
+    switched = schedule is not None and len(schedule) > 1 and final is not None
     rows = []
     for i, start in enumerate(setup.starts):
         if not setup.demonstrator_logs:  # a demonstration taught by hand: no demonstrator to run
@@ -214,13 +349,13 @@ def main() -> None:
         rows.append(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
-            | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
+            | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following)
+            | (switch_metrics(None, setup, 0.0, period) if switched else {})
         )
 
     progress = config.get("progress")
     tracker = config["tracker"]
     settings = tracker_settings(tracker)
-    end_posture = gain_posture(setup.demos.values())  # where the reaches end, for joint PD's gains
     for setting in settings:
         law = setting.law
         tracker_config = TrackerConfig(
@@ -246,18 +381,18 @@ def main() -> None:
         for i, start in enumerate(setup.starts):
             replayed = nearest_demonstration(start.q, setup.demos)
             sources: dict[str, ReferenceSource] = {
-                "esn": EsnSource(esn),
+                "esn": EsnSource(esn, schedule),
                 "replay": ReplaySource(setup.demos[replayed]),
             }
             if progress is not None:
-                sources["progress"] = progress_source(progress, setup.demos[replayed], esn.config.dt)
+                sources["progress"] = progress_source(progress, setup.demos[replayed], period)
             for arm, source in sources.items():
                 log = track(
                     posed(setup.skeleton, start.q),
                     source,
                     tracker_config,
                     gains,
-                    period=esn.config.dt,
+                    period=period,
                     warmup_steps=warmup_steps(evaluation, esn.config),
                     duration=evaluation["duration"],
                     dt=demo_config["simulator"]["dt"],
@@ -283,36 +418,36 @@ def main() -> None:
                     | {"arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm in ("replay", "progress") else ""}
-                    | arm_metrics(log, i, setup, esn.config.dt, window, spans, tolerance, ringing, following)
+                    | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following)
                 )
+                if switched and schedule is not None and final is not None:
+                    rows[-1] |= switch_metrics(log if arm == "esn" else None, final, schedule[-1][0], period)
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
-    with (run_dir / "metrics.csv").open("w", newline="") as out:
-        writer = csv.DictWriter(out, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
     print_summary(rows, len(setup.starts), window, setup.reference)
 
-    title = f"ESN on the robot: {args.config.stem}"
+    title = f"ESN on the robot: {name}"
     if settings[0].omega is not None:  # given gains have no natural frequency or damping ratio to plot against
         swept = "damping" if len(tracker.get("dampings", [1.0])) > 1 else "omega"
         plot_metrics(rows, tracker["laws"], len(setup.starts), window, swept, setup.reference, title).savefig(
             run_dir / "metrics.png", dpi=150
         )
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
-    plot_timeline(run_dir, setup, settings, spans, title).savefig(run_dir / "timeline.png", dpi=150)
-    plot_joints(run_dir, setup, settings, spans, title).savefig(run_dir / "joints.png", dpi=150)
-    plot_torques(run_dir, setup, settings, spans, title).savefig(run_dir / "torques.png", dpi=150)
+    plot_timeline(run_dir, setup, settings, spans[0], title).savefig(run_dir / "timeline.png", dpi=150)
+    plot_joints(run_dir, setup, settings, spans[0], title).savefig(run_dir / "joints.png", dpi=150)
+    plot_torques(run_dir, setup, settings, spans[0], title).savefig(run_dir / "torques.png", dpi=150)
     for offset in config.get("plots", {}).get("offsets_deg", []):
         index = offset_start(setup, offset)
         name = "offset_" + "_".join(f"{value:+g}" for value in offset)
-        plot_joints(run_dir, setup, settings, spans, title, index).savefig(run_dir / f"joints_{name}.png", dpi=150)
-        plot_torques(run_dir, setup, settings, spans, title, index).savefig(run_dir / f"torques_{name}.png", dpi=150)
+        plot_joints(run_dir, setup, settings, spans[index], title, index).savefig(
+            run_dir / f"joints_{name}.png", dpi=150
+        )
+        plot_torques(run_dir, setup, settings, spans[index], title, index).savefig(
+            run_dir / f"torques_{name}.png", dpi=150
+        )
     if "start_grid" in evaluation:
         plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
-    print(f"\nWrote the results to {run_dir}")
-    first = run_dir / settings[0].name / "esn_00.sklog.npz"
-    print(f"Replay with:\n  uv run python third_party/skelarm/tools/player.py {first}")
+    return rows
 
 
 def progress_source(table: dict[str, Any], q_demo: NDArray[np.float64], period: float) -> ProgressReplaySource:

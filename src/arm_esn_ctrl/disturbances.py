@@ -12,7 +12,11 @@ A disturbance is configured by a ``[disturbance]`` table, and several by
   degrees counterclockwise from the direction toward the target, or a
   ``direction``: ``"forward"`` along the reach toward the target (0 deg),
   ``"across"`` it (90 deg, the default), or ``"backward"`` away from the target
-  (180 deg).
+  (180 deg). Instead of ``onset``, ``way`` places the push along the taught motion
+  from the run's start: when its hand has come that fraction of the way to the
+  target, 1 less its distance to the target over the distance at its start, so
+  that takes of different lengths are pushed at the same stage of their reach
+  (:func:`placed` turns it into the onset).
 - ``type = "block"``: from ``onset`` until ``release``, a stiff spring-damper
   (``stiffness`` in N/m, ``damping`` in N s/m) holds the tip where it was at
   ``onset``, like a hand gripping the arm; then it lets go.
@@ -56,12 +60,12 @@ from arm_esn_ctrl.storage import resolve_run_path
 
 # The keys each type of [disturbance] table needs, and those it may have.
 DISTURBANCE_KEYS = {
-    "push": {"type", "force", "onset", "duration"},
+    "push": {"type", "force", "duration"},
     "block": {"type", "onset", "release", "stiffness", "damping"},
     "recorded": {"type", "log"},
 }
 OPTIONAL_KEYS = {
-    "push": {"direction", "angle_deg"},
+    "push": {"direction", "angle_deg", "onset", "way"},  # one of onset and way
     "block": set(),
     "recorded": {"time_offset", "threshold", "min_gap"},
 }
@@ -154,6 +158,40 @@ def make_disturbance(
             msg = f"disturbance {index} of {len(config)}: {error}"
             raise ValueError(msg) from error
     return Disturbances(parts) if parts else None
+
+
+def placed(
+    config: dict[str, Any] | list[dict[str, Any]] | None,
+    taught_hand: NDArray[np.float64],
+    target: NDArray[np.float64],
+    dt: float,
+) -> dict[str, Any] | list[dict[str, Any]] | None:
+    """``config`` with every push placed by its ``way`` given its ``onset`` on the task clock instead.
+
+    ``taught_hand`` is the hand's path of the taught motion the run starts from,
+    sampled every ``dt`` from the task's start: a push of ``way`` w starts when that
+    hand is first w of the way to the ``target`` (see the module). Other
+    disturbances are returned as given.
+
+    Raises
+    ------
+    ValueError
+        If the taught hand never comes that far.
+    """
+    if config is None:
+        return None
+    distance = np.linalg.norm(taught_hand - target, axis=1)
+    way = 1.0 - distance / distance[0]
+    tables = []
+    for table in _tables(config):
+        if table.get("type") == "push" and "way" in table and "onset" not in table:
+            reached = np.flatnonzero(way >= table["way"])
+            if reached.size == 0:
+                msg = f"the taught hand never comes {table['way']:g} of the way to the target"
+                raise ValueError(msg)
+            table = {key: value for key, value in table.items() if key != "way"} | {"onset": float(reached[0] * dt)}
+        tables.append(table)
+    return tables[0] if isinstance(config, dict) else tables
 
 
 def disturbance_spans(config: dict[str, Any] | list[dict[str, Any]] | None) -> list[tuple[float, float]]:
@@ -299,6 +337,12 @@ def _make_one(
         msg = f"a {kind} [disturbance] needs the keys {', '.join(sorted(DISTURBANCE_KEYS[kind]))}{optional}"
         raise ValueError(msg)
     if kind == "push":
+        if ("onset" in config) == ("way" in config):
+            msg = "a push takes an onset or a way, not both"
+            raise ValueError(msg)
+        if "way" in config:
+            msg = "a push placed by its way needs the taught motion first (see placed)"
+            raise ValueError(msg)
         if "direction" in config and "angle_deg" in config:
             msg = "a push takes a direction or an angle_deg, not both"
             raise ValueError(msg)

@@ -801,7 +801,6 @@ class RobotApp(QMainWindow):
                 tau=torque,
                 ext_force=force,
                 **run.controller.log_channels(),
-                **self._context_channel(),
             )
             tip = self.skeleton.links[-1]
             run.record(self.dt, self.skeleton.q.copy(), np.array([tip.xe, tip.ye]), torque, force)
@@ -872,15 +871,8 @@ class RobotApp(QMainWindow):
             tau=run.torque,
             ext_force=self._external_force(run),
             **run.controller.log_channels(),
-            **self._context_channel(),
         )
         return log
-
-    def _context_channel(self) -> dict[str, NDArray[np.float64]]:
-        """The context of an ESN of several tasks now, for the log: one weight per task; nothing otherwise."""
-        if self.esn is None or not self.esn.contexts:
-            return {}
-        return {"context": self.esn.context.copy()}
 
     def default_log_path(self) -> Path:
         """Where a run's log is saved by default: under :data:`RECORDED_FORCES` in the storage, named by time."""

@@ -102,6 +102,7 @@ from arm_esn_ctrl.disturbances import (
     disturbance_spans,
     keep_recorded_logs,
     make_disturbance,
+    placed,
     recorded_evaluation,
 )
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
@@ -111,7 +112,7 @@ from arm_esn_ctrl.sweeps import summarize_seeds
 from arm_esn_ctrl.tracking import (
     EsnSource,
     TrackerConfig,
-    gain_posture,
+    gains_posture,
     nearest_demonstration,
     task_joint_angles,
     track,
@@ -164,10 +165,13 @@ class Context:
     trackers: dict[str, tuple[TrackerConfig, tuple[NDArray[np.float64], NDArray[np.float64]]]]
     duration: float
     window: list[float]
-    spans: list[tuple[float, float]]
+    spans: list[tuple[float, float]]  # when each disturbance acts in the runs from the first start posture
     tolerance: float
     ringing: tuple[float, float]
     following: float
+    # Each start posture's disturbance, its pushes placed along the taught motion, and when each acts.
+    disturbances: list[Any]
+    start_spans: list[list[tuple[float, float]]]
 
 
 _context: Context | None = None  # this process's, set by init_worker
@@ -271,7 +275,18 @@ def sweep_context(config: dict[str, Any]) -> Context:
         simulator = tomllib.load(f)["simulator"]
     tracker = config["tracker"]
     settings = tracker_settings(tracker)
-    end_posture = gain_posture(setup.demos.values())  # where the reaches end, for joint PD's gains
+    # Where joint PD's gains are set: where the reaches end, or the take of [tracker]'s gains_from.
+    end_posture = gains_posture(tracker, setup.demos.values(), config["esn"]["dt"])
+    disturbances = [
+        placed(
+            disturbance,
+            setup.demo_hands[nearest_demonstration(start.q, setup.demos)],
+            setup.target,
+            config["esn"]["dt"],
+        )
+        for start in setup.starts
+    ]
+    start_spans = [disturbance_spans(each) for each in disturbances]
     trackers = {}
     for setting in settings:
         tracker_config = TrackerConfig(
@@ -293,10 +308,12 @@ def sweep_context(config: dict[str, Any]) -> Context:
         trackers,
         duration,
         evaluation.get("effort_window", [0.0, duration]),
-        disturbance_spans(disturbance),
+        start_spans[0],
         evaluation.get("return_tolerance", RETURN_TOLERANCE),
         ringing_settings(evaluation),
         evaluation.get("following_window", FOLLOWING_WINDOW),
+        disturbances,
+        start_spans,
     )
 
 
@@ -318,7 +335,6 @@ def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[di
     Returns its row of ``sweep.csv`` and its runs' metrics, one dict a run.
     """
     setup, simulator, settings = context.setup, context.simulator, context.settings
-    disturbance = context.config.get("disturbance")
     esn = ReachingEsn(EsnConfig(**(context.config["esn"] | combination)))
     esn.fit(list(setup.demos.values()))
     runs = []
@@ -337,7 +353,7 @@ def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[di
                 enforce_limits=simulator.get("enforce_limits", True),
                 stops=simulator.get("stops", "projected"),
                 external_force=make_disturbance(
-                    disturbance,
+                    context.disturbances[i],
                     endpoint_positions(setup.skeleton, start.q[np.newaxis])[0],
                     setup.target,
                     dt=simulator["dt"],
@@ -349,7 +365,7 @@ def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[di
                 setup,
                 esn.config.dt,
                 context.window,
-                context.spans,
+                context.start_spans[i],
                 context.tolerance,
                 context.ringing,
                 context.following,

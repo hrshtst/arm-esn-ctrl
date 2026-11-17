@@ -58,7 +58,9 @@ from skelarm import (
 )
 from skelarm.dynamics import StopModel
 
+from arm_esn_ctrl.demonstrations import load_joint_angles
 from arm_esn_ctrl.esn import ReachingEsn
+from arm_esn_ctrl.storage import resolve_run_path
 
 # The tracking laws of skelarm that a tracker can use, by their configuration name.
 LAWS = {"computed_torque": ComputedTorque, "pd": JointPD}
@@ -86,6 +88,22 @@ def gain_posture(demonstrations: Iterable[NDArray[np.float64]]) -> NDArray[np.fl
     on: their reaches end near the target, where the gains are set.
     """
     return np.mean([np.asarray(q, dtype=np.float64)[-1] for q in demonstrations], axis=0)
+
+
+def gains_posture(
+    tracker: dict[str, Any], demonstrations: Iterable[NDArray[np.float64]], dt: float
+) -> NDArray[np.float64]:
+    """Where a ``[tracker]`` table sets joint PD's gains: where its ``gains_from`` take ends, or else the reaches.
+
+    ``gains_from`` names a demonstration file under the storage root, sampled every
+    ``dt``: the gains are then set at its final posture, whatever the ESN was trained
+    on, so that ESNs trained on other takes, or on several tasks, are tracked with
+    the same gains. Without it, they are set where the ``demonstrations`` end (see
+    :func:`gain_posture`).
+    """
+    if "gains_from" in tracker:
+        return load_joint_angles(resolve_run_path(tracker["gains_from"]), dt)[1][-1]
+    return gain_posture(demonstrations)
 
 
 def tracking_gains(
@@ -445,10 +463,18 @@ class ReferenceTracker(Controller):
         return self._torque
 
     def log_channels(self) -> dict[str, Any]:
-        """The reference ``q_ref`` and the tracking error ``error = q_ref - q``, at every step."""
+        """The reference ``q_ref`` and the tracking error ``error = q_ref - q``, at every step.
+
+        With an ESN of several tasks as the source, also its ``context`` then, one weight per task.
+        """
         if self.config.control_period is None:
-            return self.law.log_channels()
-        return {"q_ref": self.reference.q.copy(), "error": self.reference.q - self._q}
+            channels = dict(self.law.log_channels())
+        else:
+            channels = {"q_ref": self.reference.q.copy(), "error": self.reference.q - self._q}
+        esn = getattr(self.source, "esn", None)
+        if esn is not None and esn.contexts:
+            channels["context"] = esn.context.copy()
+        return channels
 
 
 def track(
