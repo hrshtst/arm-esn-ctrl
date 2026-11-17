@@ -309,6 +309,17 @@ def test_the_analysis_runs_each_chosen_esn_with_the_searchs_tracker_from_the_tak
 
 
 @pytest.mark.parametrize("n", [1, 2])
+def test_the_analysis_runs_each_one_take_esn_as_the_chosen_ones_from_the_other_takes_starts_too(n):
+    one, nine = load(EXPERIMENT / f"robot_one_take_esn{n}.toml"), load(EXPERIMENT / f"robot_esn{n}.toml")
+    (chosen,) = EXPERIMENT.glob(f"one_take_esn{n}_*.toml")
+
+    assert one.pop("esn")["model"].endswith(f"-{chosen.stem}/esn.toml")
+    nine.pop("esn")
+    assert one["evaluation"]["extra_starts"].pop("other_takes") == load(TAKES)["demonstrations"]["start_q"][1:]
+    assert one == nine
+
+
+@pytest.mark.parametrize("n", [1, 2])
 @pytest.mark.parametrize("times", [1, 2, 4])
 def test_the_analysis_pushes_each_chosen_esn_at_one_two_and_four_times_report_007s_forces(n, times):
     pushes, hand = load(EXPERIMENT / f"pushes{times}x_robot_esn{n}.toml"), load(EXPERIMENT / "hand_pushes_robot.toml")

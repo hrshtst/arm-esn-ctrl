@@ -303,7 +303,7 @@ ring; the outer ring; and all nine.
 | --- | --- | --- |
 | 1 to 4 | `robot_esn1.toml`, `robot_esn2.toml` | ESN #1 and ESN #2 against the replay, undisturbed, from the nine takes' starts and the 36 unseen ones (`robot_esn.py`; 90 runs, about 8 minutes each) |
 | 5 | `pushes1x_robot_esn1.toml`, `pushes2x_…`, `pushes4x_…`, and those of ESN #2 | ESN #1 and ESN #2 against the replay and the progress replay under the three pushes at 1, 2, and 4 times their forces, from each take's start (`robot_esn.py`; 27 runs, about 2 minutes each) |
-| 6 | `one_take_coarse_search.toml`, then the one-take fine search, its scoring with the untaught starts, and the two chosen ESNs, written as each step gives the next | the one-take baseline's search, and one-take ESN #1 and ESN #2 against the replay of take 00, undisturbed, from take 00's start, the other eight takes' starts, and the 36 unseen ones |
+| 6 | `one_take_coarse_search.toml`, `one_take_fine_search.toml`, `one_take_untaught_search.toml`, the two chosen ESNs' configurations, and `robot_one_take_esn1.toml`, `robot_one_take_esn2.toml`, written as each step gave the next | the one-take baseline's search, and one-take ESN #1 and ESN #2 against the replay of take 00, undisturbed, from take 00's start, the other eight takes' starts, and the 36 unseen ones (`robot_esn.py`; 90 runs, about 8 minutes each) |
 | 7 | `takes1.toml`, `takes3.toml`, `takes6.toml`, `takes9.toml` | ESN #1's and ESN #2's settings, seeds 1 to 5, trained on one, three, six, and nine takes, each ESN on the robot, undisturbed, from every take's start and the 36 unseen ones (`sweep_robot_esn.py`; about 4 minutes each with 30 workers) |
 
 The pushes are `hand_pushes_robot.toml`'s: the first two placed along each take,
