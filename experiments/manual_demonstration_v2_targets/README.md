@@ -349,3 +349,22 @@ center, and the chosen ESNs are not known yet.
 
 In a run of claims 4 and 5 whose change names the context it already has, nothing
 changes; those runs are kept as they come and are not part of the claims.
+
+### The outcome (added after the runs, 2026-11-19)
+
+The ESNs were trained as `20261119-000048-esn1_lr0.17_sr1.05_is1_ridge10_seed1` and
+`20261119-000238-esn2_lr0.17_sr1.2_is1_ridge10_seed5`, and the 14 runs of the claims
+ran as `20261119-002310-robot_esn1` to `20261119-005610-switch_early_to_c_robot_esn1`.
+[Report 025](../../reports/025-three-targets-by-context/README.md) gives the figures
+and tables.
+
+| Claim | ESN #1 | ESN #2 | |
+| --- | --- | --- | --- |
+| 1. The takes' starts | 27 of 27 hold, as the replay's | 27 of 27 | holds |
+| 2. The unseen starts, at A, B, C (the replay: 36, 36, 35 of 36) | 36, 36, 36 | 35, 36, 33 | fails: ESN #2 holds from fewer starts than the replay at A and at C |
+| 3. Starting where the arm is, and going directly | smaller than the replay's in all three measures at all three targets | the same | holds |
+| 4. Changing the context at rest | 54 of 54 arrive and hold at the new target | 54 of 54 | holds |
+| 5. Changing the context on the way | 54 of 54 | 54 of 54 | holds |
+
+The demonstration, pushes by hand while the target changes, is recorded by the
+maintainer in the robot app.
