@@ -20,8 +20,8 @@ stand here. 3b's are a proposal: the maintainer confirms them before 3b starts.
 The scripted take is made and imported
 (`results/demonstrations/20261118-171132-ellipse_scripted_v2_no_limits`). Two takes by
 hand were refused by the import, their samples uneven while sweeps loaded the machine,
-and the take is recorded again. On the scripted take the search is run and has given its two
-ESNs; no claim has been run.
+and the take is recorded again. On the scripted take the search and the claims' runs are done
+([the outcomes](#the-outcomes-for-the-scripted-take)).
 
 **Checks of the runners.** Before the search, the runners were tried in a scratch
 directory, on the scripted take and on a made-up take in place of the hand's, with
@@ -273,6 +273,44 @@ text above is the changed one.
   starts, which the search's last step also scores from.
 - **The progress replay is dropped.** Claims 4 and 5 compare with the replay alone.
 - **The take by hand aims at 4 s a loop.** The first take went around in about 2.9 s.
+
+### The outcomes for the scripted take
+
+Added on 2026-11-19, after the runs of the scripted take's ESNs (commit 210ffce). The
+take by hand is not recorded yet, so its outcomes are still to come.
+
+| Claim | ESN #1 | ESN #2 | The replay | Outcome |
+| --- | --- | --- | --- | --- |
+| 1, cycles at the end of 120 s from the eight starts on the curve | 8 of 8 | 8 of 8 | 8 of 8 | holds |
+| 2, from the seven other starts on the curve: fastest reference speed, largest torque (medians) | 1,531 deg/s, 11.1 N m | 1,595 deg/s, 11.2 N m | 2,670 deg/s, 139.8 N m | holds |
+| 2, from the 36 untaught starts | 5,526 deg/s, 270 N m | 5,590 deg/s, 272 N m | 9,000 deg/s, 471 N m | holds |
+| 3, cycles at the end of 60 s from the 36 untaught starts | 36 of 36 | 36 of 36 | 36 of 36 | holds |
+| 4, cycles at the end of 80 s under the pushes, at 1, 2, and 4 times | 8, 8, 8 of 8 | 8, 8, 8 of 8 | 8, 8, 8 of 8 | holds |
+| 5, cycles at the end of 60 s with the block | 8 of 8 | 8 of 8 | 8 of 8 | holds |
+| 5, in the 2 s after the release: largest torque (median) | 9.8 N m | 9.3 N m | 19.7 N m | holds |
+| 5, in the 2 s after the release: largest off the curve (median) | 84 mm | 77 mm | 60 mm | fails |
+
+Claims 1 to 4 hold for the scripted take. Claim 5 fails: the ESNs' hands cycle at the
+end and ask for less torque after the release, but they go farther off the curve than
+the replay's.
+
+Beside the claims:
+
+- **The start.** Claim 2 holds in its direction, yet neither arm starts where the arm
+  is. From an untaught start the ESNs' reference goes to the curve at once, as fast as
+  5,500 deg/s in the median, where the take's own start asks for 42 deg/s and 0.9 N m.
+  The ESNs join the curve in 0.8 s in the median (2.0 s at most), the replay in 0.3 s.
+- **The curve and the pace.** Undisturbed, the ESNs' curve RMS is 0.79 mm and the
+  replay's 0.83 mm; the ESNs' period is 1.004 of the taught one.
+- **The pushes.** Each ESN is back within 20 mm of the curve in 2.3 s at most after
+  any push, at every size; the replay in 0.4 s at most.
+- **The delay** is taken within a loop, between −1 s and 3 s: a hand pushed around
+  the far side of the center loses or gains a turn of its angle, which is no delay.
+  After the pushes the ESNs end between 0.4 s ahead of their undisturbed runs and
+  0.7 s behind. After the block of 3 s they end 2.7 s behind in the median (0.5 to
+  2.9 s). The replay ends with no delay.
+- **The replay's eight runs are one run** from 10 s on: it begins at the take's start
+  wherever the arm is, so the block meets it at the same place in every run.
 
 ## The reach and the periodic motion in one ESN (3b)
 
