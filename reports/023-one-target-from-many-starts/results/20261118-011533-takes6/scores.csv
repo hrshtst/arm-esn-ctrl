@@ -1,0 +1,3 @@
+leak_rate,spectral_radius,input_scaling,ridge,runs,holding_runs,median_detour_ratio,seeds,typical_seed
+0.1,1.05,0.5,10.0,225,221,1.073366753702032,5,1
+0.055,1.2,1.0,1.0,225,214,1.0713997773343005,5,1

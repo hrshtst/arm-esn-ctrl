@@ -10,6 +10,7 @@ below. The search's rule, [below](#the-search), was fixed on 2026-11-17 before a
 run of the search. The claims of this stage and the runs that test them,
 [below](#the-analysis), were fixed on 2026-11-18 before any of those runs. Claims 1
 to 4 hold; claims 5, 6, and 7 fail as stated ([the outcomes](#the-outcomes)).
+[Report 023](../../reports/023-one-target-from-many-starts/README.md) gives the results.
 
 ## The robot and the takes
 
@@ -408,6 +409,10 @@ with six takes at ESN #1's setting.
 ESN hands are still moving when the run ends at 24 s, 9 s after the third push.
 `pushes1x_long_robot_esn1.toml` and `pushes1x_long_robot_esn2.toml` run the pushes at
 report 007's forces for 48 s, to see whether the hand comes back. They test no claim.
+They do come back: all nine runs of each ESN are in the goal for good by 32.6 s (ESN
+#1) and 27.6 s (ESN #2), 5 to 18 s after the third push, against 16.2 s for the
+replay, and end 3 to 11 mm from the target
+(`20261118-085118-pushes1x_long_robot_esn1`, `20261118-085121-pushes1x_long_robot_esn2`).
 
 ## The configurations
 

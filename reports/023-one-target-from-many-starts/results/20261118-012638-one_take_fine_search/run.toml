@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_many_starts/one_take_fine_search.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_many_starts/one_take_fine_search.toml --workers 30"
+started = 2026-11-18 01:26:38+09:00
+host = "delbosque"
+commit = "98c36c7531f743718092e8bc8b137159ed94a1f7"
+uncommitted_changes = false

@@ -1,0 +1,55 @@
+# One-take ESN #2 on the robot, undisturbed, from take 00's start, the other eight
+# takes' starts, and 36 unseen start postures, against the replay of take 00. About 8
+# minutes: 90 runs, one after another. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts/robot_one_take_esn2.toml
+
+[esn]
+# esn.toml in the run directory of its training, relative to the storage root.
+model = "results/manual_demonstration_v2_many_starts/20261118-024015-one_take_esn2_lr0.055_sr0.75_is0.22_ridge1_seed3/esn.toml"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start
+
+[evaluation.extra_starts]
+# The start postures of the takes this ESN is not trained on (deg).
+other_takes = [
+  [73.0, 71.0],  # take 01's
+  [133.0, 71.0],  # take 02's
+  [-167.0, 71.0],  # take 03's
+  [-107.0, 71.0],  # take 04's
+  [-47.0, 71.0],  # take 05's
+  [21.0, 132.0],  # take 06's
+  [141.0, 132.0],  # take 07's
+  [-99.0, 132.0],  # take 08's
+]
+
+# The unseen start postures (deg): 36 hand positions spread evenly over the workspace as
+# the 36 untaught ones of hand_esn.toml, on the same rings turned 15 deg back, joint 2
+# positive. No search or scoring ran from them:
+#
+#   uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
+#       --counts 18 12 6 --first-angle 38.3
+unseen = [
+  [12.0, 60.0], [32.0, 60.0], [52.0, 60.0], [72.0, 60.0], [92.0, 60.0], [112.0, 60.0],
+  [132.0, 60.0], [152.0, 60.0], [172.0, 60.0], [-168.0, 60.0], [-148.0, 60.0], [-128.0, 60.0],
+  [-108.0, 60.0], [-88.0, 60.0], [-68.0, 60.0], [-48.0, 60.0], [-28.0, 60.0], [-8.0, 60.0],
+  [2.0, 109.0], [32.0, 109.0], [62.0, 109.0], [92.0, 109.0], [122.0, 109.0], [152.0, 109.0],
+  [-178.0, 109.0], [-148.0, 109.0], [-118.0, 109.0], [-88.0, 109.0], [-58.0, 109.0], [-28.0, 109.0],
+  [10.0, 146.0], [70.0, 146.0], [130.0, 146.0], [-170.0, 146.0], [-110.0, 146.0], [-50.0, 146.0],
+]

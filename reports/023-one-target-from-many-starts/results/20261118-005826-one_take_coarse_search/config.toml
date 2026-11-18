@@ -1,0 +1,55 @@
+# The one-take baseline's coarse search: coarse_search.toml's 108 settings, one reservoir
+# each (seed 0), trained on take 00 alone and run on the robot, undisturbed, from its
+# start. Each setting is scored by whether its run arrives and holds, then by its detour
+# ratio; the best is the center of the one-take fine search. About 2 minutes with 30
+# workers. See README.md.
+#
+#   uv run python experiments/sweep_robot_esn.py \
+#       experiments/manual_demonstration_v2_many_starts/one_take_coarse_search.toml --workers 30
+
+[demonstrations]
+# Take 00 of reach_manual_v2_no_limits.toml's nine, filtered at 2 Hz: its hand starts in
+# the direction of the start of reports 005 to 020's take.
+run = "results/demonstrations/20261117-164658-reach_manual_v2_no_limits"
+train = ["demo_00_filtered.sklog.npz"]  # from (13, 71) deg
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 800
+spectral_radius = 1.2  # swept
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.03       # swept
+input_scaling = 0.5    # swept
+bias = true
+ridge = 1e-2           # swept
+seed = 0
+
+[sweep]
+leak_rate = [0.01, 0.03, 0.1, 0.3]
+spectral_radius = [0.9, 1.2, 1.5]
+input_scaling = [0.1, 0.5, 2.0]
+ridge = [1e-4, 1e-2, 1.0]
+
+[ranking]
+# The most runs that arrive and hold, then the smallest median detour ratio of the
+# runs that arrive.
+by = "detour_ratio"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start

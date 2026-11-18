@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_many_starts/pushes1x_long_robot_esn2.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts/pushes1x_long_robot_esn2.toml"
+started = 2026-11-18 08:51:21+09:00
+host = "delbosque"
+commit = "64d478b538fe263d9e7b5b7408063e8ee974811b"
+uncommitted_changes = false

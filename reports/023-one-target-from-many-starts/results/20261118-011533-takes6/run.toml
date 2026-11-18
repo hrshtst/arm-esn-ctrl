@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_many_starts/takes6.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_many_starts/takes6.toml --workers 30"
+started = 2026-11-18 01:15:33+09:00
+host = "delbosque"
+commit = "767876318800dc564eaea3f4562c201f3f189d01"
+uncommitted_changes = false

@@ -266,6 +266,7 @@ that run them are shared:
 | [manual_demonstration_v2_consistent_dynamics](experiments/manual_demonstration_v2_consistent_dynamics/README.md) | the consistent search's two ESNs read as report 015 read report 011's, and all its 10,080 ESNs screened as report 016 screened report 011's, set against their outcomes with the offset starts counted; the passing ESNs released at their unstable fixed points and blocked along the reach on the robot (Stages 1 and 2) | [019](reports/019-dynamics-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_robot_loop](experiments/manual_demonstration_v2_consistent_robot_loop/README.md) | the ESN and the robot read as one dynamical system: the consistent search's two ESNs on the robot from rest anywhere, their fixed points, rates, and pulses with the arm, and every fixed point of report 019's screens with the arm, against its releases and outcomes (Stages 1 and 2) | [020](reports/020-the-esn-and-the-robot-as-one-system/README.md) |
 | [manual_demonstration_four_dof_consistent_search](experiments/manual_demonstration_four_dof_consistent_search/README.md) | the consistent search on skelarm's four-link arm: the grid and its extension below the lowest input scaling, the rule, a second rule that asks the reference to follow the arm, and the chosen ESNs against both replays in every scenario |
+| [manual_demonstration_v2_many_starts](experiments/manual_demonstration_v2_many_starts/README.md) | one target reached from many start postures on v2's arm with no joint limits, taught by one take from each of nine: ESNs of 800 neurons searched by how many starts the hand arrives and holds from and how directly, then checked from unseen starts, under pushes, and against fewer takes (Stages 1 and 2) | [023](reports/023-one-target-from-many-starts/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -506,6 +507,16 @@ The reports so far:
   the block falls to about a third of the replay's, with longer swings after pushes and
   long presses against the joint stops from offset starts. Their settings do not hold on
   held-out seeds.
+- [023 One target from many starts: nine takes start where the arm is and go directly, but a push sends the hand far away](reports/023-one-target-from-many-starts/README.md)
+  (Stages 1 and 2): one target reached from many start postures on the two-link arm with
+  no joint limits, taught by nine takes, with ESNs chosen by undisturbed runs only.
+  Undisturbed, the two chosen arrive and hold from every taught and unseen start, and
+  from an unseen start their references begin at the arm: a tenth of the replay's speed
+  and torque, and a detour ratio of 1.08 against 1.59. Under pushes they fail: the
+  reference goes with the arm, a push on the resting arm sends the hand up to 1.5 m away,
+  and the return takes as long as a new reach. One take is already enough to arrive, so
+  the claims that more takes arrive more often fail; more takes cut the jump and the
+  detour.
 
 Each report has five parts:
 
