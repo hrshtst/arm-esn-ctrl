@@ -170,3 +170,24 @@ def test_the_take_counts_are_the_many_starts_ones_at_the_chosen_settings(n_takes
     ]
     old.pop("settings")
     assert takes == old
+
+
+ROBOT_RUNS = [
+    *(f"{stem}_esn{n}" for n in (1, 2) for stem in ("robot", "pushes1x_robot", "pushes2x_robot", "pushes4x_robot")),
+    *(f"pushes1x_long_robot_esn{n}" for n in (1, 2)),
+    *(f"robot_one_take_esn{n}" for n in (1, 2)),
+]
+
+
+@pytest.mark.parametrize("stem", ROBOT_RUNS)
+def test_the_analysis_runs_are_the_many_starts_ones_with_this_searchs_esns(stem):
+    run = load(EXPERIMENT / f"{stem}.toml")
+    old = load(MANY_STARTS / f"{stem}.toml")
+    prefix = "one_take_" if "one_take" in stem else ""
+    (name,) = (name for name in CHOSEN if name.startswith(f"{prefix}esn{stem[-1]}_"))
+
+    model = run.pop("esn")["model"]
+    assert model.startswith(f"results/{EXPERIMENT.name}/")
+    assert model.endswith(f"-{name}/esn.toml")
+    old.pop("esn")
+    assert run == old
