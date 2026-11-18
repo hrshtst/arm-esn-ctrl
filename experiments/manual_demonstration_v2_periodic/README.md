@@ -14,7 +14,15 @@ It has two parts:
 **Status.** The maintainer decided the curve, its pace, and the takes on 2026-11-18.
 The measures, the search's rule, and the claims below were written on 2026-11-18,
 before any take of this experiment was recorded and before any ESN was trained on one.
-Nothing has been run.
+The scripted take is made and imported
+(`results/demonstrations/20261118-171132-ellipse_scripted_v2_no_limits`); the take by
+hand is not recorded yet. No search or claim has been run.
+
+**Checks of the runners.** Before the search, the runners were tried in a scratch
+directory, on the scripted take and on a made-up take in place of the hand's, with
+ESNs of 200 neurons and seed 99 at settings off the search's grid (leak rates 0.05 and
+0.2, spectral radius 1.0, input scaling 0.3, ridge 10⁻³), and once with 800 neurons at
+such a setting to time a run. Those runs are not results and are not kept.
 
 ## The robot, the curve, and the takes
 
@@ -59,7 +67,7 @@ All have joint 2 positive, as every start of stage 1.
 
 | Starts | What they are |
 | --- | --- |
-| eight on the curve | the hand on the ellipse at angles 0°, 45°, …, 315°, an eighth of a loop apart; the first is the takes' start. A take passes through all of them |
+| eight on the curve | the hand on the ellipse at the curve's angles 0°, 45°, …, 315°, which the scripted take grows at an even rate: an eighth of a loop apart. The first is the takes' start. A take passes through all of them |
 | 36 untaught | stage 1's untaught starts, hands spread evenly over the workspace (`tools/tip_starts.py <takes> --counts 18 12 6 --first-angle 53.3`). The search scores from them in its last step |
 | 36 unseen | stage 1's unseen starts, the same rings turned 15° back (`--first-angle 38.3`). No search or scoring of this experiment runs from them |
 
@@ -264,4 +272,12 @@ claim 8.
 
 ## The configurations
 
-None yet. Each is listed here when it is written, before its run.
+Each is listed here when it is written, before its run. Sweeps take `--workers 15`:
+the machine is shared.
+
+| Configurations | What they run |
+| --- | --- |
+| `scripted_coarse_search.toml` | the coarse search on the scripted take: 108 settings, seed 0, each on the robot for 40 s from the eight starts on the curve (about 10 minutes with 15 workers) |
+| `coarse_search.toml` | the same on the take by hand; its `run` names the take's import |
+| `hand_esn.toml` | an ESN to tune by hand, trained on the take by hand and run on its own from the eight starts on the curve and the 36 untaught ones; it prints the apps' commands |
+| `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay and the progress replay (132 runs, about 20 minutes) |
