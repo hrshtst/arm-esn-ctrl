@@ -16,7 +16,7 @@ from arm_esn_ctrl.storage import REPO_ROOT
 MANUAL = REPO_ROOT / "experiments/demonstrations/ellipse_manual_v2_no_limits.toml"
 SCRIPTED = REPO_ROOT / "experiments/demonstrations/ellipse_scripted_v2_no_limits.toml"
 MANY_STARTS = REPO_ROOT / "experiments/demonstrations/reach_manual_v2_no_limits.toml"
-CHECKS = ("start_tolerance_deg", "max_tip_speed", "min_loops")
+CHECKS = ("start_tolerance_deg", "max_tip_speed", "min_loops", "end_window", "end_speed_ratio")
 
 
 def load(path):
@@ -41,6 +41,7 @@ def test_the_hand_take_is_checked_and_filtered_as_the_many_starts_takes():
     assert recording["max_tip_speed"] == many_starts["max_tip_speed"]
     assert recording["filter"] == many_starts["filter"] == {"kind": "lowpass", "cutoff_hz": 2.0}
     assert recording["min_loops"] == 8
+    assert (recording["end_window"], recording["end_speed_ratio"]) == (0.5, 0.5)
 
 
 def test_the_hand_and_the_script_teach_the_same_ellipse_from_the_same_start():
@@ -61,6 +62,10 @@ def test_the_hand_and_the_script_teach_the_same_ellipse_from_the_same_start():
     assert {key: scripted["recording"][key] for key in CHECKS} == {key: manual["recording"][key] for key in CHECKS}
     assert scripted["recording"]["takes"] == ["data/ellipse_scripted_v2_no_limits/take_00.sklog.npz"]
     assert scripted["script"] == {"dt": 0.01}  # the recorder's 100 Hz
+
+
+def test_the_scripted_take_is_not_filtered_for_it_has_no_pixel_steps():
+    assert load(SCRIPTED)["recording"]["filter"] == {"kind": "none"}
 
 
 def test_the_start_posture_puts_the_hand_on_the_curve_at_angle_0_with_joint_2_positive():

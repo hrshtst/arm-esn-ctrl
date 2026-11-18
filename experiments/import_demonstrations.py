@@ -20,7 +20,8 @@ copy, only if every one passes; the figure then draws them together.
 A periodic motion (a ``[task]`` of type ``periodic_curve``) has no target to arrive
 at and hold: its hand must go around the curve's center instead, at least
 ``[recording]`` ``min_loops`` whole times, counterclockwise, the way the curve's angle
-grows.
+grows, and the take must end while the hand still goes around (``end_window`` and
+``end_speed_ratio``), or an ESN would learn to stop where it ends.
 
 A take that passes is imported, its pause before moving included, into a new run
 directory, as two demonstrations that a configuration's ``[demonstrations]`` names
@@ -74,6 +75,7 @@ from arm_esn_ctrl.metrics import (
     onset_index,
     reach_metrics,
     taught_loop,
+    taught_period,
 )
 from arm_esn_ctrl.postures import joint_columns
 from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, start_run
@@ -117,6 +119,13 @@ def main() -> None:
         msg = "the [task] target needs a tolerance, which is the goal radius"
         raise ValueError(msg)
     periodic = task.type == "periodic_curve"
+    # A periodic motion goes around its curve's center, enough times, and ends moving.
+    loop_checks = (
+        {"center": task.params["center"]}
+        | {key: recording[key] for key in ("min_loops", "end_window", "end_speed_ratio")}
+        if periodic
+        else {}
+    )
     demos: dict[str, StateLog] = {}
     start_of: dict[str, list[float]] = {}
     take_of: dict[str, Path] = {}
@@ -137,8 +146,7 @@ def main() -> None:
             hold=0.0 if periodic else recording["hold"],  # a periodic motion has no target to hold at
             start_tolerance=float(np.radians(recording["start_tolerance_deg"])),
             max_tip_speed=recording["max_tip_speed"],
-            center=task.params["center"] if periodic else None,
-            min_loops=recording["min_loops"] if periodic else 0,
+            **loop_checks,
         )
         for name, log in demos.items()
     }
@@ -215,9 +223,11 @@ def loop_metrics(log: StateLog, hand: NDArray[np.float64], start_deg: list[float
 
     The loops are the hand's around the center of the task's curve:
 
-    - ``loops``: how many whole times it goes around, and ``median_period_s``,
-      ``shortest_period_s``, and ``longest_period_s``: how long a loop takes (see
-      :func:`arm_esn_ctrl.metrics.loop_periods`);
+    - ``loops``: how many whole times it goes around (see
+      :func:`arm_esn_ctrl.metrics.loop_periods`), and ``median_period_s``,
+      ``shortest_period_s``, and ``longest_period_s``: how long a taught loop takes,
+      a whole loop after the first, which holds the start from rest; the median is
+      the taught period (see :func:`arm_esn_ctrl.metrics.taught_period`);
     - ``loop_spread_m``: the hand's RMS distance from its mean loop, how much its
       loops differ from each other (see :func:`arm_esn_ctrl.metrics.mean_loop`);
     - ``curve_rms_m`` and ``curve_max_m``: the hand's RMS and largest distance from
@@ -239,9 +249,9 @@ def loop_metrics(log: StateLog, hand: NDArray[np.float64], start_deg: list[float
     onset = onset_index(hand)
     return joint_columns("start_q{j}_deg", start_deg) | {
         "loops": len(periods),
-        "median_period_s": float(np.median(periods)),
-        "shortest_period_s": float(periods.min()),
-        "longest_period_s": float(periods.max()),
+        "median_period_s": taught_period(times, hand, center),
+        "shortest_period_s": float(periods[1:].min()),
+        "longest_period_s": float(periods[1:].max()),
         "loop_spread_m": mean_loop(hand, center)[1],
         "curve_rms_m": float(np.sqrt(np.mean(from_curve**2))),
         "curve_max_m": float(from_curve.max()),
@@ -277,10 +287,11 @@ def print_metrics(rows: list[dict[str, Any]]) -> None:
         if "loops" in row:  # a periodic motion
             print(
                 f"{row['demo']}: moves at {row['onset_time_s']:.2f} s of {row['length_s']:.2f} s;"
-                f" {int(row['loops'])} whole loops, of {row['median_period_s']:.2f} s"
-                f" ({row['shortest_period_s']:.2f} to {row['longest_period_s']:.2f} s), spread"
-                f" {1000 * row['loop_spread_m']:.1f} mm from their mean; from the curve"
-                f" {1000 * row['curve_rms_m']:.1f} mm RMS and {1000 * row['curve_max_m']:.1f} mm at most;"
+                f" {int(row['loops'])} whole loops, the taught ones (after the first) of"
+                f" {row['median_period_s']:.2f} s in the median ({row['shortest_period_s']:.2f} to"
+                f" {row['longest_period_s']:.2f} s); the hand {1000 * row['loop_spread_m']:.1f} mm RMS from its mean"
+                f" loop, and {1000 * row['curve_rms_m']:.1f} mm RMS and {1000 * row['curve_max_m']:.1f} mm at most"
+                f" from the curve;"
                 f" taught loop {row['taught_loop_start_s']:.2f} to {row['taught_loop_end_s']:.2f} s, closing"
                 f" {row['taught_loop_mismatch_deg']:.3f} deg apart; joint jitter {row['jitter_deg']:.3f} deg"
             )
@@ -332,7 +343,7 @@ def plot_take(
     """
     several = len(demos) > 2
     fig = Figure(figsize=(12, 8.5), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle(f"Demonstration{'s' if several else ''} taught by hand: {title}", color="#0b0b0b")
+    fig.suptitle(f"Demonstration{'s' if several else ''}: {title}", color="#0b0b0b")
     ax_hand, ax_joint, ax_speed, ax_interval = fig.subplots(2, 2).flat
     for ax in (ax_hand, ax_joint, ax_speed, ax_interval):
         style(ax)

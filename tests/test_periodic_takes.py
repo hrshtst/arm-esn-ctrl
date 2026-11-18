@@ -29,19 +29,20 @@ def load(path):
         return tomllib.load(f)
 
 
-def ellipse_take(loops, pause=1.0, clockwise=False):
+def ellipse_take(loops, pause=1.0, clockwise=False, rest=0.0):
     """A take as the recorder saves one: still for ``pause`` seconds, then the hand around the task's ellipse.
 
     The hand goes ``loops`` times around, 4 s a loop, from the curve's point at angle
-    0, with the elbow on joint 2's positive side; the samples are near 100 Hz, their
-    intervals varying a little, as the recorder's clock does.
+    0, with the elbow on joint 2's positive side, and then rests for ``rest`` seconds
+    before the take ends; the samples are near 100 Hz, their intervals varying a
+    little, as the recorder's clock does.
     """
     skeleton = Skeleton.from_toml(MANUAL)
     task = load(MANUAL)["task"]
     rng = np.random.default_rng(0)
     times = np.cumsum(np.concatenate([[0.0], rng.uniform(0.009, 0.012, 6000)]))
-    times = times[times <= pause + 4.0 * loops]
-    angle = (-1 if clockwise else 1) * 2 * np.pi * np.clip(times - pause, 0.0, None) / 4.0
+    times = times[times <= pause + 4.0 * loops + rest]
+    angle = (-1 if clockwise else 1) * 2 * np.pi * np.clip(times - pause, 0.0, 4.0 * loops) / 4.0
     curve = build_curve("ellipse", task)
     hand = np.array([curve(theta) for theta in angle])
     # The two-link arm's inverse kinematics, joint 2 positive.
@@ -69,6 +70,8 @@ def check(log, min_loops=8):
         max_tip_speed=recording["max_tip_speed"],
         center=config["task"]["center"],
         min_loops=min_loops,
+        end_window=recording["end_window"],
+        end_speed_ratio=recording["end_speed_ratio"],
     )
 
 
@@ -86,6 +89,16 @@ def test_a_take_that_goes_around_clockwise_is_not_a_demonstration():
     (problem,) = check(ellipse_take(8.5, clockwise=True))
 
     assert "clockwise" in problem
+
+
+def test_a_take_whose_hand_rests_for_a_second_at_its_end_is_not_a_demonstration():
+    (problem,) = check(ellipse_take(8.5, rest=1.0))
+
+    assert "end the take while the hand moves" in problem
+
+
+def test_a_take_that_ends_while_the_hand_goes_around_is_a_demonstration():
+    assert check(ellipse_take(8.3)) == []  # ended near the top of the ellipse, where the hand is fastest
 
 
 def test_the_scripted_take_puts_the_hand_on_the_curve_ten_times_around_from_the_start_posture(tmp_path, monkeypatch):
@@ -149,8 +162,10 @@ def test_a_periodic_take_is_imported_with_its_loops_and_its_taught_loop(tmp_path
         assert "arrival_time_s" not in row
         assert "movement_time" not in row
         assert int(row["loops"]) == 8
+        # The taught loops, after the first, which also holds the pause before moving.
         assert float(row["median_period_s"]) == pytest.approx(4.0, abs=0.02)
-        assert float(row["longest_period_s"]) == pytest.approx(5.0, abs=0.02)  # the first, with the pause
+        assert float(row["shortest_period_s"]) == pytest.approx(4.0, abs=0.02)
+        assert float(row["longest_period_s"]) == pytest.approx(4.0, abs=0.02)
         assert float(row["taught_loop_start_s"]) == pytest.approx(5.0, abs=0.02)
         assert float(row["taught_loop_mismatch_deg"]) < 1.0
         assert float(row["onset_time_s"]) == pytest.approx(1.0, abs=0.1)
@@ -171,3 +186,24 @@ def test_a_periodic_take_of_too_few_loops_is_not_imported(tmp_path, monkeypatch,
 
     assert "fewer than 8" in capsys.readouterr().out
     assert not (tmp_path / "results").exists()
+
+
+def test_the_scripted_take_is_imported_as_configured_with_its_filtered_copy_the_take_itself(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["make_periodic_take.py", str(SCRIPTED)])
+    make_periodic_take.main()
+    monkeypatch.setattr(sys, "argv", ["import_demonstrations.py", str(SCRIPTED)])
+
+    import_demonstrations.main()
+
+    (run,) = (tmp_path / "results/demonstrations").iterdir()
+    made, filtered = (StateLog.load(run / f"{name}.sklog.npz") for name in ("demo_00", "demo_00_filtered"))
+    assert filtered.channel("q") == pytest.approx(made.channel("q"), abs=1e-12)
+    with (run / "metrics.csv").open() as f:
+        rows = list(csv.DictReader(f))
+    for row in rows:
+        assert int(row["loops"]) >= 9  # the tenth ends at the last sample
+        assert float(row["median_period_s"]) == pytest.approx(4.0, abs=1e-6)
+        assert float(row["curve_max_m"]) < 1e-5
+        assert float(row["taught_loop_mismatch_deg"]) < 1e-3
+        assert float(row["achieved_rate_hz"]) == pytest.approx(100.0)

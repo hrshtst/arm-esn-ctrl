@@ -30,11 +30,13 @@
 #    the take; let a second pass before the tip moves, so that the filtered copy
 #    still begins at the start posture (see [recording]). Grab the tip within the
 #    dashed circle around it and take it around the gray ellipse counterclockwise,
-#    up over the top first, at about 4 s a loop, at least ten times without
-#    stopping, then let go. S saves the take; R discards an attempt before saving
-#    it; Q closes. A file is written once and never overwritten: to record the take
-#    again, remove its file first. The import needs eight whole loops ([recording]
-#    min_loops); ten leave a margin.
+#    up over the top first, at about 4 s a loop. After ten loops or more, press S
+#    while the tip is still going around, without letting go: S stops the take and
+#    saves it at once, also during a drag. A take that ends with the hand at rest
+#    teaches an ESN to stop there, and the import refuses it. R discards an attempt
+#    before saving it; Q closes. A file is written once and never overwritten: to
+#    record the take again, remove its file first. The import needs eight whole
+#    loops ([recording] min_loops); ten leave a margin.
 #
 # 2. Import it into a demonstration run, which checks and measures the take, as
 #    recorded (demo_00) and filtered (demo_00_filtered), its loops among the rest. It
@@ -54,6 +56,12 @@ takes = ["data/ellipse_manual_v2_no_limits/take_00.sklog.npz"]
 start_tolerance_deg = 0.2
 max_tip_speed = 3.0  # m/s: a faster step between two samples is a jump, not a motion
 min_loops = 8        # the hand goes around the ellipse's center at least this many whole times, counterclockwise
+# The take ends while the hand still goes around: over its last end_window seconds,
+# the hand's mean speed is at least end_speed_ratio of its median speed over the
+# whole take. A hand at rest over the last half second has a mean speed near zero;
+# one still going around when S is pressed has one near its median.
+end_window = 0.5       # s
+end_speed_ratio = 0.5
 
 # The filter of the filtered copy, as reach_manual_v2_no_limits.toml's: a first-order
 # low-pass at 2 Hz, run forward and backward.

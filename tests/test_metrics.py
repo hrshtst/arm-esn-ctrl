@@ -27,6 +27,7 @@ from arm_esn_ctrl.metrics import (
     reach_metrics,
     route_spread,
     taught_loop,
+    taught_period,
 )
 
 START = np.array([0.5, 1.2])
@@ -460,6 +461,17 @@ def test_each_whole_loop_takes_its_period(clockwise):
     assert periods == pytest.approx([2.0, 2.0, 2.0], abs=1e-6)
     turned = loop_phase(hand, [0.3, 0.1])
     assert turned[-1] - turned[0] == pytest.approx((-1 if clockwise else 1) * 3.6 * 2 * np.pi, abs=1e-6)
+
+
+def test_the_taught_period_is_the_median_of_the_whole_loops_after_the_first():
+    # Still for 1 s, a first loop of 5 s more, then loops of 3.8, 4.0, 4.4, and 4.1 s, and half of one more.
+    times = np.arange(0.0, 24.0, 0.001)
+    ends = np.cumsum([0.0, 1.0, 5.0, 3.8, 4.0, 4.4, 4.1])
+    angle = np.interp(times, np.append(ends, 24.0), 2 * np.pi * np.array([0, 0, 1, 2, 3, 4, 5, 5.5]))
+    hand = np.array([0.3, 0.1]) + 0.2 * np.column_stack([np.cos(angle), np.sin(angle)])
+
+    assert loop_periods(times, hand, center=[0.3, 0.1]) == pytest.approx([6.0, 3.8, 4.0, 4.4, 4.1], abs=1e-3)
+    assert taught_period(times, hand, center=[0.3, 0.1]) == pytest.approx(4.05, abs=1e-3)
 
 
 def test_less_than_a_loop_has_no_period():

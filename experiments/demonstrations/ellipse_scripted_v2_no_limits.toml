@@ -3,16 +3,17 @@
 # made by experiments/make_periodic_take.py: the joint angles that put the hand on the
 # curve, its angle growing at an even rate, for ten loops, from the start posture of
 # ellipse_manual_v2_no_limits.toml, which teaches the same ellipse by hand. The robot,
-# the task, the start posture, and the checks of the import are that file's.
+# the task, the start posture, and the checks of the import are that file's; its
+# filter is not, so that the filtered copy is the take itself.
 #
 # 1. Make the take, into the storage root's data/, as the recorder would. It is
 #    written once and never overwritten: to make it again, remove its file first.
 #
 #   uv run python experiments/make_periodic_take.py experiments/demonstrations/ellipse_scripted_v2_no_limits.toml
 #
-# 2. Import it into a demonstration run, which checks and measures the take, as made
-#    (demo_00) and filtered (demo_00_filtered), its loops among the rest, as a take
-#    recorded by hand:
+# 2. Import it into a demonstration run, which checks and measures the take, its loops
+#    among the rest, as a take recorded by hand. Its filtered copy (demo_00_filtered)
+#    equals the take as made (demo_00):
 #
 #   uv run python experiments/import_demonstrations.py experiments/demonstrations/ellipse_scripted_v2_no_limits.toml
 
@@ -23,11 +24,16 @@ takes = ["data/ellipse_scripted_v2_no_limits/take_00.sklog.npz"]
 start_tolerance_deg = 0.2
 max_tip_speed = 3.0  # m/s: a faster step between two samples is a jump, not a motion
 min_loops = 8        # the hand goes around the ellipse's center at least this many whole times, counterclockwise
+end_window = 0.5       # s: over the take's last end_window seconds, the hand's mean speed is
+end_speed_ratio = 0.5  # at least end_speed_ratio of its median speed over the whole take
 
-# The filter of the filtered copy, as ellipse_manual_v2_no_limits.toml's.
+# No filter: the filtered copy equals the take. The 2 Hz filter of the take taught by
+# hand removes the steps of the cursor's whole screen pixels, which this take does not
+# have. It would also pull the take's first sample 1.2 deg from the start posture,
+# since this hand moves at its full pace from the first sample, and the loops about
+# 3 mm inside the curve.
 [recording.filter]
-kind = "lowpass"
-cutoff_hz = 2.0
+kind = "none"
 
 # How experiments/make_periodic_take.py makes the take.
 [script]

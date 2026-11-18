@@ -219,6 +219,8 @@ def check_take(
     max_tip_speed: float,
     center: ArrayLike | None = None,
     min_loops: int = 0,
+    end_window: float = 0.0,
+    end_speed_ratio: float = 0.0,
 ) -> list[str]:
     """Return why a take taught by hand cannot be a demonstration, or nothing if it can.
 
@@ -231,8 +233,10 @@ def check_take(
       periodic motion, has no arrival to check (``target`` is None);
     - the hand of a periodic motion goes around its curve's ``center`` at least
       ``min_loops`` whole times (see :func:`arm_esn_ctrl.metrics.loop_periods`),
-      counterclockwise, the way the curve's angle grows; a reach has no center to go
-      around (``center`` is None);
+      counterclockwise, the way the curve's angle grows, and the take ends while the
+      hand still goes around: over its last ``end_window`` seconds, the hand's mean
+      speed is at least ``end_speed_ratio`` of its median speed over the whole take.
+      A reach has no center to go around (``center`` is None);
     - the hand never moves faster than ``max_tip_speed`` (m/s) between two samples,
       which would be a jump rather than a reach.
     """
@@ -259,6 +263,7 @@ def check_take(
                 f"the take ends {times[-1] - held['arrival_time_s']:.2f} s after the hand arrives,"
                 f" before {hold:g} s of holding"
             )
+    speed = np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(times)  # between each two samples
     if center is not None:
         phase = loop_phase(hand, center)
         loops = len(loop_periods(times, hand, center))
@@ -266,7 +271,13 @@ def check_take(
             problems.append("the hand goes around the curve's center clockwise, not counterclockwise")
         elif loops < min_loops:
             problems.append(f"the hand goes around the curve's center {loops} whole times, fewer than {min_loops}")
-    speed = np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(times)
+        ending = float(np.mean(speed[times[1:] > times[-1] - end_window]))
+        typical = float(np.median(speed))
+        if ending < end_speed_ratio * typical:
+            problems.append(
+                f"the take ends with the hand at {ending:.2f} m/s over its last {end_window:g} s, less than"
+                f" {end_speed_ratio:g} of its median speed, {typical:.2f} m/s: end the take while the hand moves"
+            )
     if speed.max() > max_tip_speed:
         k = int(np.argmax(speed))
         problems.append(

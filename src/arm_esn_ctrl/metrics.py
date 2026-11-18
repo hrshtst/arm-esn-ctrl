@@ -423,6 +423,15 @@ def loop_periods(times: NDArray[np.float64], points: NDArray[np.float64], center
     return np.diff(np.concatenate([[times[0]], ends]))
 
 
+def taught_period(times: NDArray[np.float64], points: NDArray[np.float64], center: ArrayLike) -> float:
+    """Return the taught period of a periodic take (s): the median time of its whole loops after the first.
+
+    The loops are those of :func:`loop_periods`. The first holds the start from rest,
+    so it is left out; the others are the taught loops.
+    """
+    return float(np.median(loop_periods(times, points, center)[1:]))
+
+
 def taught_loop(q: NDArray[np.float64], points: NDArray[np.float64], center: ArrayLike) -> tuple[int, int]:
     """Return the samples of a periodic take to replay without end: the loop's first and one past its last.
 
