@@ -335,6 +335,10 @@ the machine is shared.
 | `scripted_coarse_search.toml` | the coarse search on the scripted take: 108 settings, seed 0, each on the robot for 40 s from the eight starts on the curve (about 10 minutes with 15 workers) |
 | `scripted_fine_search.toml` | the fine search on the scripted take: 81 settings around the coarse search's best, seeds 1 to 5, alike |
 | `scripted_untaught_search.toml` | the scoring with the untaught starts on the scripted take: the fine search's 20 best settings, seeds 1 to 5, each on the robot for 40 s from the eight starts on the curve and the 36 untaught ones (about 90 minutes with 15 workers) |
+| `scripted_robot_esn{1,2}.toml` | claims 1 and 2 for the scripted take's ESNs: each on the robot against the replay, undisturbed, for 120 s from the eight starts on the curve. The ESN's run is filled in when the search has given it, here and in the next three rows |
+| `scripted_untaught_robot_esn{1,2}.toml` | claims 2 and 3: the same for 60 s from the 36 untaught starts |
+| `scripted_pushes{1,2,4}x_robot_esn{1,2}.toml` | claim 4: each under the three pushes at 1, 2, and 4 times their forces, for 80 s from the eight starts on the curve |
+| `scripted_block_robot_esn{1,2}.toml` | claim 5: each with the tip held from 10 s to 13 s, for 60 s from the eight starts on the curve |
 | `coarse_search.toml` | the same on the take by hand; its `run` names the take's import |
 | `hand_esn.toml` | an ESN to tune by hand, trained on the take by hand and run on its own from the eight starts on the curve and the 36 untaught ones; it prints the apps' commands |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay (88 runs) |
