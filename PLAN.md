@@ -52,12 +52,17 @@ is written down before the run. The rest is a habit that the maintainer changes 
 Stages 0 and 1 are a record of what was done. Stages 2 to 4 are the present thinking: a
 sentence or two each, to be worked out, and changed, when a stage starts.
 
+**Stages 2 and 3 are worked on side by side,** each by its own session in its own git
+worktree and branch, made from the latest commit of `main`. Each searches its own ESN
+setting, as every stage does, so neither waits for stage 1's open questions. The
+maintainer brings the two branches together.
+
 | Stage | What it adds | Status |
 | --- | --- | --- |
 | 0 | the code every later stage needs | implemented |
-| 1 | one target from many start postures | reports 023 and 024 written; open questions below |
-| 2 | several targets, named by a one-hot context | not started |
-| 3 | a periodic motion, and switching between it and reaching | not started |
+| 1 | one target from many start postures | reports 023 and 024 written and reviewed; its open questions are deferred |
+| 2 | several targets, named by a one-hot context | next, beside stage 3 |
+| 3 | a periodic motion, and switching between it and reaching | next, beside stage 2 |
 | 4 | all tasks in one ESN | not started |
 
 ### Stage 0: the code
@@ -90,11 +95,12 @@ forces, against an ESN of one take, and against one, three, six, and nine takes.
   by coming back in time, not by keeping to the take, they fail at larger pushes, and one
   of them starts with a jump.
 
-Open questions, none of which has to be answered before other work:
+Open questions, deferred on 2026-11-18. Stages 2 and 3 do not wait for them:
 
 1. Whether to search once more, with a pushed run scored by how far the hand is sent or
    by the following gain, and with the start's jump in the score.
-2. Which ESN setting stage 2 starts from.
+2. Which of the two reports' ESNs is taken as this stage's. The maintainer prefers
+   report 023's.
 
 ### Stage 2: several targets by context
 

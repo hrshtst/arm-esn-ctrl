@@ -57,7 +57,12 @@ uv run basedpyright && uv run mypy           # type checking
 
 - Commit each change before producing results from it or asking for review. Fixes after
   review are new commits; do not amend.
-- Commits are local on `main`. **Never push.**
+- Commits are local, on `main` or on the branch of a session's own worktree. **Never
+  push,** and do not merge branches; the maintainer does both.
+- **A new git worktree** needs three things before anything runs in it:
+  `git submodule update --init --recursive`, `uv sync`, and a copy of the main worktree's
+  `storage.toml`. That file is not tracked, and without it runs go to `storage/` inside
+  the worktree instead of the storage root.
 - No attribution or session trailers in commit messages.
 - Subjects follow the log: `feat(experiments): ...`, `docs(reports): ...`, `fix: ...`.
 
