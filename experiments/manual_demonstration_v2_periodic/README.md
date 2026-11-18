@@ -302,7 +302,7 @@ Beside the claims:
   The ESNs join the curve in 0.8 s in the median (2.0 s at most), the replay in 0.3 s.
 - **The curve and the pace.** Undisturbed, the ESNs' curve RMS is 0.79 mm and the
   replay's 0.83 mm; the ESNs' period is 1.004 of the taught one.
-- **The pushes.** Each ESN is back within 20 mm of the curve in 2.3 s at most after
+- **The pushes.** Each ESN is back within 20 mm of the curve in 2.2 s at most after
   any push, at every size; the replay in 0.4 s at most.
 - **The delay** is taken within a loop, between −1 s and 3 s: a hand pushed around
   the far side of the center loses or gains a turn of its angle, which is no delay.
