@@ -89,6 +89,16 @@ def test_the_one_take_fine_searchs_pushed_runs_are_the_many_starts_one_take_fine
             "manual_demonstration_v2_many_starts/20261118-012638-one_take_fine_search",
             "one_take_fine_pushes",
         ),
+        (
+            "untaught_score.toml",
+            "manual_demonstration_v2_many_starts_push_search/20261118-120421-untaught_search",
+            "fine_pushes",
+        ),
+        (
+            "one_take_untaught_score.toml",
+            "manual_demonstration_v2_many_starts_push_search/20261118-123329-one_take_untaught_search",
+            "one_take_fine_pushes",
+        ),
     ],
 )
 def test_a_score_names_its_steps_undisturbed_run_and_its_pushed_run(name, undisturbed, pushes):

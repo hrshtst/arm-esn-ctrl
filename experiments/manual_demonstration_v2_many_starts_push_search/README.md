@@ -135,6 +135,46 @@ one-take fine search's undisturbed runs are those of the many-starts one-take fi
 search (`20261118-012638-one_take_fine_search`), not run again; only its pushed runs
 are new.
 
+**The fine search.** Of its 81 settings, 36 hold undisturbed in all 45 runs, 15 pass the
+pushes in all 45, and six do both (`20261118-114046-fine_search`,
+`20261118-111415-fine_pushes`, `20261118-120351-fine_score`). The pushed runs that pass,
+of 1,215 at each leak rate, are 1,147 at 0.017, 889 at 0.03, and 391 at 0.055. The 20th
+best setting passes 86 of its 90 runs.
+
+**ESN #1 and ESN #2.** Scored again with the untaught starts
+(`20261118-120421-untaught_search`, `20261118-125450-untaught_score`), one of the 20
+settings passes all 270 runs; the others fail undisturbed from untaught starts, pushed, or
+both, and the worst passes 248. The typical seeds of the two best:
+
+| ESN | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold undisturbed | Pushed runs that pass | Median detour ratio of the setting |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #1 | 0.03 | 0.9 | 2 | 1 | 5 | 225 of 225 | 45 of 45 | 1.090 |
+| #2 | 0.017 | 1.05 | 4 | 10 | 5 | 221 of 225 | 45 of 45 | 1.278 |
+
+ESN #1's setting is the fine search's center. Their configurations train them and run
+them on their own, as the many-starts experiment's do:
+
+```bash
+uv run python experiments/autonomous_esn.py \
+    experiments/manual_demonstration_v2_many_starts_push_search/esn1_lr0.03_sr0.9_is2_ridge1_seed5.toml
+uv run python experiments/autonomous_esn.py \
+    experiments/manual_demonstration_v2_many_starts_push_search/esn2_lr0.017_sr1.05_is4_ridge10_seed5.toml
+```
+
+**The one-take ESNs.** Of the one-take fine search's 81 settings, 70 hold undisturbed in
+all five runs, 56 pass the pushes in all five, and FINE_BOTH do both
+(`20261118-111145-one_take_fine_pushes`, `20261118-120352-one_take_fine_score`). Scored
+again with the untaught starts (`20261118-123329-one_take_untaught_search`,
+`20261118-125450-one_take_untaught_score`), every one of the 20 passes its five pushed
+runs, and one holds in all 185 undisturbed runs:
+
+| ESN | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Runs that hold undisturbed | Pushed runs that pass | Median detour ratio of the setting |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| one-take #1 | 0.017 | 1.05 | 0.045 | 0.1 | 5 | 185 of 185 | 5 of 5 | 3.08 |
+| one-take #2 | 0.017 | 1.05 | 0.1 | 0.1 | 1 | 183 of 185 | 5 of 5 | 2.57 |
+
+One-take ESN #1 is the many-starts one-take ESN #1: the same setting and seed.
+
 ## The analysis
 
 ESN #1 and ESN #2 are tested as report 023's were, on the robot with the search's
@@ -214,3 +254,9 @@ experiment's with the new ESNs.
 | `coarse_score.toml`, `one_take_coarse_score.toml` | the coarse searches' scores, over the many-starts coarse searches' undisturbed runs and the pushed runs above |
 | `fine_search.toml`, `fine_pushes.toml` | the fine search: 81 settings around the coarse score's best, seeds 1 to 5, each on the robot from each take's start, undisturbed and under the pushes (about 25 minutes each) |
 | `one_take_fine_pushes.toml` | the one-take fine search's pushed runs: 81 settings around its coarse score's best, seeds 1 to 5, from take 00's start (about 3 minutes) |
+| `fine_score.toml`, `one_take_fine_score.toml` | the fine searches' scores |
+| `untaught_search.toml`, `one_take_untaught_search.toml` | the fine searches' 20 best settings, seeds 1 to 5, undisturbed from the takes' starts (take 00's) and from the 36 untaught ones (about 30 and 25 minutes) |
+| `untaught_score.toml`, `one_take_untaught_score.toml` | their scores, over those undisturbed runs and the fine searches' pushed runs |
+| `esn1_lr0.03_sr0.9_is2_ridge1_seed5.toml`, `esn2_lr0.017_sr1.05_is4_ridge10_seed5.toml` | ESN #1 and ESN #2, the typical seeds of the two best settings of `untaught_score.toml`, trained and run on their own as the many-starts ones |
+| `one_take_esn1_lr0.017_sr1.05_is0.045_ridge0.1_seed5.toml`, `one_take_esn2_lr0.017_sr1.05_is0.1_ridge0.1_seed1.toml` | one-take ESN #1 and ESN #2, the typical seeds of the two best settings of `one_take_untaught_score.toml`, trained on take 00 and run on their own from its start and the 36 untaught ones |
+| `takes1.toml`, `takes3.toml`, `takes6.toml`, `takes9.toml` | ESN #1's and ESN #2's settings, seeds 1 to 5, trained on one, three, six, and nine takes, each on the robot from every take's start and the 36 unseen ones (about 4 minutes each) |
