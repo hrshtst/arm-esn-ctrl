@@ -40,3 +40,50 @@ def test_the_coarse_searchs_pushed_runs_are_the_many_starts_coarse_search_under_
     assert_pushed_as(pushed, undisturbed)
     assert pushed["esn"]["seed"] == 0
     assert len(pushed["demonstrations"]["train"]) == (1 if prefix else 9)
+
+
+def test_the_fine_search_runs_81_settings_around_the_coarse_scores_best_undisturbed_and_pushed():
+    undisturbed = load(EXPERIMENT / "fine_search.toml")
+    old = load(MANY_STARTS / "fine_search.toml")
+
+    assert_pushed_as(load(EXPERIMENT / "fine_pushes.toml"), undisturbed)
+    # The center, and halfway to its coarse neighbors: mirrored where the center is at the coarse grid's edge.
+    assert undisturbed["sweep"] == {
+        "leak_rate": [0.017, 0.03, 0.055],
+        "spectral_radius": [0.75, 0.9, 1.05],
+        "input_scaling": [1.0, 2.0, 4.0],
+        "ridge": [0.1, 1.0, 10.0],
+        "seed": [1, 2, 3, 4, 5],
+    }
+    assert [undisturbed["esn"][name] for name in SWEPT] == [0.03, 0.9, 2.0, 1.0]
+    for name in SWEPT:
+        assert undisturbed["sweep"][name][1] == undisturbed["esn"][name]
+    # Otherwise the many-starts fine search.
+    for table in ("demonstrations", "tracker", "evaluation", "ranking"):
+        assert undisturbed[table] == old[table]
+    assert {k: v for k, v in undisturbed["esn"].items() if k not in SWEPT} == {
+        k: v for k, v in old["esn"].items() if k not in SWEPT
+    }
+
+
+def test_the_one_take_fine_searchs_pushed_runs_are_the_many_starts_one_take_fine_search_under_the_pushes():
+    assert_pushed_as(load(EXPERIMENT / "one_take_fine_pushes.toml"), load(MANY_STARTS / "one_take_fine_search.toml"))
+
+
+@pytest.mark.parametrize(
+    ("name", "undisturbed", "pushes"),
+    [
+        ("coarse_score.toml", "manual_demonstration_v2_many_starts/20261117-205256-coarse_search", "coarse_pushes"),
+        (
+            "one_take_coarse_score.toml",
+            "manual_demonstration_v2_many_starts/20261118-005826-one_take_coarse_search",
+            "one_take_coarse_pushes",
+        ),
+    ],
+)
+def test_a_score_names_its_steps_undisturbed_run_and_its_pushed_run(name, undisturbed, pushes):
+    runs = load(EXPERIMENT / name)["runs"]
+
+    assert runs["undisturbed"] == f"results/{undisturbed}"
+    assert runs["pushes"].startswith(f"results/{EXPERIMENT.name}/")
+    assert runs["pushes"].endswith(f"-{pushes}")

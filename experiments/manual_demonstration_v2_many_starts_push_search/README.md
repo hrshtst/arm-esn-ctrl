@@ -102,6 +102,39 @@ The scoring configurations name the runs they score, so each is written when its
 exist; the fine search's and the rescoring's sweeps are written when the step before
 gives the center and the 20 settings.
 
+**The center.** Of the coarse search's 108 settings, 30 hold undisturbed from all nine
+starts, eight pass the pushes from all nine, and five do both
+(`20261118-110123-coarse_pushes`, `20261118-111042-coarse_score`). The smallest median
+detour ratio among the five, 1.0135, is that of leak rate 0.03, spectral radius 0.9,
+input scaling 2, and ridge 1. The pushed runs that pass, of 243 at each leak rate, are 94
+at 0.01, 81 at 0.03, 27 at 0.1, and 11 at 0.3. The fine search's values around the
+center:
+
+| Parameter | Values |
+| --- | --- |
+| leak rate | 0.017, 0.03, 0.055 |
+| spectral radius | 0.75, 0.9, 1.05 |
+| input scaling | 1, 2, 4 |
+| ridge | 0.1, 1, 10 |
+
+The center's spectral radius is the coarse grid's smallest, and its input scaling and
+ridge the largest, so the fine search goes as far beyond each as on the other side.
+
+```bash
+uv run python experiments/sweep_robot_esn.py \
+    experiments/manual_demonstration_v2_many_starts_push_search/fine_search.toml --workers 30
+uv run python experiments/sweep_robot_esn.py \
+    experiments/manual_demonstration_v2_many_starts_push_search/fine_pushes.toml --workers 30
+```
+
+**The one-take center.** Of the 108 one-take settings, 67 hold undisturbed from take
+00's start, 45 pass the pushes, and 44 do both (`20261118-110940-one_take_coarse_pushes`,
+`20261118-111042-one_take_coarse_score`). The best of the 44 is the many-starts one-take
+search's center: leak rate 0.03, spectral radius 0.9, input scaling 0.1, ridge 1. So the
+one-take fine search's undisturbed runs are those of the many-starts one-take fine
+search (`20261118-012638-one_take_fine_search`), not run again; only its pushed runs
+are new.
+
 ## The analysis
 
 ESN #1 and ESN #2 are tested as report 023's were, on the robot with the search's
@@ -178,3 +211,6 @@ experiment's with the new ESNs.
 | --- | --- |
 | `coarse_pushes.toml` | the coarse search's pushed runs: 108 settings, seed 0, each on the robot under the pushes from each take's start (about 7 minutes with 30 workers) |
 | `one_take_coarse_pushes.toml` | the one-take baseline's alike, trained on take 00 alone and run from its start (about 2 minutes) |
+| `coarse_score.toml`, `one_take_coarse_score.toml` | the coarse searches' scores, over the many-starts coarse searches' undisturbed runs and the pushed runs above |
+| `fine_search.toml`, `fine_pushes.toml` | the fine search: 81 settings around the coarse score's best, seeds 1 to 5, each on the robot from each take's start, undisturbed and under the pushes (about 25 minutes each) |
+| `one_take_fine_pushes.toml` | the one-take fine search's pushed runs: 81 settings around its coarse score's best, seeds 1 to 5, from take 00's start (about 3 minutes) |
