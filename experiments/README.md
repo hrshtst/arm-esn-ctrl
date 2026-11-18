@@ -67,6 +67,7 @@ experiments/
 | [manual_demonstration_four_dof_consistent_search](manual_demonstration_four_dof_consistent_search/README.md) | reports 017 to 020's procedure on skelarm's four-link arm, its protocol fixed before the take is taught: the search with joint PD whose gains are the whole mass matrix, 36 offset starts within the joint limits, and the disturbances placed along the take as v2's | `import_demonstrations.py`, then as reports 017 to 020 | to be written |
 | [manual_demonstration_v2_many_starts](manual_demonstration_v2_many_starts/README.md) | one target reached from many start postures, taught by one take from each on v2's arm with no joint limits, with ESNs of 800 neurons: the first stage of extending reports 017 to 020 to more tasks; its ESN is tuned by hand first, then searched by how many of the takes' starts the hand arrives and holds from, and how directly | `import_demonstrations.py`, `autonomous_esn.py`, `robot_esn.py`, `sweep_robot_esn.py` | [023](../reports/023-one-target-from-many-starts/README.md) |
 | [manual_demonstration_v2_many_starts_push_search](manual_demonstration_v2_many_starts_push_search/README.md) | the many-starts search again with the pushed runs in the score: each setting scored by how many of its runs pass, undisturbed and under report 007's pushes, then by how directly the hand goes; and report 023's seven claims tested again with the ESNs it chooses | `sweep_robot_esn.py`, `score_sweeps.py`, `autonomous_esn.py`, `robot_esn.py` | [024](../reports/024-many-starts-with-pushes-in-the-score/README.md) |
+| [manual_demonstration_v2_targets](manual_demonstration_v2_targets/README.md) | several targets by context, the second stage of the multi-task study: one ESN of 800 neurons reaches three targets on v2's arm with no joint limits, the target named by a context in its input; searched as the first stage, by how many runs hold at the target their context names, then by how directly the hand goes; its steps and claims fixed on 2026-11-18, no runs yet | `import_demonstrations.py`, `sweep_robot_esn.py`, `autonomous_esn.py`, `robot_esn.py` | to be written |
 
 Run a configuration with its runner:
 
@@ -226,7 +227,8 @@ different forces.
 - **Several tasks in one ESN.** The ESN's configuration has one `[[demonstrations]]`
   table per task, each with its demonstration run, its `train` files, and the task's
   name as its `context`. The ESN's input then holds one value per task after the
-  joint angles, 1 for the task being done (times `[esn]` `context_scaling`), and
+  joint angles, 1 for the task being done (times `[esn]` `context_scaling`, and
+  divided by `input_scaling` if `context_times_input_scaling` is false), and
   nothing else tells it the task. `autonomous_esn.py` and `robot_esn.py` run each
   task from its own start postures; in `robot_esn.py`, `[[switch]]` tables (`time`,
   `task`) change the task during every run. The other runners take one task.

@@ -384,6 +384,80 @@ def test_the_context_scaling_scales_the_context_input():
     assert row == pytest.approx(np.tile([0.0, 0.0, 0.0, 0.25], (3, 1)))
 
 
+def context_drives(**config) -> list[NDArray[np.float64]]:
+    """What the second task's context adds to each neuron's input, for ESNs of input scalings 0.5 and 1."""
+    trajectories, contexts = two_tasks()
+    drives = []
+    for input_scaling in (0.5, 1.0):
+        esn = ReachingEsn(dataclasses.replace(CONFIG, input_scaling=input_scaling, context_scaling=0.25, **config))
+        esn.fit(trajectories, contexts)
+        esn.set_context(1)
+        row = esn._with_context(np.zeros((1, 2)), esn.context)[0]
+        drives.append(row[2:] @ esn.model.get_reservoir(0).getInputWeights()[2:])
+    return drives
+
+
+def test_by_default_the_context_reaches_the_reservoir_times_the_input_scaling():
+    low, high = context_drives()
+
+    assert CONFIG.context_times_input_scaling
+    assert np.abs(low).max() > 0.01
+    assert high == pytest.approx(2 * low, abs=1e-12)
+
+
+def test_the_context_can_be_fed_in_divided_by_the_input_scaling():
+    trajectories, contexts = two_tasks()
+    config = dataclasses.replace(CONFIG, input_scaling=0.5, context_scaling=0.25, context_times_input_scaling=False)
+    esn = ReachingEsn(config)
+    esn.fit(trajectories, contexts)
+    esn.set_context(1)
+
+    row = esn._with_context(np.zeros((3, 2)), esn.context)
+
+    assert esn.context_gain == 0.5
+    assert row == pytest.approx(np.tile([0.0, 0.0, 0.0, 0.5], (3, 1)))
+
+
+def test_divided_by_the_input_scaling_the_context_reaches_the_reservoir_alike_at_any_input_scaling():
+    low, high = context_drives(context_times_input_scaling=False)
+
+    assert np.abs(low).max() > 0.01
+    assert high == pytest.approx(low, abs=1e-12)
+
+
+def test_a_saved_esn_keeps_its_context_divided_by_the_input_scaling(tmp_path):
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(dataclasses.replace(CONFIG, input_scaling=0.5, context_times_input_scaling=False))
+    esn.fit(trajectories, contexts)
+    esn.save(tmp_path / "esn.toml")
+
+    loaded = ReachingEsn.load(tmp_path / "esn.toml")
+
+    assert not loaded.config.context_times_input_scaling
+    start = trajectories[2][0]
+    for model in (esn, loaded):
+        model.set_context(1)
+    assert loaded.generate(start, 100) == pytest.approx(esn.generate(start, 100), abs=1e-12)
+
+
+def test_an_esn_saved_without_the_key_loads_with_the_context_times_the_input_scaling(tmp_path):
+    trajectories, contexts = two_tasks()
+    esn = ReachingEsn(dataclasses.replace(CONFIG, input_scaling=0.5))
+    esn.fit(trajectories, contexts)
+    esn.save(tmp_path / "esn.toml")
+    text = (tmp_path / "esn.toml").read_text(encoding="utf-8")
+    assert "context_times_input_scaling = true\n" in text
+    (tmp_path / "esn.toml").write_text(text.replace("context_times_input_scaling = true\n", ""), encoding="utf-8")
+
+    loaded = ReachingEsn.load(tmp_path / "esn.toml")
+
+    assert loaded.config.context_times_input_scaling
+    start = trajectories[2][0]
+    for model in (esn, loaded):
+        model.set_context(1)
+    assert loaded.generate(start, 100) == pytest.approx(esn.generate(start, 100), abs=1e-12)
+
+
 def test_a_saved_esn_keeps_its_tasks(tmp_path):
     trajectories, contexts = two_tasks()
     esn = ReachingEsn(CONFIG)
