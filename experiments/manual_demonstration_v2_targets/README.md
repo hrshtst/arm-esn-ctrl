@@ -223,9 +223,10 @@ The fine search ran as `20261118-184536-fine_search`, in two hours with 15 worke
 **Step 8 runs the 20 settings with the best scores.** Its rule names two cases, the
 settings whose every run holds and none such. With one such setting, step 9 would
 have no second setting to choose from. So step 8 runs the 20 best, as when none
-holds; the setting that holds in every run is the first of them. This is the
-session's reading of the rule, made before step 8's run; the maintainer has not
-confirmed it.
+holds; the setting that holds in every run is the first of them. This was the
+session's reading of the rule, made before step 8's run. The maintainer confirmed it
+while the run was going, before its outcome was read: ESN #1 and ESN #2 are the best
+and the second best of step 8's ranking.
 
 ## The analysis
 
