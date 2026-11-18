@@ -35,9 +35,17 @@ comes to stage 1's target at (−0.6, 0.4) m is 0.33 m.
 | by a script | [`ellipse_scripted_v2_no_limits.toml`](../demonstrations/ellipse_scripted_v2_no_limits.toml) | the joint angles that put the hand on the curve at an even angle rate, 4 s a loop, for 40 s, from the same start posture (`make_periodic_take.py`). It moves at its full pace from its first sample |
 
 Each configuration's header gives its commands. Neither take starts away from the
-curve: joining the curve from elsewhere is tested, not taught. An ESN is trained on a
-take's copy filtered at 2 Hz, as in stage 1, and normalizes the joint angles by the
-range the take covers.
+curve: joining the curve from elsewhere is tested, not taught. An ESN normalizes the
+joint angles by the range its take covers. It is trained on the take by hand filtered
+at 2 Hz, as in stage 1, and on the scripted take as it is made: the filter removes the
+steps of the cursor's whole screen pixels, which the scripted take does not have, and
+it would pull that take's first sample 1.2° from the start posture and its loops about
+3 mm inside the curve (corrected on 2026-11-18, before any run, when the import
+refused the filtered scripted take).
+
+A take by hand ends while the hand still goes around: saved after the hand has
+stopped, it would teach the ESN to stop there. The import refuses a take whose hand
+is at rest over its last half second.
 
 **A take's loops.** A loop is whole when the hand's angle about the curve's center has
 grown by a turn since the last one ended, counted from the take's first sample. The
