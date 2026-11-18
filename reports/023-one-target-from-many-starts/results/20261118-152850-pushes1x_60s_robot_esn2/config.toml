@@ -1,10 +1,10 @@
-# ESN #2 on the robot under report 007's three pushes at their original forces, as
-# pushes1x_robot_esn2.toml, run for 48 s in place of 24 s: to see whether the hand
-# comes back to the target after the third push, at 15 s. Added on 2026-11-18, after the
-# analysis's outcomes: in the 24 s runs most hands are still moving at the end. About 4
-# minutes. See README.md.
+# ESN #2 on the robot under report 007's three pushes at their original forces, from each
+# take's start, against the replay and the progress replay of that take: the same ESN,
+# pushes, and starts as pushes1x_robot_esn2.toml, run for 60 s in place of 24 s. Added on
+# 2026-11-18, after the analysis's outcomes: in the 24 s runs most pushed hands were still
+# coming back when the run ended. About 5 minutes. See README.md.
 #
-#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts/pushes1x_long_robot_esn2.toml
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts/pushes1x_60s_robot_esn2.toml
 
 [esn]
 # esn.toml in the run directory of its training, relative to the storage root.
@@ -29,7 +29,7 @@ lead_deg = 2.5
 window = 1.0  # s
 
 [evaluation]
-duration = 48.0        # task (s), after the warm-up; the last push comes at 15 s
+duration = 60.0        # task (s), after the warm-up; the last push comes at 15 s
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 start_offsets_deg = [[0.0, 0.0]]  # each take's own start
 return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)

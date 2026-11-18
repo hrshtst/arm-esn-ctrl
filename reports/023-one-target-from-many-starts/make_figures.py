@@ -19,12 +19,11 @@ root, which are not kept in Git. It prints the tables of the report and draws in
 - ``unseen.png``: the detour ratio, the reference's fastest joint speed, and the largest
   torque from each unseen start (Section 3.3);
 - ``joints_esn1.png``, ``torques_esn1.png``, ``joints_esn2.png``, ``torques_esn2.png``:
-  each ESN's joint angles or torques over time against the replay's, undisturbed and
-  under the pushes of each size (Sections 3.2 to 3.4);
-- ``pushes_paths.png``: the hand's paths under the pushes (Section 3.4);
-- ``pushes_distance.png``: the hand's distance to the target over time under the pushes
-  (Section 3.4);
-- ``pushes_long.png``: the same over 48 s, at the pushes' original forces (Section 3.4);
+  each ESN's joint angles or torques over time against the replay's, undisturbed over
+  24 s and under the pushes of each size over 60 s (Sections 3.2 to 3.4);
+- ``pushes_paths.png``: the hand's paths under the pushes, over 60 s (Section 3.4);
+- ``pushes_distance.png``: the hand's distance to the target over time under the pushes,
+  over 60 s (Section 3.4);
 - ``one_take.png``: the hand's paths of the nine-take and the one-take ESNs from the 44
   starts take 00 does not start from (Section 3.5);
 - ``takes.png``: the runs that hold, the detour ratio, the reference's speed, and the
@@ -78,6 +77,8 @@ CHOSEN = {"ESN #1": "robot_esn1", "ESN #2": "robot_esn2"}
 ONE_TAKE = {"One-take ESN #1": "robot_one_take_esn1", "One-take ESN #2": "robot_one_take_esn2"}
 SIZES = {1: "report 007's forces", 2: "twice", 4: "four times"}  # the pushes' sizes
 THIRD_PUSH = (15.0, 15.5)  # the third push, on the task clock (s)
+FIRST_END = 24.0  # where the undisturbed runs and the first pushed ones end, on the task clock (s)
+LONG_END = 60.0  # where the pushed runs run again end (s)
 UNSEEN_SHOWN = "unseen 1"  # the unseen start drawn over time: the replay's peak torque from it is the median
 SETTINGS = {  # the take counts' settings: leak rate, spectral radius, input scaling, ridge
     "ESN #1's setting": (0.055, 1.2, 1.0, 1.0),
@@ -118,7 +119,6 @@ def main() -> None:
         "unseen.png": plot_unseen,
         "pushes_paths.png": plot_push_paths,
         "pushes_distance.png": plot_push_distance,
-        "pushes_long.png": plot_long,
         "one_take.png": plot_one_take,
         "takes.png": plot_takes,
     }
@@ -187,6 +187,11 @@ def pushes(n: str, times: int) -> str:
     return f"pushes{times}x_robot_esn{n}"
 
 
+def pushes_60s(n: str, times: int) -> str:
+    """The same pushed run, run again for 60 s."""
+    return f"pushes{times}x_60s_robot_esn{n}"
+
+
 def scores(stem: str) -> list[dict[str, Any]]:
     return read_csv(RESULTS / run_name(stem) / "scores.csv")
 
@@ -243,18 +248,23 @@ def in_goal_for_good(state: StateLog) -> float:
 
 
 def third_push(state: StateLog) -> dict[str, float]:
-    """The third push's effect on the hand, from the log: distances to the target (m) and times (s)."""
+    """The third push's effect on the hand, from the log: distances to the target (m) and times (s), the state at
+    24 s, where the first runs ended, and the state when the log ends."""
     times, distance = state.times, from_target(state)
     before = (times >= THIRD_PUSH[0] - 1.0) & (times < THIRD_PUSH[0])
     after = times >= THIRD_PUSH[0]
+    first_end = np.searchsorted(times, FIRST_END - 1e-6)  # the sample at 24 s
     gap = np.degrees(np.abs(state.channel("q_ref") - state.channel("q"))[after]).max()
     return {
         "before": float(distance[before].max()),
         "at_end": float(distance[np.searchsorted(times, THIRD_PUSH[1])]),
         "farthest": float(distance[after].max()),
         "farthest_at": float(times[after][distance[after].argmax()]),
+        "first_end": float(distance[first_end]),
+        "first_end_speed_dps": float(np.degrees(np.abs(state.channel("dq")[first_end]).max())),
+        "for_good": in_goal_for_good(state),
         "end": float(distance[-1]),
-        "end_speed_dps": float(np.degrees(np.abs(state.channel("dq")[-1]).max())),
+        "end_joint_1_deg": float(np.degrees(state.channel("q")[-1, 0])),
         "reference_gap_deg": float(gap),
     }
 
@@ -511,22 +521,27 @@ def plot_unseen() -> Figure:
     return fig
 
 
-def series_columns(name: str) -> list[tuple[str, int, int, str]]:
-    """The columns of an ESN's series over time: the run, its start, the take the replay plays, and the title."""
+def series_columns(name: str) -> list[tuple[str, int, int, float, str]]:
+    """The columns of an ESN's series over time: the run, its start, the take the replay plays, the run's end (s),
+    and the title."""
     n = name[-1]
     undisturbed = CHOSEN[name]
     unseen = next(row for row in rows(undisturbed, "replay") if row["origin"] == UNSEEN_SHOWN)
     posture = extra_starts("robot_esn1.toml", "unseen")[int(UNSEEN_SHOWN.split()[1])]
     columns = [
-        (undisturbed, 0, 0, "undisturbed, from take 00's start"),
+        (undisturbed, 0, 0, FIRST_END, "undisturbed, from take 00's start"),
         (
             undisturbed,
             int(unseen["start"]),
             int(unseen["replayed"].split("_")[1]),
+            FIRST_END,
             f"undisturbed, from the unseen start ({posture[0]:g}°, {posture[1]:g}°)",
         ),
     ]
-    columns += [(pushes(n, times), 0, 0, f"pushes at {label}, from take 00's start") for times, label in SIZES.items()]
+    columns += [
+        (pushes_60s(n, times), 0, 0, LONG_END, f"pushes at {label}, from take 00's start")
+        for times, label in SIZES.items()
+    ]
     return columns
 
 
@@ -546,7 +561,7 @@ def plot_series(name: str, channel: str) -> Figure:
     )
     axes = fig.subplots(3, len(columns), sharex="col", height_ratios=[0.55, 1.0, 1.0])
     arms = [("esn", ESN_COLOR), ("replay", REPLAY_COLOR)]
-    for col, (stem, start, played, title) in enumerate(columns):
+    for col, (stem, start, played, end, title) in enumerate(columns):
         logs = {arm: log(stem, arm, start) for arm, _ in arms}
         taught = np.degrees(take(played))
         for row in range(3):
@@ -591,7 +606,7 @@ def plot_series(name: str, channel: str) -> Figure:
                 esn = logs["esn"]
                 top = max(1.15 * float(np.abs(esn.channel("tau")[esn.times >= 0.05]).max()), 0.5)
                 ax.set_ylim(-top, top)
-            ax.set_xlim(-1.0, 24.0)
+            ax.set_xlim(-1.0, end)
         axes[0, col].set_ylim(-0.5, 22.0)
         axes[-1, col].set_xlabel("time (s)", color=TEXT_COLOR)
     axes[0, 0].set_ylabel("tip force (N)", color=TEXT_COLOR)
@@ -623,8 +638,8 @@ def push_panels() -> list[tuple[str, str, str, str]]:
 def plot_push_paths() -> Figure:
     fig = Figure(figsize=(15, 15), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(
-        "The hand's paths under the three pushes, from the nine takes' starts (dots); thick black: while a force"
-        " acts; crosses: where the hand is at 24 s",
+        "The hand's paths under the three pushes over 60 s, from the nine takes' starts (dots); thick black: while a"
+        " force acts;\ncrosses: where the hand is at 60 s, when the run ends",
         color=TITLE_COLOR,
     )
     axes = fig.subplots(3, 3)
@@ -633,7 +648,7 @@ def plot_push_paths() -> Figure:
             ax = axes[row, col]
             workspace(ax, f"{name}, pushes at {label}")
             for start in range(N_TAKES):
-                draw_path(ax, log(pushes(n, times), arm, start), color, 0.75, mark_end=True)
+                draw_path(ax, log(pushes_60s(n, times), arm, start), color, 0.75, mark_end=True)
     for ax in axes[-1]:
         ax.set_xlabel("x (m)", color=TEXT_COLOR)
     for ax in axes[:, 0]:
@@ -662,37 +677,22 @@ def distance_axes(ax: Axes, title: str, end: float) -> None:
 def plot_push_distance() -> Figure:
     fig = Figure(figsize=(15, 10.5), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(
-        "The hand's distance to the target under the three pushes, from the nine takes' starts; thick black: while a"
-        " force acts; purple: the goal's radius, 20 mm",
+        "The hand's distance to the target under the three pushes over 60 s, from the nine takes' starts; thick black:"
+        " while a force acts;\npurple: the goal's radius, 20 mm; thin gray line: 24 s, where the first runs ended",
         color=TITLE_COLOR,
     )
     axes = fig.subplots(3, 3, sharex=True, sharey=True)
     for row, (times, label) in enumerate(SIZES.items()):
         for col, (name, n, arm, color) in enumerate(push_panels()):
             ax = axes[row, col]
-            distance_axes(ax, f"{name}, pushes at {label}", 24.0)
+            distance_axes(ax, f"{name}, pushes at {label}", LONG_END)
+            ax.axvline(FIRST_END, color=TEXT_COLOR, linewidth=0.8, zorder=2)
             for start in range(N_TAKES):
-                draw_distance(ax, log(pushes(n, times), arm, start), color)
+                draw_distance(ax, log(pushes_60s(n, times), arm, start), color)
     for ax in axes[-1]:
         ax.set_xlabel("time (s)", color=TEXT_COLOR)
     for ax in axes[:, 0]:
         ax.set_ylabel("distance to the target (mm)", color=TEXT_COLOR)
-    return fig
-
-
-def plot_long() -> Figure:
-    fig = Figure(figsize=(15, 4.4), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle(
-        "The same over 48 s, at report 007's forces: the hand's distance to the target from the nine takes' starts",
-        color=TITLE_COLOR,
-    )
-    axes = fig.subplots(1, 3, sharey=True)
-    for ax, (name, n, arm, color) in zip(axes, push_panels(), strict=True):
-        distance_axes(ax, name, 48.0)
-        for start in range(N_TAKES):
-            draw_distance(ax, log(f"pushes1x_long_robot_esn{n}", arm, start), color)
-        ax.set_xlabel("time (s)", color=TEXT_COLOR)
-    axes[0].set_ylabel("distance to the target (mm)", color=TEXT_COLOR)
     return fig
 
 
@@ -854,20 +854,26 @@ def print_undisturbed() -> None:
 
 def print_pushes() -> None:
     print("\n== Under the pushes: runs that arrive and end within the goal, of nine")
-    for times in SIZES:
-        cells = [f"ESN #{n} {sum(ends_in_goal(run) for run in rows(pushes(n, times), 'esn'))}" for n in "12"]
-        cells += [
-            f"{arm} {sum(ends_in_goal(run) for run in rows(pushes('1', times), arm))}" for arm in ("replay", "progress")
-        ]
-        ends = [
-            1e3 * max(column(rows(pushes(n, times), arm), "final_distance_m"))
-            for n, arm in (("1", "esn"), ("2", "esn"), ("1", "replay"), ("1", "progress"))
-        ]
-        print(f"x{times}: {', '.join(cells)}; farthest ends (mm): {', '.join(f'{end:.0f}' for end in ends)}")
-    print("Each push, over the nine runs: median (smallest to largest)")
+    for heading, stem_of in (
+        ("At 24 s, as first tested (the 24 s runs)", pushes),
+        ("At 60 s (the 60 s runs)", pushes_60s),
+    ):
+        print(f"{heading}:")
+        for times in SIZES:
+            cells = [f"ESN #{n} {sum(ends_in_goal(run) for run in rows(stem_of(n, times), 'esn'))}" for n in "12"]
+            cells += [
+                f"{arm} {sum(ends_in_goal(run) for run in rows(stem_of('1', times), arm))}"
+                for arm in ("replay", "progress")
+            ]
+            ends = [
+                1e3 * max(column(rows(stem_of(n, times), arm), "final_distance_m"))
+                for n, arm in (("1", "esn"), ("2", "esn"), ("1", "replay"), ("1", "progress"))
+            ]
+            print(f"x{times}: {', '.join(cells)}; farthest ends (mm): {', '.join(f'{end:.0f}' for end in ends)}")
+    print("Each push, over the nine runs of 60 s: median (smallest to largest)")
     for times in SIZES:
         for name, n, arm, _ in push_panels():
-            runs = rows(pushes(n, times), arm)
+            runs = rows(pushes_60s(n, times), arm)
             parts = []
             for push in (1, 2, 3):
                 off = column(runs, f"off_path_m_{push}")
@@ -878,11 +884,12 @@ def print_pushes() -> None:
                 )
             torque = column(runs, "peak_torque_nm")
             print(f"x{times} {name}: {'; '.join(parts)}; peak torque {median(torque):.1f} ({max(torque):.1f}) N m")
-    print("The third push, per run (distances to the target)")
+    print("The third push, per run of 60 s (distances to the target)")
     for times in SIZES:
         for name, n, arm, _ in push_panels():
-            details = [third_push(log(pushes(n, times), arm, start)) for start in range(N_TAKES)]
+            details = [third_push(log(pushes_60s(n, times), arm, start)) for start in range(N_TAKES)]
             inside = sum(d["before"] <= TOLERANCE for d in details)
+            back = [d["for_good"] for d in details]
             print(
                 f"x{times} {name}: in the goal through the second before it {inside}/9;"
                 f" at its end {1e3 * median([d['at_end'] for d in details]):.0f}"
@@ -890,38 +897,24 @@ def print_pushes() -> None:
                 f" farthest {median([d['farthest'] for d in details]):.2f}"
                 f" ({min(d['farthest'] for d in details):.2f}-{max(d['farthest'] for d in details):.2f}) m"
                 f" at {median([d['farthest_at'] for d in details]):.1f} s;"
-                f" at 24 s {1e3 * median([d['end'] for d in details]):.0f} mm,"
-                f" moving over 1 dps in {sum(d['end_speed_dps'] > 1.0 for d in details)}/9;"
                 f" reference to arm at most {max(d['reference_gap_deg'] for d in details):.1f} deg"
+            )
+            print(
+                f"    at 24 s {1e3 * median([d['first_end'] for d in details]):.0f} mm,"
+                f" moving over 1 dps in {sum(d['first_end_speed_dps'] > 1.0 for d in details)}/9;"
+                f" in the goal for good from {median(back):.1f} ({np.nanmin(back):.1f}-{np.nanmax(back):.1f}) s,"
+                f" not back by 60 s in {int(np.isnan(back).sum())}/9;"
+                f" at 60 s {1e3 * median([d['end'] for d in details]):.0f} mm,"
+                f" the largest {1e3 * max(d['end'] for d in details):.0f} mm"
             )
             if arm == "esn":
                 print(
-                    "    per start: "
-                    + ", ".join(
-                        f"{start}: {d['before'] * 1e3:.0f}>{d['farthest']:.2f} m>{d['end'] * 1e3:.0f} mm"
+                    "    per start (farthest, in the goal for good from, joint 1 at the end): "
+                    + "; ".join(
+                        f"{start}: {d['farthest']:.2f} m, {d['for_good']:.1f} s, {d['end_joint_1_deg']:.0f} deg"
                         for start, d in enumerate(details)
                     )
                 )
-    print("Over 48 s, at report 007's forces: in the goal for good from (s), per start")
-    for name, n, arm, _ in push_panels():
-        stem = f"pushes1x_long_robot_esn{n}"
-        times_ = [in_goal_for_good(log(stem, arm, start)) for start in range(N_TAKES)]
-        ends = [1e3 * from_target(log(stem, arm, start))[-1] for start in range(N_TAKES)]
-        farthest = [third_push(log(stem, arm, start))["farthest"] for start in range(N_TAKES)]
-        print(
-            f"{name}: {', '.join(f'{t:.1f}' for t in times_)}; ends {', '.join(f'{e:.0f}' for e in ends)} mm;"
-            f" farthest after the third push {', '.join(f'{f:.2f}' for f in farthest)} m"
-        )
-        if arm == "esn":
-            same = all(
-                np.allclose(
-                    log(stem, arm, s).channel("q")[: len(log(pushes(n, 1), arm, s).times)],
-                    log(pushes(n, 1), arm, s).channel("q"),
-                    atol=1e-9,
-                )
-                for s in range(N_TAKES)
-            )
-            print(f"  its first 24 s equal the 24 s run's: {same}")
 
 
 def print_one_take() -> None:
@@ -975,6 +968,24 @@ def print_checks() -> None:
         for key in ("detour_ratio", "peak_torque_nm", "final_distance_m")
     ]
     print(f"the replay beside ESN #1 equals the one beside ESN #2: {all(replays)}")
+    same, largest = [], 0.0
+    for times in SIZES:
+        for n in "12":
+            for arm in ("esn", "replay", "progress"):
+                for start in range(N_TAKES):
+                    first = log(pushes(n, times), arm, start).channel("q")
+                    longer = log(pushes_60s(n, times), arm, start).channel("q")[: len(first)]
+                    same.append(np.allclose(longer, first, atol=1e-9))
+                    largest = max(largest, float(np.abs(longer - first).max()))
+    differ = len(same) - sum(same)
+    print(
+        "the first 24 s of every 60 s pushed run's joint angles equal the 24 s run's:"
+        + (
+            " True"
+            if differ == 0
+            else f" False, {differ} of {len(same)} differ, by at most {np.degrees(largest):.3g} deg"
+        )
+    )
 
 
 if __name__ == "__main__":

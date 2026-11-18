@@ -19,10 +19,11 @@ The findings:
   - the reference's fastest joint speed is 183 and 119 °/s, against 2,100 °/s;
   - the largest joint torque is 9.6 and 6.2 N m, against 99.4 N m;
   - the detour ratio is 1.08 and 1.09, against 1.59.
-- **Under pushes both ESNs fail (claim 5 fails).** Under report 007's three pushes, the
-  hand arrives and is within 20 mm at 24 s in 2 and 1 of nine runs, against 9 of 9 for the
-  replay and the progress replay. At twice and at four times the forces it is 1 or 2 of
-  nine.
+- **Under pushes the hand is sent far away and comes back (claim 5 fails at 24 s and holds
+  at 60 s).** In runs of 24 s, as the claim was first tested, the hand arrives and is
+  within 20 mm at the end in 2 and 1 of nine runs at report 007's forces, and in 1 or 2 at
+  twice and at four times them, against 9 of 9 for the replay and the progress replay. In
+  runs of 60 s, run afterwards, all nine runs of each ESN end within 20 mm at every size.
   - **The reference goes with the pushed arm.** The following gain is 0.94 to 0.96 by the
     median, at every push. The first two pushes take the hand 0.20 to 0.40 m off the
     take's path, against 0.03 and 0.05 m for the replay.
@@ -30,11 +31,10 @@ The findings:
     the nine hands are in the goal through the second before it.
   - **The third push, of 4 N for 0.5 s on the resting arm, sends the hand far away.** It
     goes 0.11 to 1.52 m from the target with ESN #1 and 0.12 to 1.04 m with ESN #2, against
-    at most 0.13 m for the replay. The ESN then reaches again from there, and the run ends
-    at 24 s before it is back.
-  - **Given time, every hand comes back.** In runs of 48 s, added after seeing this, all
-    18 ESN runs are in the goal for good by 32.6 s (ESN #1) and 27.6 s (ESN #2), 5 to 18 s
-    after the push, and end 3 to 11 mm from the target. The replay is back by 16.2 s.
+    at most 0.13 m for the replay. The ESN then reaches again from there.
+  - **Every hand comes back and stays.** Over the three sizes, the 54 ESN runs are in the
+    goal for good by 32.6 s (ESN #1) and 30.8 s (ESN #2), 5 to 18 s after the push's
+    onset, and end 3 to 11 mm from the target. The replay is back by 16.2 s.
 - **One take is enough to arrive (claims 6 and 7 fail as stated).** Both claims asked for
   more runs that hold with more takes. ESNs trained on one take, chosen by the same
   search, also hold from all 44 starts their take does not start from.
@@ -101,7 +101,8 @@ training takes' range of it. The ESNs get no task knowledge: no target and no co
   given the reference's velocity, its torque computed every 10 ms and held between. Its
   gains are set where the take of reports 005 to 020 ends (kp = 74.96 and 8.96 N m/rad,
   kd = 3.00 and 0.358 N m s/rad), whatever takes an ESN is trained on.
-- **A run** is 24 s after the 1 s warm-up.
+- **A run** is 24 s after the 1 s warm-up. The pushed runs were run again for 60 s (see
+  the claims).
 - **The replay** plays by time the take whose start is nearest the run's start. Under the
   pushes a third arm runs, report 014's progress replay of that take (a lead of 2.5°, a
   window of 1 s).
@@ -177,6 +178,12 @@ Fixed on 2026-11-18 before any of their runs. Each is to hold for ESN #1 and for
    5), the runs that hold from the 36 unseen starts are more with nine takes than with
    one, and do not decrease from one take to three, to six, to nine.
 
+**Claim 5's runs, lengthened afterwards (2026-11-18).** The pushed runs were 24 s when the
+claims were fixed and first tested. After those outcomes, the maintainer had them run
+again for 60 s, because most pushed hands were still coming back at 24 s. The claim's
+wording is unchanged, and both counts are reported: within 20 mm at 24 s, as fixed, and at
+60 s.
+
 **The pushes** are report 007's: 3 N at 10° from the direction toward the target, 5 N at
 80°, and 4 N at −80°, each for 0.5 s at the tip. The first two are placed along each take,
 where its hand is 18% and 62% of the way to the target, as they come in the take of
@@ -203,13 +210,13 @@ written below as `$D`.
 | `one_take_coarse_search`, `one_take_fine_search`, `one_take_untaught_search` | `sweep_robot_esn.py`, as above | `7678763`, `98c36c7`, `6a6b811` |
 | `one_take_esn1_lr0.017_sr1.05_is0.045_ridge0.1_seed5`, `one_take_esn2_lr0.055_sr0.75_is0.22_ridge1_seed3` | `autonomous_esn.py`, as above | `683d989` |
 | `robot_one_take_esn1`, `robot_one_take_esn2` | `robot_esn.py`, as above | `b35a9e4` |
-| `pushes1x_long_robot_esn1`, `pushes1x_long_robot_esn2` | `robot_esn.py`, as above | `64d478b` |
+| `pushes{1,2,4}x_60s_robot_esn{1,2}` (6), the pushed runs for 60 s | `robot_esn.py`, as above | `02c0809` |
 | [`summary`](results/summary) | `uv run python reports/023-one-target-from-many-starts/make_figures.py` | |
 
 - **Running time,** with 30 workers on 32 logical processors: the coarse search 7 min, the
   fine search 23 min, the scoring with the untaught starts 30 min, each take count 5 min,
   and the one-take search 2 min, 2 min, and 70 min. Each undisturbed robot run of 90 runs
-  takes 8 min, each pushed run 2 min, and each of 48 s 4 min.
+  takes 8 min, each pushed run of 24 s 2 min, and each of 60 s 6 min.
 - **Checks:**
   - Every run record names its commit. Those of the coarse and the fine search report
     uncommitted changes: `hand_esn.toml`, edited by hand while tuning and committed
@@ -217,7 +224,12 @@ written below as `$D`.
   - Before the rule was fixed, the 36 coarse settings with a ridge of 10⁻² were run once
     to measure the search's time. That run was not kept.
   - The replay beside ESN #1 equals the replay beside ESN #2 in every measure compared.
-  - The first 24 s of each 48 s run equal the 24 s run's, joint angle for joint angle.
+  - The first 24 s of every 60 s pushed run equal the 24 s run's, joint angle for joint
+    angle, for the ESNs' arms and the replays'.
+  - An earlier version of this report had runs of 48 s at report 007's forces
+    (`pushes1x_long_robot_esn1`, `pushes1x_long_robot_esn2`, commit `64d478b`). The 60 s
+    runs repeat them and replace them here: each hand is in the goal for good at the same
+    time in both.
 - **What is kept here:** the takes, and each run's configuration and run record with its
   `metrics.csv`, or its `scores.csv` and `seeds.csv`; the take counts' `runs.csv`; and the
   four ESNs' `esn.toml` and `esn.rclib`.
@@ -331,16 +343,24 @@ under the pushes (Section 3.4):
   and 0.17 N m from take 00's start, against the replay's 0.66 N m, and within 0.46 and
   0.19 N m from the unseen start, against 10.13 N m.
 
-### 3.4 Under the pushes (claim 5 fails)
+### 3.4 Under the pushes (claim 5 fails at 24 s and holds at 60 s)
 
-Runs that arrive and are within 20 mm of the target at 24 s, of nine (the farthest end in
-parentheses):
+Runs that arrive and are within 20 mm of the target when the run ends, of nine (the
+farthest end in parentheses):
 
-| Pushes | ESN #1 | ESN #2 | Replay | Progress replay |
-| --- | --- | --- | --- | --- |
-| at report 007's forces | 2 (0.94 m) | 1 (0.15 m) | 9 (12 mm) | 9 (12 mm) |
-| at twice | 1 (0.74 m) | 2 (0.45 m) | 9 (12 mm) | 9 (12 mm) |
-| at four times | 1 (0.70 m) | 1 (0.46 m) | 9 (12 mm) | 9 (12 mm) |
+| Pushes | Run | ESN #1 | ESN #2 | Replay | Progress replay |
+| --- | --- | --- | --- | --- | --- |
+| at report 007's forces | 24 s, as first tested | 2 (0.94 m) | 1 (0.15 m) | 9 (12 mm) | 9 (12 mm) |
+| at twice | 24 s | 1 (0.74 m) | 2 (0.45 m) | 9 (12 mm) | 9 (12 mm) |
+| at four times | 24 s | 1 (0.70 m) | 1 (0.46 m) | 9 (12 mm) | 9 (12 mm) |
+| at report 007's forces | 60 s, run afterwards | 9 (6 mm) | 9 (11 mm) | 9 (12 mm) | 9 (12 mm) |
+| at twice | 60 s | 9 (6 mm) | 9 (11 mm) | 9 (12 mm) | 9 (12 mm) |
+| at four times | 60 s | 9 (6 mm) | 9 (11 mm) | 9 (12 mm) | 9 (12 mm) |
+
+- **At 24 s the claim fails, at every size and for both ESNs.**
+- **At 60 s it holds, at every size and for both ESNs.** Every hand is back within 11 mm.
+
+The figures show the runs of 60 s. Their first 24 s are the first runs.
 
 ![The hand's paths under the pushes](results/summary/pushes_paths.png)
 
@@ -395,32 +415,41 @@ parentheses):
   as far as −52°, and joint 2 folds to 170° (the third column of the figures of Section
   3.3). The reference stays within 11° of the arm throughout, so the tracker is following
   the ESN there, not fighting it.
-- **Then the ESN reaches again.** The hand comes back toward the target, and the run ends
-  at 24 s while 7 and 8 of the nine arms are still moving.
+- **Then the ESN reaches again.** The hand comes back toward the target. At 24 s, where
+  the first runs ended, 7 and 8 of the nine arms are still moving.
 - **At twice and four times the forces** the hand is 0.84 and 0.88 m away when the push
   ends (ESN #1, medians) and 1.54 and 1.53 m at the farthest.
 - **From take 03's start the hand barely moves:** 0.11 m with ESN #1 and 0.12 m with ESN
   #2. Each push's direction is set by the run's start, and there the arm rests at joint
   1 = −246°.
 
-**Over 48 s,** at report 007's forces (runs added after seeing the outcome above; they
-test no claim):
+**Over 60 s,** at the three sizes (runs added after seeing the outcome at 24 s). When the
+hand is in the goal for good after the third push, medians over the nine runs (earliest to
+latest in parentheses), and how far the push sent it:
 
-![The hand's distance to the target over 48 s](results/summary/pushes_long.png)
+| Pushes | | ESN #1 | ESN #2 | Replay |
+| --- | --- | --- | --- | --- |
+| at report 007's forces | In the goal for good from (s) | 28.9 (21.3 to 32.6) | 26.0 (20.3 to 27.6) | 15.8 (15.5 to 16.2) |
+| | Farthest after the third push (m) | 1.41 (0.11 to 1.52) | 0.86 (0.12 to 1.04) | 0.10 (0.04 to 0.13) |
+| at twice | In the goal for good from (s) | 28.4 (23.0 to 29.4) | 28.5 (23.1 to 30.7) | 15.8 (15.6 to 16.2) |
+| | Farthest after the third push (m) | 1.54 (0.27 to 1.57) | 1.15 (0.39 to 1.39) | 0.21 (0.10 to 0.26) |
+| at four times | In the goal for good from (s) | 28.3 (23.6 to 28.5) | 28.4 (24.0 to 30.8) | 16.0 (15.9 to 16.2) |
+| | Farthest after the third push (m) | 1.53 (0.77 to 1.59) | 1.17 (0.75 to 1.49) | 0.39 (0.20 to 0.53) |
+| every size | Hands not back by 60 s, of 9 | 0 | 0 | 0 |
+| every size | End from the target (mm) | 3 to 6 | 3 to 11 | 1 to 12 |
 
-| | ESN #1 | ESN #2 | Replay |
-| --- | --- | --- | --- |
-| Runs that end within 20 mm, of 9 | 9 | 9 | 9 |
-| In the goal for good from (s), earliest to latest | 21.3 to 32.6 | 20.3 to 27.6 | 15.5 to 16.2 |
-| The same, median (s) | 28.9 | 26.0 | 15.8 |
-| End from the target (mm) | 3 to 6 | 3 to 11 | 1 to 12 |
-
-- **Every hand comes back and stays.** The return takes 6 to 18 s from the push's onset
-  for ESN #1 and 5 to 13 s for ESN #2, against 0.5 to 1.2 s for the replay.
-- **Two of ESN #1's arms come back the other way around.** From the starts of takes 05
-  and 08, joint 1 goes from 113° on to −246°, a whole turn, and rests there.
-- **So the claim's 24 s cut the returns short.** The failure is a hand sent far away and a
-  return as slow as a new reach, not a hand that stays away.
+- **Every hand comes back and stays.** The return takes 6 to 18 s from the third push's
+  onset for ESN #1 and 5 to 16 s for ESN #2, against 0.5 to 1.2 s for the replay.
+- **Larger pushes do not make the return much later.** The hand is sent farther, up to
+  1.59 m, across the workspace, but the latest return is 32.6 s at report 007's forces and
+  29.4 and 28.5 s at twice and four times (ESN #1).
+- **Some arms come back the other way around.** Without limits the target has two rest
+  postures, joint 1 at 114° and at −246°. Pushed, ESN #1's arm ends a whole turn from
+  where its undisturbed run rests from 2 of the nine starts at report 007's forces (those
+  of takes 05 and 08) and from 5 at twice and at four times. ESN #2's does from one, take
+  04's start, at every size.
+- **So the claim's 24 s cut the returns short.** What a push costs is a hand sent far away
+  and a return as slow as a new reach, not a hand that stays away.
 
 ### 3.5 Nine takes against one (claim 6 fails as stated)
 
@@ -490,10 +519,11 @@ runs a cell; the measures are medians over them):
   ESNs. Each added take cuts the jump and the detour. Claims 6 and 7 were stated on the
   runs that hold and fail for that reason. Stated on the jump and the detour, they would
   have held, but they were not.
-- **The pushes are the failure that matters.** Both ESNs let a push carry the arm far from
-  the target, most of all the push on the resting arm, and take as long as a new reach to
-  come back. Under the claim's 24 s that is a failure in 7 or 8 of nine runs. Over 48 s
-  every run returns.
+- **A push costs time and distance, not the reach.** Both ESNs let a push carry the arm
+  far from the target, most of all the push on the resting arm, and take as long as a new
+  reach to come back: 5 to 18 s, against about 1 s for the replay. Whether that fails
+  depends on how long the run waits. Within the 24 s the claim was fixed with, 7 or 8 of
+  nine runs fail. Over 60 s every run returns, at every size.
 - **Why they give way is not tested here.** Three things differ from report 017 and may
   each contribute:
   - **The search had no pushes.** It scored undisturbed runs only, and it chose settings
@@ -511,13 +541,14 @@ runs a cell; the measures are medians over them):
     on the same rings, 15° away.
   - The first two pushes come at different times in different takes, and the third at
     15 s, when two runs of ESN #2 have not yet arrived.
-  - The 48 s runs were added after seeing the outcome, at report 007's forces only.
+  - The 60 s runs were added after seeing the outcome at 24 s. Claim 5 was fixed with
+    runs of 24 s and fails as fixed.
 
 ## 5. Next steps
 
-1. **The pushes.** Decide whether to search again with the pushes in the score, as report
-   017's search had. Scoring the fine search's 20 full-scoring settings again under the
-   pushes would show first whether any setting of this grid withstands them.
+1. **The pushes.** [Report 024](../024-many-starts-with-pushes-in-the-score/README.md)
+   searches again with the pushed runs in the score. Its ESNs are back sooner and start
+   less gently.
 2. **What the following costs.** Whether an ESN that follows less, as report 017's, still
    starts where the arm is from the unseen starts, or whether the two pull against each
    other.

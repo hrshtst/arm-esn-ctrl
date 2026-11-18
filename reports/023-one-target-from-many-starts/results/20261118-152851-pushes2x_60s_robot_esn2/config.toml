@@ -1,14 +1,14 @@
-# ESN #1 on the robot under report 007's three pushes at their original forces, as
-# pushes1x_robot_esn1.toml, run for 48 s in place of 24 s: to see whether the hand
-# comes back to the target after the third push, at 15 s. Added on 2026-11-18, after the
-# analysis's outcomes: in the 24 s runs most hands are still moving at the end. About 4
-# minutes. See README.md.
+# ESN #2 on the robot under report 007's three pushes at twice their forces, from each
+# take's start, against the replay and the progress replay of that take: the same ESN,
+# pushes, and starts as pushes2x_robot_esn2.toml, run for 60 s in place of 24 s. Added on
+# 2026-11-18, after the analysis's outcomes: in the 24 s runs most pushed hands were still
+# coming back when the run ended. About 5 minutes. See README.md.
 #
-#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts/pushes1x_long_robot_esn1.toml
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts/pushes2x_60s_robot_esn2.toml
 
 [esn]
 # esn.toml in the run directory of its training, relative to the storage root.
-model = "results/manual_demonstration_v2_many_starts/20261118-003541-esn1_lr0.055_sr1.2_is1_ridge1_seed4/esn.toml"
+model = "results/manual_demonstration_v2_many_starts/20261118-003612-esn2_lr0.1_sr1.05_is0.5_ridge10_seed3/esn.toml"
 
 [tracker]
 # The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
@@ -29,7 +29,7 @@ lead_deg = 2.5
 window = 1.0  # s
 
 [evaluation]
-duration = 48.0        # task (s), after the warm-up; the last push comes at 15 s
+duration = 60.0        # task (s), after the warm-up; the last push comes at 15 s
 hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
 start_offsets_deg = [[0.0, 0.0]]  # each take's own start
 return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
@@ -43,21 +43,21 @@ following_window = 0.5    # the following gain: from a disturbance's onset to th
 
 [[disturbance]]  # nearly forward: 10 deg off it, toward counterclockwise across
 type = "push"
-force = 3.0            # N; report 007's
+force = 6.0            # N; 3 N in report 007
 way = 0.18             # the take's hand is 18% of the way to the target
 duration = 0.5         # s
 angle_deg = 10.0       # deg from the direction toward the target
 
 [[disturbance]]  # nearly across, counterclockwise: 10 deg off it, toward the target
 type = "push"
-force = 5.0            # N; report 007's
+force = 10.0           # N; 5 N in report 007
 way = 0.62             # 62% of the way
 duration = 0.5         # s
 angle_deg = 80.0       # deg from the direction toward the target
 
 [[disturbance]]  # nearly across, clockwise, after the hold: 10 deg off it, toward the target
 type = "push"
-force = 4.0            # N; report 007's
+force = 8.0            # N; 4 N in report 007
 onset = 15.0           # task time (s)
 duration = 0.5         # s
 angle_deg = -80.0      # deg from the direction toward the target

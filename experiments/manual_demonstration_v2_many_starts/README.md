@@ -9,7 +9,8 @@ have 800 neurons.
 below. The search's rule, [below](#the-search), was fixed on 2026-11-17 before any
 run of the search. The claims of this stage and the runs that test them,
 [below](#the-analysis), were fixed on 2026-11-18 before any of those runs. Claims 1
-to 4 hold; claims 5, 6, and 7 fail as stated ([the outcomes](#the-outcomes)).
+to 4 hold; claims 5, 6, and 7 fail as stated ([the outcomes](#the-outcomes)). Over 60 s,
+run afterwards, every pushed run ends within 20 mm of the target.
 [Report 023](../../reports/023-one-target-from-many-starts/README.md) gives the results.
 
 ## The robot and the takes
@@ -412,14 +413,27 @@ unseen starts, at ESN #1's setting and at ESN #2's:
 From the starts of the takes an ESN is trained on, every run holds but two of the 30
 with six takes at ESN #1's setting.
 
-**A longer run, added after these outcomes (2026-11-18).** In the pushed runs most
-ESN hands are still moving when the run ends at 24 s, 9 s after the third push.
-`pushes1x_long_robot_esn1.toml` and `pushes1x_long_robot_esn2.toml` run the pushes at
-report 007's forces for 48 s, to see whether the hand comes back. They test no claim.
-They do come back: all nine runs of each ESN are in the goal for good by 32.6 s (ESN
-#1) and 27.6 s (ESN #2), 5 to 18 s after the third push, against 16.2 s for the
-replay, and end 3 to 11 mm from the target
-(`20261118-085118-pushes1x_long_robot_esn1`, `20261118-085121-pushes1x_long_robot_esn2`).
+**Longer pushed runs, added after these outcomes (2026-11-18).** In the pushed runs most
+ESN hands are still moving when the run ends at 24 s, 9 s after the third push. First
+`pushes1x_long_robot_esn1.toml` and `pushes1x_long_robot_esn2.toml` ran the pushes at
+report 007's forces for 48 s (`20261118-085118-pushes1x_long_robot_esn1`,
+`20261118-085121-pushes1x_long_robot_esn2`). Then, at the maintainer's request, the six
+`pushes{1,2,4}x_60s_robot_esn{1,2}.toml` ran every size for 60 s
+(`20261118-152847-pushes1x_60s_robot_esn1` to `20261118-152853-pushes4x_60s_robot_esn2`).
+Their first 24 s equal the 24 s runs, and at report 007's forces they repeat the 48 s
+runs.
+
+Over 60 s, all nine runs of each ESN end within 20 mm of the target at every size, as
+the replays do: ESN #1's within 6 mm and ESN #2's within 11 mm. The hand is in the goal
+for good from, by the median (earliest to latest):
+
+| Pushes | ESN #1 (s) | ESN #2 (s) | Replay (s) |
+| --- | --- | --- | --- |
+| at report 007's forces | 28.9 (21.3 to 32.6) | 26.0 (20.3 to 27.6) | 15.8 (15.5 to 16.2) |
+| at twice | 28.4 (23.0 to 29.4) | 28.5 (23.1 to 30.7) | 15.8 (15.6 to 16.2) |
+| at four times | 28.3 (23.6 to 28.5) | 28.4 (24.0 to 30.8) | 16.0 (15.9 to 16.2) |
+
+So claim 5 fails with the runs of 24 s it was fixed with, and its count holds over 60 s.
 
 ## The configurations
 

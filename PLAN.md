@@ -87,9 +87,10 @@ from 36 unseen starts, under report 007's pushes at one, two, and four times the
 forces, against an ESN of one take, and against one, three, six, and nine takes.
 
 - **[Report 023](reports/023-one-target-from-many-starts/README.md):** ESNs chosen by
-  undisturbed runs arrive from everywhere, start where the arm is, and go directly. They
-  fail the pushes. One take is already enough to arrive; more takes make the path direct
-  and the start gentle.
+  undisturbed runs arrive from everywhere, start where the arm is, and go directly. A push
+  sends the hand far away, and it comes back 5 to 18 s later: within 20 mm of the target
+  in 1 or 2 of nine runs at 24 s, as claimed, and in all nine at 60 s. One take is already
+  enough to arrive; more takes make the path direct and the start gentle.
 - **[Report 024](reports/024-many-starts-with-pushes-in-the-score/README.md):** a search
   with the pushed runs in the score finds ESNs that pass report 007's pushes. They pass
   by coming back in time, not by keeping to the take, they fail at larger pushes, and one
