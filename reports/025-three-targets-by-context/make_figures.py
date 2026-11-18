@@ -98,6 +98,7 @@ NAMES = ("leak_rate", "spectral_radius", "input_scaling", "ridge")
 JUMP_SPEED = 500.0
 JUMP_TORQUE = 20.0
 NEAR = 45.0  # an unseen start near the start of the take the replay plays: within this, over both joints (deg)
+LOW_HAND = -0.2  # no take's hand starts below this (y, m)
 PUSH_FORCE = 1.0  # a push by hand in the demonstration: the tip force above this (N)
 
 TEXT_COLOR = "#52514e"
@@ -338,6 +339,11 @@ def joint_distance(task: str, row: dict[str, Any]) -> float:
     """How far a run's start is from the start of the take the replay plays (deg, over the two joints)."""
     played = take_start(task, int(row["replayed"].split("_")[1]))
     return float(np.linalg.norm(start_posture(task, row) - played))
+
+
+def played_distances(task: str) -> NDArray[np.float64]:
+    """How far each unseen start is from the start of the take the replay plays with ``task``'s context (deg)."""
+    return np.array([joint_distance(task, replay) for replay in group(robot("1"), "replay", task, "unseen")])
 
 
 def rest_postures(task: str) -> NDArray[np.float64]:
@@ -969,6 +975,7 @@ def print_takes() -> None:
     print("\n== The takes: their start, and their arrival filtered, as trained on (as recorded in parentheses)")
     arrivals: list[float] = []
     early: list[str] = []
+    lowest = (np.inf, "")  # the lowest hand at a take's start (y, m) and its take
     for label in LABELS:
         for row, filtered in zip(take_rows(label, False), take_rows(label, True), strict=True):
             start = np.array([row["start_q1_deg"], row["start_q2_deg"]])
@@ -983,10 +990,12 @@ def print_takes() -> None:
             arrivals.append(filtered["arrival_time_s"])
             if filtered["arrival_time_s"] <= 4.0:
                 early.append(f"{label} {row['demo']}")
+            lowest = min(lowest, (float(at[1]), f"{label} {row['demo']}"))
     print(
         f"filtered, they arrive {min(arrivals):.1f} to {max(arrivals):.1f} s, median {median(arrivals):.1f} s;"
         f" arrived by 4 s: {', '.join(early)}"
     )
+    print(f"the lowest hand at a take's start: y = {lowest[0]:.2f} m ({lowest[1]})")
     for label in LABELS:
         rests = rest_postures(label)
         center = np.median(rests, axis=0)
@@ -1162,7 +1171,7 @@ def print_claim_3() -> None:
         " joints), and from those farther"
     )
     for label in LABELS:
-        distances = np.array([joint_distance(label, replay) for replay in group(robot("1"), "replay", label, "unseen")])
+        distances = played_distances(label)
         for name, stem, arm in arms:
             runs = group(stem, arm, label, "unseen")
             cells = []
@@ -1173,6 +1182,31 @@ def print_claim_3() -> None:
                     f" torque {median(column(chosen, 'peak_torque_nm')):6.2f} N m"
                 )
             print(f"{label} {name:6s}: {' | '.join(cells)}")
+    print(
+        f"Unseen starts whose reference jumps by either measure (speed above {JUMP_SPEED:g} deg/s or torque above"
+        f" {JUMP_TORQUE:g} N m), and how many of them are farther than {NEAR:g} deg from the played take's start"
+    )
+    for label in LABELS:
+        far = played_distances(label) > NEAR
+        cells = []
+        for name, n in ESNS.items():
+            runs = group(robot(n), "esn", label, "unseen")
+            jumps = np.array(
+                [run["peak_reference_speed_dps"] > JUMP_SPEED or run["peak_torque_nm"] > JUMP_TORQUE for run in runs]
+            )
+            cells.append(f"{name} {int((jumps & far).sum())} of {int(jumps.sum())}")
+        print(f"{label}: {', '.join(cells)}")
+    print(
+        f"Unseen starts whose hand is below y = {LOW_HAND:g} m, among those far from the played take's start and near"
+    )
+    for label in LABELS:
+        far = played_distances(label) > NEAR
+        starts = np.array([start_posture(label, replay) for replay in group(robot("1"), "replay", label, "unseen")])
+        low = hand(np.radians(starts))[:, 1] < LOW_HAND
+        print(
+            f"{label}: far {int((low & far).sum())} of {int(far.sum())},"
+            f" near {int((low & ~far).sum())} of {int((~far).sum())}"
+        )
     print("The unseen starts shown over time (the replay's largest torque is the lower middle of the 36):")
     for label, origin in UNSEEN_SHOWN.items():
         replay = next(row for row in rows(robot("1"), "replay", label) if row["origin"] == origin)
@@ -1218,8 +1252,13 @@ def print_switches() -> None:
                 lines += [
                     f"  {first} → {new}: hold {sum(bool(run['switch_success']) for run in runs)}/{len(runs)};"
                     f" arrival from the change {median(arrival):.2f} ({np.nanmin(arrival):.2f} to"
-                    f" {np.nanmax(arrival):.2f}) s; final distance at most"
-                    f" {1e3 * max(column(runs, 'switch_final_distance_m')):.1f} mm",
+                    f" {np.nanmax(arrival):.2f}) s"
+                    + (
+                        f", the three latest {', '.join(f'{a:.2f}' for a in sorted(arrival)[-3:])} s"
+                        if timing == "on the way"
+                        else ""
+                    )
+                    + f"; final distance at most {1e3 * max(column(runs, 'switch_final_distance_m')):.1f} mm",
                     f"      at the change: {arrived}/{len(runs)} have arrived at {first}; median distance to {first}"
                     f" {1e3 * median([d['to_first'] for d in details]):.0f} mm, to {new}"
                     f" {1e3 * median([d['to_new'] for d in details]):.0f} mm",

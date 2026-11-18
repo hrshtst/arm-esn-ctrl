@@ -61,7 +61,7 @@ maintainer brings the two branches together.
 | --- | --- | --- |
 | 0 | the code every later stage needs | implemented |
 | 1 | one target from many start postures | reports 023 and 024 written and reviewed; its open questions are deferred |
-| 2 | several targets, named by a one-hot context | next, beside stage 3 |
+| 2 | several targets, named by a one-hot context | report 025 written, awaiting review |
 | 3 | a periodic motion, and switching between it and reaching | next, beside stage 2 |
 | 4 | all tasks in one ESN | not started |
 
@@ -112,6 +112,17 @@ context vector added to the ESN's input, not by its coordinates.
   at (0.45, 0.2) m. If three do not work, two.
 - **To show:** the hand goes to the target the context names; and changing the context
   during a run changes the target.
+
+Three targets were kept. The maintainer taught 27 takes, nine to each, choosing each
+take's start and target in the recorder.
+
+- **[Report 025](reports/025-three-targets-by-context/README.md):** both chosen ESNs
+  reach the target the context names from the takes' starts, and a change of context at
+  rest or on the way takes the hand to the new target in every run. From 36 unseen starts
+  one ESN holds everywhere and the other misses four runs. The references begin at the
+  arm from starts near a take's and jump from starts far from every take's. Pushes under
+  a fixed schedule were left out; a run pushed by hand while the target changes is to be
+  recorded.
 
 ### Stage 3: a periodic motion
 
