@@ -3,7 +3,7 @@
 # takes of the three targets and run on the robot, undisturbed, from each take's start
 # with the context of that take's target: 27 runs an ESN. Each setting is scored by how
 # many of its runs arrive and hold at the target their context names, then by their
-# median detour ratio; the best is the center of the fine search. About 35 minutes with
+# median detour ratio; the best is the center of the fine search. About 26 minutes with
 # 15 workers. See README.md.
 #
 #   uv run python experiments/sweep_robot_esn.py \

@@ -95,7 +95,76 @@ def test_the_context_is_fed_in_divided_by_the_input_scaling_with_a_scale_of_1_an
         assert esn.context_gain * input_scaling == pytest.approx(1.0)
 
 
-@pytest.mark.parametrize("name", ["coarse_search.toml"])
+CENTER = {"leak_rate": 0.1, "spectral_radius": 1.2, "input_scaling": 2.0, "ridge": 1.0}  # the coarse search's best
+
+
+def two_digits(x):
+    """``x`` rounded to two significant digits."""
+    return float(f"{x:.2g}")
+
+
+def test_the_fine_search_parses_as_a_sweep_of_81_settings_of_five_seeds_1_to_5_of_three_tasks():
+    config = load(EXPERIMENT / "fine_search.toml")
+
+    assert task_names(config["demonstrations"]) == ("A", "B", "C")
+    sweep = dict(config["sweep"])
+    assert sweep.pop("seed") == [1, 2, 3, 4, 5]
+    assert len(sweep_combinations(sweep)) == 81
+    combinations = sweep_combinations(config["sweep"], config.get("settings"))
+    assert len(combinations) == 81 * 5
+    for combination in combinations:
+        EsnConfig(**config["esn"] | combination)
+
+
+def test_the_fine_searchs_middle_values_are_the_coarse_searchs_best_setting():
+    coarse, fine = load(EXPERIMENT / "coarse_search.toml"), load(EXPERIMENT / "fine_search.toml")
+
+    assert list(fine["sweep"]) == [*CENTER, "seed"]
+    for name, center in CENTER.items():
+        assert fine["sweep"][name][1] == fine["esn"][name] == center
+        assert center in coarse["sweep"][name]
+
+
+def test_the_fine_searchs_outer_values_are_halfway_to_the_coarse_neighbors_and_as_far_beyond_an_edge():
+    coarse, fine = load(EXPERIMENT / "coarse_search.toml"), load(EXPERIMENT / "fine_search.toml")
+
+    # The center's input scaling and ridge are the coarse grid's largest.
+    assert [name for name, center in CENTER.items() if center == coarse["sweep"][name][-1]] == [
+        "input_scaling",
+        "ridge",
+    ]
+    for name, center in CENTER.items():
+        grid = coarse["sweep"][name]
+        below, _, above = fine["sweep"][name]
+        k = grid.index(center)
+        # Beyond the grid's edge, as far from the center as the coarse neighbor on the other side.
+        if name == "spectral_radius":  # halfway in difference
+            lower = grid[k - 1] if k > 0 else 2 * center - grid[k + 1]
+            upper = grid[k + 1] if k + 1 < len(grid) else 2 * center - grid[k - 1]
+            assert (below, above) == pytest.approx(((lower + center) / 2, (center + upper) / 2))
+        else:  # halfway in ratio, rounded to two digits
+            lower = grid[k - 1] if k > 0 else center**2 / grid[k + 1]
+            upper = grid[k + 1] if k + 1 < len(grid) else center**2 / grid[k - 1]
+            assert (below, above) == (two_digits((lower * center) ** 0.5), two_digits((center * upper) ** 0.5))
+
+
+@pytest.mark.parametrize("table", ["demonstrations", "ranking", "tracker", "evaluation"])
+def test_the_fine_search_trains_on_the_same_takes_and_scores_tracks_and_runs_as_the_coarse_search(table):
+    coarse, fine = load(EXPERIMENT / "coarse_search.toml"), load(EXPERIMENT / "fine_search.toml")
+
+    assert fine[table] == coarse[table]
+
+
+def test_the_fine_searchs_esn_is_the_coarse_searchs_with_its_context_but_for_the_swept_values():
+    coarse, fine = load(EXPERIMENT / "coarse_search.toml"), load(EXPERIMENT / "fine_search.toml")
+
+    swept = {*fine["sweep"]}
+    assert without(fine["esn"], swept) == without(coarse["esn"], swept)
+    assert set(CONTEXT) <= set(fine["esn"])
+    assert list(fine) == list(coarse)  # the same tables, and no disturbance
+
+
+@pytest.mark.parametrize("name", ["coarse_search.toml", "fine_search.toml"])
 def test_the_searchs_header_runs_it_with_15_workers_as_the_machine_is_shared(name):
     assert header_command(EXPERIMENT / name) == [
         "uv",

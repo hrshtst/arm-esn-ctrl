@@ -185,6 +185,23 @@ uv run python experiments/sweep_robot_esn.py \
     experiments/manual_demonstration_v2_targets/untaught_search.toml --workers 15
 ```
 
+**The center (added after the coarse search, 2026-11-18).** The coarse search ran as
+`20261118-181307-coarse_search`, in 26 minutes with 15 workers. Of its 108 settings,
+18 hold in all 27 runs, nine at each target; the smallest median detour ratio among
+them, 1.0105, is that of leak rate 0.1, spectral radius 1.2, input scaling 2, and
+ridge 1. The fine search's values around it:
+
+| Parameter | Values |
+| --- | --- |
+| leak rate | 0.055, 0.1, 0.17 |
+| spectral radius | 1.05, 1.2, 1.35 |
+| input scaling | 1, 2, 4 |
+| ridge | 0.1, 1, 10 |
+
+The center's input scaling and ridge are the coarse grid's largest, so the fine search
+goes as far above them as below. Stage 1's center was leak rate 0.1, spectral radius
+1.2, input scaling 0.5, and ridge 1, so the two differ in the input scaling only.
+
 ## The analysis
 
 ESN #1 and ESN #2 are tested on the robot with the search's tracker. No size is fixed
