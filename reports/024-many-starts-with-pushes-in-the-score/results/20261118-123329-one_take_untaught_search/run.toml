@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_many_starts_push_search/one_take_untaught_search.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_many_starts_push_search/one_take_untaught_search.toml --workers 30"
+started = 2026-11-18 12:33:29+09:00
+host = "delbosque"
+commit = "1fc94c1aa41fd4c86faa8ae3f14ae69618740142"
+uncommitted_changes = true

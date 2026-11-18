@@ -15,7 +15,12 @@ starting where the arm is, and in going directly?
 **Status.** The search's rule and the claims, below, were fixed on 2026-11-18 before
 any run of this experiment, but for one check of the configuration: two of the coarse
 settings (leak rates 0.03 and 0.1 at spectral radius 1.2, input scaling 0.5, ridge 1)
-were run once under the pushes, into a scratch directory.
+were run once under the pushes, into a scratch directory. The search finds ESNs that
+pass report 007's pushes. Claims 1, 3, and 4 hold; claim 5 holds at report 007's forces
+and fails at twice and at four times; claims 2, 6, and 7 fail as stated
+([the outcomes](#the-outcomes)).
+[Report 024](../../reports/024-many-starts-with-pushes-in-the-score/README.md) gives the
+results.
 
 ## What stays as in the many-starts experiment
 
@@ -244,6 +249,76 @@ no ESN was chosen by.
 
 These are written as the search gives the ESNs, as copies of the many-starts
 experiment's with the new ESNs.
+
+### The outcomes
+
+The runs are in the storage root under
+`results/manual_demonstration_v2_many_starts_push_search/`: `20261118-125714-robot_esn1`
+and `20261118-125715-robot_esn2`, `20261118-125719-pushes1x_robot_esn1` to
+`20261118-125728-pushes1x_long_robot_esn2`, `20261118-125717-robot_one_take_esn1` and
+`20261118-125718-robot_one_take_esn2`, and `20261118-130522-takes1` to
+`20261118-131924-takes9`.
+
+**Claim 1 holds.** Undisturbed, ESN #1 and ESN #2 arrive and hold from all nine takes'
+starts, as the replay does. From takes 02's and 07's starts ESN #2's reference jumps
+(583 and 580 °/s, 30.5 and 30.4 N m).
+
+**Claim 2 fails for ESN #2; claims 3 and 4 hold.** Medians over the 36 unseen starts (the
+largest in parentheses):
+
+| | ESN #1 | ESN #2 | Replay of the nearest take |
+| --- | --- | --- | --- |
+| Runs that hold | 36 | 35 | 36 |
+| Detour ratio | 1.10 (4.09) | 1.32 (7.40) | 1.59 (11.33) |
+| Reference's fastest joint speed (°/s) | 289 | 998 | 2,100 |
+| Largest joint torque (N m) | 15.1 (56.3) | 52.2 (141.2) | 99.4 (371.7) |
+| Arrival (s) | 7.50 | 7.21 | 7.82 |
+
+ESN #2's one run that does not hold starts at (132°, 60°): its reference jumps 19° in the
+first 10 ms, the hand crosses the goal at 0.07 s and leaves it, and is in the goal for
+good from 2.79 s.
+
+**Claim 5 holds at report 007's forces and fails at the larger ones.** Runs that arrive
+and end within 20 mm of the target, of nine:
+
+| Pushes | ESN #1 | ESN #2 | Replay | Progress replay |
+| --- | --- | --- | --- | --- |
+| at report 007's forces | 9 | 9 | 9 | 9 |
+| at twice | 4 | 9 | 9 | 9 |
+| at four times | 3 | 5 | 9 | 9 |
+
+The references still follow the pushed arm, by 0.90 to 0.91 (ESN #1) and 0.71 to 0.79
+(ESN #2) at report 007's forces. The third push sends the hand 0.51 and 0.20 m from the
+target by the median, against 0.10 m for the replay. Of the 15 failing runs, 12 end 22 to
+54 mm from the target.
+
+**The longer run.** Over 48 s at report 007's forces, the hands are in the goal for good
+from 15.7 to 23.6 s (ESN #1, median 23.2 s) and 15.6 to 21.8 s (ESN #2, median 20.4 s),
+against 15.5 to 16.2 s for the replay, and stay there.
+
+**Claim 6 fails as stated.** From the 44 starts take 00 does not start from, ESN #1 holds
+from 44, ESN #2 from 43, and both one-take ESNs from 44. The other half holds: the median
+detour ratios are 1.08 and 1.29, against 3.19 and 2.67 for the one-take ESNs and 4.76
+for the replay of take 00.
+
+**Claim 7 fails as stated.** Runs that hold from the 36 unseen starts, of 180 (five
+seeds):
+
+| Takes | ESN #1's setting | ESN #2's setting |
+| --- | --- | --- |
+| one | 162 | 180 |
+| three | 136 | 153 |
+| six | 173 | 171 |
+| nine | 179 | 174 |
+
+The median detour ratio falls with the takes, from 1.93 to 1.10 and from 2.55 to 1.33,
+and the reference's fastest joint speed from 3,028 to 255 °/s and from 4,180 to 961 °/s.
+
+**Against report 023's ESNs.** From the unseen starts, report 023's ESN #1 and ESN #2
+have median detour ratios of 1.08 and 1.09, reference speeds of 183 and 119 °/s, and
+torques of 9.6 and 6.2 N m; under the pushes they pass 2 and 1 of nine and follow by 0.94
+to 0.96. Among the 20 settings scored last, the reference's speed from the untaught
+starts doubles with the input scaling, and the following gain goes with the leak rate.
 
 ## The configurations
 

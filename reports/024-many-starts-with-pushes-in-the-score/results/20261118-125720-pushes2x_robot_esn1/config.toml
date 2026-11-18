@@ -1,0 +1,64 @@
+# ESN #1 on the robot under report 007's three pushes of 0.5 s at the tip, at
+# twice their forces, from each take's start, against the replay and the progress
+# replay of that take. The first two pushes are placed along each take, where its hand is
+# 18% and 62% of the way to the target, as they come in the take of reports 005 to 020
+# (at 3 s and 7 s); the third comes at 15 s, after every take has arrived and held.
+# About 2 minutes. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_many_starts_push_search/pushes2x_robot_esn1.toml
+
+[esn]
+# esn.toml in the run directory of its training, relative to the storage root.
+model = "results/manual_demonstration_v2_many_starts_push_search/20261118-125612-esn1_lr0.03_sr0.9_is2_ridge1_seed5/esn.toml"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[progress]
+# A third arm, report 014's progress replay of the take that starts nearest.
+lead_deg = 2.5
+window = 1.0  # s
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up; the last push comes at 15 s
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start
+return_tolerance = 0.005  # after a disturbance, the hand is back once within this of the taught path (m)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz)
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)
+
+# Each push: a force of `force` N for `duration` s, at `angle_deg` counterclockwise from
+# the direction toward the target (0 forward, 90 across, 180 backward), fixed for the
+# run by the start posture; from `way` of the way along the take, or from `onset` (s).
+
+[[disturbance]]  # nearly forward: 10 deg off it, toward counterclockwise across
+type = "push"
+force = 6.0            # N; 3 N in report 007
+way = 0.18             # the take's hand is 18% of the way to the target
+duration = 0.5         # s
+angle_deg = 10.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, counterclockwise: 10 deg off it, toward the target
+type = "push"
+force = 10.0           # N; 5 N in report 007
+way = 0.62             # 62% of the way
+duration = 0.5         # s
+angle_deg = 80.0       # deg from the direction toward the target
+
+[[disturbance]]  # nearly across, clockwise, after the hold: 10 deg off it, toward the target
+type = "push"
+force = 8.0            # N; 4 N in report 007
+onset = 15.0           # task time (s)
+duration = 0.5         # s
+angle_deg = -80.0      # deg from the direction toward the target

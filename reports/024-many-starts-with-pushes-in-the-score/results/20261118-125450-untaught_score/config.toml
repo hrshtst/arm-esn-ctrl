@@ -1,0 +1,13 @@
+# The score with the untaught starts: each of the fine search's 20 best settings over
+# the undisturbed runs of its five reservoirs from the takes' starts and the 36 untaught
+# ones, and over their pushed runs of the fine search: how many pass, then the median
+# detour ratio of the undisturbed runs that arrive. The typical seeds of the two best
+# are ESN #1 and ESN #2. See README.md.
+#
+#   uv run python experiments/score_sweeps.py \
+#       experiments/manual_demonstration_v2_many_starts_push_search/untaught_score.toml
+
+[runs]
+# Runs of sweep_robot_esn.py, relative to the storage root.
+undisturbed = "results/manual_demonstration_v2_many_starts_push_search/20261118-120421-untaught_search"
+pushes = "results/manual_demonstration_v2_many_starts_push_search/20261118-111415-fine_pushes"

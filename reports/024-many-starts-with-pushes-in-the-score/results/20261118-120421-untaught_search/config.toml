@@ -1,0 +1,99 @@
+# The fine search's 20 best settings, scored again with the start postures no take starts
+# from: each with its five reservoirs (seeds 1 to 5), on the robot, undisturbed, from
+# each take's start and from the 36 untaught ones. untaught_score.toml scores each
+# setting over these 225 runs and its 45 pushed runs of fine_pushes.toml; the typical
+# seeds of the two best are ESN #1 and ESN #2. About 30 minutes with 30 workers.
+# See README.md.
+#
+#   uv run python experiments/sweep_robot_esn.py \
+#       experiments/manual_demonstration_v2_many_starts_push_search/untaught_search.toml --workers 30
+
+# The fine search's 20 best settings, in its order, each with the runs that pass of its
+# 90 there and its median detour ratio.
+settings = [
+  { leak_rate = 0.03, spectral_radius = 0.9, input_scaling = 2.0, ridge = 1.0 },  # 90, 1.0132
+  { leak_rate = 0.017, spectral_radius = 0.9, input_scaling = 4.0, ridge = 1.0 },  # 90, 1.0520
+  { leak_rate = 0.017, spectral_radius = 1.05, input_scaling = 1.0, ridge = 1.0 },  # 90, 1.0585
+  { leak_rate = 0.017, spectral_radius = 0.75, input_scaling = 4.0, ridge = 1.0 },  # 90, 1.0607
+  { leak_rate = 0.017, spectral_radius = 1.05, input_scaling = 2.0, ridge = 10.0 },  # 90, 1.0734
+  { leak_rate = 0.017, spectral_radius = 1.05, input_scaling = 4.0, ridge = 10.0 },  # 90, 1.0767
+  { leak_rate = 0.017, spectral_radius = 1.05, input_scaling = 2.0, ridge = 1.0 },  # 89, 1.0517
+  { leak_rate = 0.017, spectral_radius = 0.9, input_scaling = 4.0, ridge = 10.0 },  # 89, 1.0783
+  { leak_rate = 0.017, spectral_radius = 0.75, input_scaling = 4.0, ridge = 10.0 },  # 89, 1.0924
+  { leak_rate = 0.03, spectral_radius = 1.05, input_scaling = 2.0, ridge = 1.0 },  # 88, 1.0117
+  { leak_rate = 0.017, spectral_radius = 0.75, input_scaling = 2.0, ridge = 0.1 },  # 88, 1.0345
+  { leak_rate = 0.017, spectral_radius = 0.9, input_scaling = 2.0, ridge = 1.0 },  # 88, 1.0576
+  { leak_rate = 0.017, spectral_radius = 0.75, input_scaling = 1.0, ridge = 0.1 },  # 88, 1.0590
+  { leak_rate = 0.017, spectral_radius = 0.75, input_scaling = 2.0, ridge = 1.0 },  # 88, 1.0676
+  { leak_rate = 0.017, spectral_radius = 0.9, input_scaling = 2.0, ridge = 10.0 },  # 88, 1.0697
+  { leak_rate = 0.017, spectral_radius = 1.05, input_scaling = 1.0, ridge = 10.0 },  # 88, 1.0960
+  { leak_rate = 0.03, spectral_radius = 1.05, input_scaling = 1.0, ridge = 1.0 },  # 87, 1.0142
+  { leak_rate = 0.03, spectral_radius = 0.75, input_scaling = 1.0, ridge = 1.0 },  # 86, 1.0117
+  { leak_rate = 0.017, spectral_radius = 1.05, input_scaling = 4.0, ridge = 1.0 },  # 86, 1.0464
+  { leak_rate = 0.017, spectral_radius = 0.9, input_scaling = 1.0, ridge = 1.0 },  # 86, 1.0647
+]
+
+[demonstrations]
+# The nine takes of reach_manual_v2_no_limits.toml, filtered at 2 Hz.
+run = "results/demonstrations/20261117-164658-reach_manual_v2_no_limits"
+train = [
+  "demo_00_filtered.sklog.npz",  # from (13, 71) deg
+  "demo_01_filtered.sklog.npz",  # from (73, 71)
+  "demo_02_filtered.sklog.npz",  # from (133, 71)
+  "demo_03_filtered.sklog.npz",  # from (-167, 71)
+  "demo_04_filtered.sklog.npz",  # from (-107, 71)
+  "demo_05_filtered.sklog.npz",  # from (-47, 71)
+  "demo_06_filtered.sklog.npz",  # from (21, 132)
+  "demo_07_filtered.sklog.npz",  # from (141, 132)
+  "demo_08_filtered.sklog.npz",  # from (-99, 132)
+]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 800
+spectral_radius = 1.2  # listed in [[settings]]
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.1        # listed in [[settings]]
+input_scaling = 0.5    # listed in [[settings]]
+bias = true
+ridge = 1.0            # listed in [[settings]]
+seed = 1               # swept
+
+[sweep]
+seed = [1, 2, 3, 4, 5]
+
+[ranking]
+# The most runs that arrive and hold, then the smallest median detour ratio of the
+# runs that arrive.
+by = "detour_ratio"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start
+
+[evaluation.extra_starts]
+# hand_esn.toml's start postures no take starts from (deg): 36 hand positions spread
+# evenly over the workspace, joint 2 positive.
+untaught = [
+  [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
+  [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
+  [-93.0, 60.0], [-73.0, 60.0], [-53.0, 60.0], [-33.0, 60.0], [-13.0, 60.0], [7.0, 60.0],
+  [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
+  [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
+  [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
+]

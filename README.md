@@ -267,6 +267,7 @@ that run them are shared:
 | [manual_demonstration_v2_consistent_robot_loop](experiments/manual_demonstration_v2_consistent_robot_loop/README.md) | the ESN and the robot read as one dynamical system: the consistent search's two ESNs on the robot from rest anywhere, their fixed points, rates, and pulses with the arm, and every fixed point of report 019's screens with the arm, against its releases and outcomes (Stages 1 and 2) | [020](reports/020-the-esn-and-the-robot-as-one-system/README.md) |
 | [manual_demonstration_four_dof_consistent_search](experiments/manual_demonstration_four_dof_consistent_search/README.md) | the consistent search on skelarm's four-link arm: the grid and its extension below the lowest input scaling, the rule, a second rule that asks the reference to follow the arm, and the chosen ESNs against both replays in every scenario |
 | [manual_demonstration_v2_many_starts](experiments/manual_demonstration_v2_many_starts/README.md) | one target reached from many start postures on v2's arm with no joint limits, taught by one take from each of nine: ESNs of 800 neurons searched by how many starts the hand arrives and holds from and how directly, then checked from unseen starts, under pushes, and against fewer takes (Stages 1 and 2) | [023](reports/023-one-target-from-many-starts/README.md) |
+| [manual_demonstration_v2_many_starts_push_search](experiments/manual_demonstration_v2_many_starts_push_search/README.md) | the many-starts search again with the pushed runs in the score: each setting scored by how many of its runs pass, undisturbed and under report 007's pushes, then by how directly the hand goes, and report 023's seven claims tested again with the ESNs it chooses (Stages 1 and 2) | [024](reports/024-many-starts-with-pushes-in-the-score/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -508,6 +509,7 @@ The reports so far:
   long presses against the joint stops from offset starts. Their settings do not hold on
   held-out seeds.
 - [023 One target from many starts: nine takes start where the arm is and go directly, but a push sends the hand far away](reports/023-one-target-from-many-starts/README.md)
+- [024 Many starts with the pushes in the score: slower reservoirs come back from report 007's pushes in time, and start less gently](reports/024-many-starts-with-pushes-in-the-score/README.md)
   (Stages 1 and 2): one target reached from many start postures on the two-link arm with
   no joint limits, taught by nine takes, with ESNs chosen by undisturbed runs only.
   Undisturbed, the two chosen arrive and hold from every taught and unseen start, and

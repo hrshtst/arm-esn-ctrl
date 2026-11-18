@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_many_starts_push_search/one_take_coarse_score.toml"
+command = "experiments/score_sweeps.py experiments/manual_demonstration_v2_many_starts_push_search/one_take_coarse_score.toml"
+started = 2026-11-18 11:10:42+09:00
+host = "delbosque"
+commit = "6f7c9c75bbefcc69d5a7edba302d41f6325d561d"
+uncommitted_changes = false

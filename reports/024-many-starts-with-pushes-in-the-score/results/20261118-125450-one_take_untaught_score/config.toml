@@ -1,0 +1,13 @@
+# The one-take baseline's score with the untaught starts: each of the fine search's 20
+# best settings over the undisturbed runs of its five reservoirs from take 00's start
+# and the 36 untaught ones, and over their pushed runs of the fine search: how many
+# pass, then the median detour ratio of the undisturbed runs that arrive. The typical
+# seeds of the two best are one-take ESN #1 and ESN #2. See README.md.
+#
+#   uv run python experiments/score_sweeps.py \
+#       experiments/manual_demonstration_v2_many_starts_push_search/one_take_untaught_score.toml
+
+[runs]
+# Runs of sweep_robot_esn.py, relative to the storage root.
+undisturbed = "results/manual_demonstration_v2_many_starts_push_search/20261118-123329-one_take_untaught_search"
+pushes = "results/manual_demonstration_v2_many_starts_push_search/20261118-111145-one_take_fine_pushes"
