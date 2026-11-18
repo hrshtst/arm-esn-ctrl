@@ -13,6 +13,7 @@ import tomli_w
 from skelarm import Skeleton, StateLog, Task, compute_inverse_kinematics
 
 from arm_esn_ctrl.autonomous import load_setups
+from arm_esn_ctrl.demonstrations import endpoint_positions, smooth_take
 from arm_esn_ctrl.storage import ENV_VAR, REPO_ROOT
 
 # The runners import each other as modules of their own directory, as they run.
@@ -80,6 +81,11 @@ def runs(storage):
 def metrics(run):
     with (run / "metrics.csv").open() as f:
         return list(csv.DictReader(f))
+
+
+def joint_angles(path):
+    """The joint angles of a demonstration's file (rad)."""
+    return import_demonstrations.joint_angles(StateLog.load(path))
 
 
 def test_takes_of_two_targets_found_by_the_pattern_are_imported_into_one_run_per_target(storage, monkeypatch, capsys):
@@ -232,6 +238,89 @@ def test_a_targets_run_imports_again_from_its_own_configuration_into_the_same_de
     for name in ("demo_00_filtered", "demo_01_filtered"):
         first, second = StateLog.load(run / f"{name}.sklog.npz"), StateLog.load(other / f"{name}.sklog.npz")
         np.testing.assert_array_equal(first.channel("q"), second.channel("q"))
+
+
+def test_a_take_recorded_a_turn_up_in_one_joint_is_imported_within_a_turn_with_its_hand_path_and_its_move(
+    storage, monkeypatch, capsys
+):
+    take = taught_take([13.0, 71.0 + 360.0], target(0), recorded_task(0))
+    take.save(storage / TAKES / "take_001.sklog.npz")
+
+    import_takes(TARGETS, monkeypatch)
+
+    (run,) = runs(storage)
+    np.testing.assert_allclose(load(run / "config.toml")["demonstrations"]["start_q"], [[13.0, 71.0]], atol=1e-9)
+    # The take as recorded, a turn down in joint 2 at every sample: the same velocities and hand path.
+    recorded, imported = import_demonstrations.joint_angles(take), joint_angles(run / "demo_00.sklog.npz")
+    np.testing.assert_allclose(imported, recorded - [0.0, 2 * np.pi], rtol=0, atol=1e-12)
+    np.testing.assert_array_equal(StateLog.load(run / "demo_00.sklog.npz").channel("dq"), take.channel("dq"))
+    skeleton = Skeleton.from_toml(TARGETS)
+    hand = endpoint_positions(skeleton, recorded)
+    np.testing.assert_allclose(endpoint_positions(skeleton, imported), hand, rtol=0, atol=1e-12)
+    # The filtered demonstration is the take filtered, a turn down in joint 2, along the same hand path.
+    smoothed = import_demonstrations.joint_angles(smooth_take(take, skeleton, {}, load(TARGETS)["recording"]["filter"]))
+    filtered = joint_angles(run / "demo_00_filtered.sklog.npz")
+    np.testing.assert_allclose(filtered, smoothed - [0.0, 2 * np.pi], rtol=0, atol=1e-9)
+    np.testing.assert_allclose(
+        endpoint_positions(skeleton, filtered), endpoint_positions(skeleton, smoothed), rtol=0, atol=1e-9
+    )
+    # Its move in the measurements, which still name and hash the take's own file.
+    rows = metrics(run)
+    assert [(row["turns_q1"], row["turns_q2"]) for row in rows] == [("0", "1")] * 2
+    assert [float(row["start_q2_deg"]) for row in rows] == pytest.approx([71.0] * 2)
+    assert {row["take_sha256"] for row in rows} == {
+        import_demonstrations.sha256_of(storage / TAKES / "take_001.sklog.npz")
+    }
+    assert "The take (take_001.sklog.npz) is moved by -360 deg in joint 2" in capsys.readouterr().out
+
+
+def test_two_takes_of_the_same_motion_a_turn_apart_are_imported_as_the_same_joint_angles(storage, monkeypatch):
+    taught_take([13.0, 71.0], target(0), recorded_task(0)).save(storage / TAKES / "take_001.sklog.npz")
+    taught_take([13.0 - 360.0, 71.0 + 360.0], target(0), recorded_task(0)).save(storage / TAKES / "take_002.sklog.npz")
+
+    import_takes(TARGETS, monkeypatch)
+
+    (run,) = runs(storage)
+    for first, second in (("demo_00", "demo_01"), ("demo_00_filtered", "demo_01_filtered")):
+        np.testing.assert_allclose(
+            joint_angles(run / f"{first}.sklog.npz"), joint_angles(run / f"{second}.sklog.npz"), rtol=0, atol=1e-9
+        )
+    np.testing.assert_allclose(load(run / "config.toml")["demonstrations"]["start_q"], [[13.0, 71.0]] * 2, atol=1e-9)
+    assert [(row["turns_q1"], row["turns_q2"]) for row in metrics(run)] == [("0", "0")] * 2 + [("-1", "1")] * 2
+
+
+def test_without_the_key_a_take_a_turn_up_is_imported_as_recorded_and_its_demonstration_is_a_copy_of_the_take(
+    tmp_path, storage, monkeypatch, capsys
+):
+    config = load(TARGETS)
+    del config["recording"]["start_within_a_turn"]
+    path = tmp_path / "demonstrations" / TARGETS.name
+    path.parent.mkdir()
+    path.write_text(tomli_w.dumps(config))
+    taught_take([13.0, 71.0 + 360.0], target(0), recorded_task(0)).save(storage / TAKES / "take_001.sklog.npz")
+
+    import_takes(path, monkeypatch)
+
+    (run,) = runs(storage)
+    text = (run / "config.toml").read_text()
+    assert "begins (deg), as recorded.\n" in text
+    np.testing.assert_allclose(tomllib.loads(text)["demonstrations"]["start_q"], [[13.0, 431.0]], atol=1e-9)
+    assert (run / "demo_00.sklog.npz").read_bytes() == (storage / TAKES / "take_001.sklog.npz").read_bytes()
+    assert np.degrees(joint_angles(run / "demo_00_filtered.sklog.npz")[0]) == pytest.approx([13.0, 431.0], abs=0.01)
+    assert not any(key.startswith("turns_q") for key in metrics(run)[0])
+    assert "is moved by" not in capsys.readouterr().out
+
+
+def test_a_take_that_already_starts_within_a_turn_is_not_changed_by_the_key(storage, monkeypatch, capsys):
+    taught_take([100.0, -71.0], target(1), recorded_task(1)).save(storage / TAKES / "take_001.sklog.npz")
+
+    import_takes(TARGETS, monkeypatch)
+
+    (run,) = runs(storage)
+    np.testing.assert_allclose(load(run / "config.toml")["demonstrations"]["start_q"], [[100.0, -71.0]], atol=1e-9)
+    assert (run / "demo_00.sklog.npz").read_bytes() == (storage / TAKES / "take_001.sklog.npz").read_bytes()
+    assert [(row["turns_q1"], row["turns_q2"]) for row in metrics(run)] == [("0", "0")] * 2
+    assert "is moved by" not in capsys.readouterr().out
 
 
 def test_a_configuration_that_lists_its_takes_and_starts_imports_them_into_one_run_as_before(

@@ -7,7 +7,10 @@
 # There are no start postures fixed in advance: in the recorder, the maintainer poses
 # the arm where each take starts and chooses the take's target, and records as many
 # takes as he likes, one after another. Each take starts where the arm was posed, its
-# own first sample, and records which target was active.
+# own first sample, and records which target was active. Posing can leave a joint a
+# whole turn away, as it left joint 2 in takes 004 to 027, so the import moves each
+# take by whole turns to start within -180 to 180 deg in every joint
+# ([recording] start_within_a_turn).
 #
 # 1. Record the takes, into the storage root's data/ (what cannot be regenerated).
 #    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
@@ -29,19 +32,25 @@
 #    saving it.
 #
 # 2. Import them into one demonstration run per target that has takes
-#    (reach_manual_v2_targets_a, _b, _c), which checks and measures every take against
-#    its own target, as recorded (demo_00, demo_01, ...) and filtered
-#    (demo_00_filtered, ...). None is imported unless all pass: remove or record again
-#    the takes that fail. The import prints each run's directory, which an ESN's
-#    [[demonstrations]] tables name, one per target:
+#    (reach_manual_v2_targets_a, _b, _c), which moves every take within a turn, then
+#    checks and measures it against its own target, as recorded (demo_00, demo_01,
+#    ...) and filtered (demo_00_filtered, ...). None is imported unless all pass:
+#    remove or record again the takes that fail. The import prints each run's
+#    directory, which an ESN's [[demonstrations]] tables name, one per target:
 #
 #   uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_v2_targets.toml
 
 [recording]
 # The takes taught by hand, relative to the storage root: every file that matches
-# this pattern, in the order of their names. They are imported unchanged: the
+# this pattern, in the order of their names. They are imported untrimmed: the
 # human's pause before moving stays in.
 takes = "data/reach_manual_v2_targets/take_*.sklog.npz"
+# Move each take by whole turns of each joint, the same over the take, so that it
+# starts within -180 to 180 deg in every joint. The arm has no joint limits, so a
+# whole turn is the same posture and the hand path is the take's; but posing the arm
+# in the recorder can leave a joint a whole turn away, and the ESN reads joint
+# angles, to which takes of one motion a turn apart would be different data.
+start_within_a_turn = true
 # What the import checks of each take (experiments/import_demonstrations.py), as
 # reach_manual_v2_no_limits.toml's. A take begins where the arm was posed, so there
 # is no start posture to check.

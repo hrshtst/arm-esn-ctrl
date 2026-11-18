@@ -34,12 +34,23 @@ in ``[demonstrations]`` ``start_q`` (deg), and keeps the rest. An ESN's
 ``[[demonstrations]]`` tables then name the runs as any others; the import prints
 each run's directory.
 
+An arm without joint limits is in the same posture a whole turn of a joint away,
+and posing it in the recorder can leave a joint a whole turn away or more. An ESN
+reads joint angles, so takes of one motion a turn apart would be different data to
+it. With ``start_within_a_turn = true`` in ``[recording]``, each take is moved
+as it is loaded, by whole turns of each joint, the same at every sample, so that it
+begins within -180 to 180 deg in every joint (see :func:`load_take`). Its hand path
+is the take's. Everything the import does then uses the moved take: the checks, the
+demonstrations, their start postures and measurements, and the figure; the import
+prints how each moved take was moved.
+
 A take that passes is imported, its pause before moving included, into a new run
 directory, as two demonstrations that a configuration's ``[demonstrations]`` names
 as any others:
 
 - ``demo_00.sklog.npz``: a copy of the take as recorded, with its uneven sample
-  times; the ESN resamples it at its own period;
+  times; the ESN resamples it at its own period. A take moved by whole turns is
+  saved again as a log instead, the take with its joint angles moved;
 - ``demo_00_filtered.sklog.npz``: the take smoothed by the filter of
   ``[recording.filter]`` (see :func:`arm_esn_ctrl.demonstrations.smooth_take`),
   which removes the steps of the cursor's whole screen pixels; the same checks
@@ -51,8 +62,10 @@ and their measurements:
   :func:`arm_esn_ctrl.metrics.reach_metrics`), when the hand starts to move (5 mm
   from where it started) and when it arrives, its joint jitter, how the take was
   sampled (the number of samples, the length, the requested and achieved rates,
-  and the longest interval), and the take's file, relative to the storage root, and
-  its SHA-256, which ties the run to it;
+  and the longest interval), with ``start_within_a_turn`` the whole turns taken off
+  each joint (``turns_q1``, ``turns_q2``, ...; 0 where nothing moved), and the
+  take's file, relative to the storage root, and its SHA-256, which ties the run to
+  it;
 - ``demonstrations.png``: the hand path, the joint angles and the hand speed over
   time of both, and the sampling intervals of the take.
 """
@@ -118,7 +131,7 @@ def main() -> None:
     # What tells one run's demonstrations from another's where they are printed: the target.
     of = {name: f" of target {run['task']['target']['label']}" if several_targets else "" for name, run in runs.items()}
     imports = {name: load_demos(run, skeleton) for name, run in runs.items()}
-    for name, (demos, start_of, take_of) in imports.items():
+    for name, (demos, start_of, take_of, _) in imports.items():
         checked = check_demos(demos, start_of, skeleton, runs[name])
         problems |= {f"{demo}{of[name]} ({take_of[demo].name})": checked[demo] for demo in demos}
     if any(problems.values()):
@@ -129,21 +142,23 @@ def main() -> None:
         raise SystemExit(1)
 
     run_dirs = {}
-    for name, (demos, start_of, take_of) in imports.items():
+    for name, (demos, start_of, take_of, turns_of) in imports.items():
         run = runs[name]
         _, run_dir = start_run(args.config, name=name, text=None if run is config else target_text(args.config, run))
         run_dirs[name] = run_dir
         for demo, log in demos.items():
-            if demo.endswith("_filtered"):
+            if demo.endswith("_filtered") or turns_of[demo].any():
                 log.save(run_dir / f"{demo}.sklog.npz")
             else:
                 shutil.copy2(take_of[demo], run_dir / f"{demo}.sklog.npz")
         task = Task.from_dict(run["task"])
         hands = {demo: endpoint_positions(skeleton, joint_angles(log)) for demo, log in demos.items()}
+        within_a_turn = run["recording"].get("start_within_a_turn", False)
         rows = [
             {"demo": demo}
             | demo_metrics(log, hands[demo], start_of[demo], task, run["recording"]["hold"])
             | sampling_metrics(demos[demo.removesuffix("_filtered")])
+            | ({f"turns_q{j}": int(n) for j, n in enumerate(turns_of[demo], start=1)} if within_a_turn else {})
             | {"take": str(take_of[demo].relative_to(storage_root())), "take_sha256": sha256_of(take_of[demo])}
             for demo, log in demos.items()
         ]
@@ -183,9 +198,10 @@ def target_configs(
     records as active, from its own first sample. Each target's configuration is
     ``config`` with a ``reaching`` ``[task]`` toward that target, its takes in
     ``[recording]`` ``takes`` (relative to the storage root, in the order of
-    ``takes``), and where each begins in ``[demonstrations]`` ``start_q`` (deg). A take
-    whose log records no multi-target task, or other targets than ``config``'s, has
-    no target: why is given by the take's file name instead.
+    ``takes``), and where each begins in ``[demonstrations]`` ``start_q`` (deg), as
+    :func:`load_take` loads it. A take whose log records no multi-target task, or
+    other targets than ``config``'s, has no target: why is given by the take's file
+    name instead.
     """
     targets = config["task"]["targets"]
     if any("label" not in target for target in targets):
@@ -196,7 +212,7 @@ def target_configs(
     start_of: dict[Path, list[float]] = {}
     problems: dict[str, list[str]] = {}
     for take in takes:
-        log = StateLog.load(take)
+        log, _ = load_take(take, config["recording"])
         recorded = log.extra.get("playback", {}).get("task", {})
         if recorded.get("type") != MULTI_TARGET_TASK:
             problems[take.name] = ["the take records no multi-target [task], so not which target it reaches"]
@@ -224,19 +240,49 @@ def target_places(task: dict[str, Any]) -> list[tuple[float | None, ...]]:
 
 def target_text(config_path: Path, config: dict[str, Any]) -> str:
     """The ``config.toml`` of one target's run: its configuration, under a comment that says where it comes from."""
+    begins = "as recorded.\n"
+    if config["recording"].get("start_within_a_turn", False):
+        begins = "once moved by\n# whole turns to within -180 to 180 deg ([recording] start_within_a_turn).\n"
     return (
         f"# The takes of target {config['task']['target']['label']} of {config_path.name}, as a configuration of\n"
         "# that target alone, written by experiments/import_demonstrations.py: [demonstrations]\n"
-        "# start_q lists where each take of [recording] takes begins (deg), as recorded.\n\n"
+        f"# start_q lists where each take of [recording] takes begins (deg), {begins}\n"
     ) + tomli_w.dumps(config)
+
+
+def load_take(path: Path, recording: dict[str, Any]) -> tuple[StateLog, NDArray[np.int64]]:
+    """A take, and the whole turns taken off each joint: none, unless ``[recording]`` ``start_within_a_turn``.
+
+    With it, a take that begins beyond -180 to 180 deg in a joint is moved by whole
+    turns of that joint, the same at every sample, so that it begins in (-180, 180]
+    deg. An arm without joint limits is then in the same postures, and the hand
+    moves along the same path. Of a take's channels only ``q`` holds joint angles;
+    the tip and any velocities stay as recorded. The moved take is a new log, the
+    take as recorded but for ``q``.
+    """
+    log = StateLog.load(path)
+    q = joint_angles(log)
+    turns = np.zeros(q.shape[1], dtype=np.int64)
+    if recording.get("start_within_a_turn", False):
+        turns = np.ceil((q[0] - np.pi) / (2 * np.pi)).astype(np.int64)
+    if not turns.any():
+        return log, turns
+    moved = StateLog(log.build_skeleton(), producer=log.producer, channel_meta=log.channel_meta, extra=log.extra)
+    channels = log.to_arrays()
+    times = channels.pop("time")
+    channels["q"] = q - 2 * np.pi * turns
+    for i, t in enumerate(times):
+        moved.record(float(t), **{name: values[i] for name, values in channels.items()})
+    return moved, turns
 
 
 def load_demos(
     config: dict[str, Any], skeleton: Skeleton
-) -> tuple[dict[str, StateLog], dict[str, list[float]], dict[str, Path]]:
+) -> tuple[dict[str, StateLog], dict[str, list[float]], dict[str, Path], dict[str, NDArray[np.int64]]]:
     """The demonstrations of a configuration of one target, by name: each take as recorded and filtered.
 
-    Also each one's start posture, from ``[demonstrations]`` ``start_q`` (deg), and its take.
+    Also each one's start posture, from ``[demonstrations]`` ``start_q`` (deg), its
+    take, and the whole turns taken off each joint of the take (see :func:`load_take`).
     """
     recording = config["recording"]
     takes = listed_takes(recording)
@@ -247,14 +293,15 @@ def load_demos(
     demos: dict[str, StateLog] = {}
     start_of: dict[str, list[float]] = {}
     take_of: dict[str, Path] = {}
+    turns_of: dict[str, NDArray[np.int64]] = {}
     for i, (take, start_deg) in enumerate(zip(takes, starts_deg, strict=True)):
-        recorded = StateLog.load(take)
+        recorded, turns = load_take(take, recording)
         for name, log in (
             (f"demo_{i:02d}", recorded),
             (f"demo_{i:02d}_filtered", smooth_take(recorded, skeleton, config["task"], recording["filter"])),
         ):
-            demos[name], start_of[name], take_of[name] = log, start_deg, take
-    return demos, start_of, take_of
+            demos[name], start_of[name], take_of[name], turns_of[name] = log, start_deg, take, turns
+    return demos, start_of, take_of, turns_of
 
 
 def check_demos(
@@ -335,7 +382,7 @@ def sha256_of(path: Path) -> str:
 
 
 def print_metrics(rows: list[dict[str, Any]]) -> None:
-    """Print each demonstration's timing and reach metrics, then how each take was sampled."""
+    """Print each demonstration's timing and reach metrics, then how each take was sampled, and moved if it was."""
     for row in rows:
         if "movement_time" not in row:  # a task without a target
             print(
@@ -357,6 +404,13 @@ def print_metrics(rows: list[dict[str, Any]]) -> None:
             f"{name}: {row['samples']} samples at {row['achieved_rate_hz']:.1f} Hz of {row['requested_rate_hz']:g} Hz"
             f" requested; longest interval {1000 * row['longest_interval_s']:.1f} ms"
         )
+        moves = [
+            f"{-360 * n:+d} deg in joint {key.removeprefix('turns_q')}"
+            for key, n in row.items()
+            if key.startswith("turns_q") and n
+        ]
+        if moves:
+            print(f"{name} ({Path(row['take']).name}) is moved by {', '.join(moves)}")
 
 
 def style(ax: Axes) -> None:

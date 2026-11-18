@@ -69,7 +69,11 @@ takes as he likes; `[recording]` `takes` is a pattern that every take's file mat
 Each take starts at its own first sample and records its target, and the import puts
 the takes of each target into a run of their own (`reach_manual_v2_targets_a`, `_b`,
 `_c`), as a configuration of that target alone with those takes and start postures
-would. Its header gives the recorder's command and its keys.
+would. Its header gives the recorder's command and its keys. Posing the arm can leave
+a joint a whole turn away, as it left joint 2 in takes 004 to 027, and the ESN reads
+joint angles; with `[recording]` `start_within_a_turn`, the import moves each take by
+whole turns to start within -180 to 180 deg in every joint. Without joint limits that
+is the same motion, and the hand path is the take's.
 
 ## Runs
 

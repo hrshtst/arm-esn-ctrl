@@ -61,6 +61,7 @@ def test_the_takes_of_three_targets_are_of_the_many_starts_arm_and_recording_wit
     assert {key: targets["recording"][key] for key in checks} == {key: takes["recording"][key] for key in checks}
     assert targets["recording"]["takes"] == "data/reach_manual_v2_targets/take_*.sklog.npz"
     assert "start_tolerance_deg" not in targets["recording"]
+    assert targets["recording"]["start_within_a_turn"]  # posing can leave a joint a whole turn away
     assert "demonstrations" not in targets
     task = Task.from_dict(targets["task"])
     assert (task.type, active_target_index(task), task.duration) == ("multi_target_reaching", 0, 4.0)
