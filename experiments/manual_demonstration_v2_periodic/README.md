@@ -145,6 +145,24 @@ for the scripted take.
 
 The search leaves out the pushes, the block, and held-out seeds.
 
+### The search on the scripted take
+
+**The center.** Of the coarse search's 108 settings
+(`20261118-191114-scripted_coarse_search`), 65 cycle from all eight starts and 24 from
+none. The smallest median curve RMS among the 65, 0.80 mm, is that of leak rate 0.03,
+spectral radius 1.5, input scaling 2, and ridge 10⁻². The fine search's values around
+it:
+
+| Parameter | Values |
+| --- | --- |
+| leak rate | 0.017, 0.03, 0.055 |
+| spectral radius | 1.35, 1.5, 1.65 |
+| input scaling | 1, 2, 4 |
+| ridge | 10⁻³, 10⁻², 10⁻¹ |
+
+The center's spectral radius and input scaling are the coarse grid's largest, so the
+fine search goes as far above them as below.
+
 ## The analysis (3a)
 
 The chosen ESNs are tested on the robot against the replay. No size is fixed in
@@ -304,6 +322,7 @@ the machine is shared.
 | Configurations | What they run |
 | --- | --- |
 | `scripted_coarse_search.toml` | the coarse search on the scripted take: 108 settings, seed 0, each on the robot for 40 s from the eight starts on the curve (about 10 minutes with 15 workers) |
+| `scripted_fine_search.toml` | the fine search on the scripted take: 81 settings around the coarse search's best, seeds 1 to 5, alike |
 | `coarse_search.toml` | the same on the take by hand; its `run` names the take's import |
 | `hand_esn.toml` | an ESN to tune by hand, trained on the take by hand and run on its own from the eight starts on the curve and the 36 untaught ones; it prints the apps' commands |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay (88 runs) |

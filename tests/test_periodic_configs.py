@@ -99,3 +99,36 @@ def test_the_hand_robot_runs_the_hand_esn_with_the_searchs_tracker_against_the_r
     assert "progress" not in robot  # no progress replay in this stage
     assert robot["evaluation"] == hand["evaluation"]
     assert "disturbance" not in robot
+
+
+# The scripted coarse search's best setting (run 20261118-191114-scripted_coarse_search): the fine search's center.
+SCRIPTED_CENTER = {"leak_rate": 0.03, "spectral_radius": 1.5, "input_scaling": 2.0, "ridge": 0.01}
+
+
+def test_the_scripted_fine_search_is_the_scripted_coarse_search_but_for_its_values_and_seeds():
+    fine, coarse = load(EXPERIMENT / "scripted_fine_search.toml"), load(EXPERIMENT / "scripted_coarse_search.toml")
+
+    fine_sweep, coarse_sweep = fine.pop("sweep"), coarse.pop("sweep")
+    assert fine_sweep.pop("seed") == [1, 2, 3, 4, 5]
+    assert list(fine_sweep) == list(coarse_sweep)
+    fine_esn, coarse_esn = fine.pop("esn"), coarse.pop("esn")
+    assert fine_esn == coarse_esn | SCRIPTED_CENTER | {"seed": 1}  # the center's values, and the first seed
+    assert fine == coarse  # the same take, tracker, runs, and score
+
+
+def test_the_scripted_fine_search_takes_the_center_and_the_values_halfway_to_its_coarse_neighbors():
+    fine, coarse = load(EXPERIMENT / "scripted_fine_search.toml"), load(EXPERIMENT / "scripted_coarse_search.toml")
+
+    for name, center in SCRIPTED_CENTER.items():
+        grid = coarse["sweep"][name]
+        k = grid.index(center)
+        if name == "spectral_radius":  # halfway in difference
+            # Beyond an edge of the grid, as far from the center as the neighbor on the other side.
+            lower = grid[k - 1] if k > 0 else 2 * center - grid[k + 1]
+            upper = grid[k + 1] if k + 1 < len(grid) else 2 * center - grid[k - 1]
+            expected = [round((lower + center) / 2, 2), center, round((center + upper) / 2, 2)]
+        else:  # halfway in ratio, to two digits
+            lower = grid[k - 1] if k > 0 else center**2 / grid[k + 1]
+            upper = grid[k + 1] if k + 1 < len(grid) else center**2 / grid[k - 1]
+            expected = [float(f"{np.sqrt(lower * center):.2g}"), center, float(f"{np.sqrt(center * upper):.2g}")]
+        assert fine["sweep"][name] == expected, name
