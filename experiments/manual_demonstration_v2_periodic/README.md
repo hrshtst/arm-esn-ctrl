@@ -18,9 +18,10 @@ The maintainer then changed them, the same day and before any search or claim wa
 run ([what was changed](#what-the-maintainer-changed)), and confirmed 3a's as they
 stand here. 3b's are a proposal: the maintainer confirms them before 3b starts.
 The scripted take is made and imported
-(`results/demonstrations/20261118-171132-ellipse_scripted_v2_no_limits`). A first take
-by hand was refused by the import and is recorded again. No search or claim has been
-run.
+(`results/demonstrations/20261118-171132-ellipse_scripted_v2_no_limits`). Two takes by
+hand were refused by the import, their samples uneven while sweeps loaded the machine,
+and the take is recorded again. On the scripted take the coarse and the fine search
+are run; no claim has been run.
 
 **Checks of the runners.** Before the search, the runners were tried in a scratch
 directory, on the scripted take and on a made-up take in place of the hand's, with
@@ -162,6 +163,16 @@ it:
 
 The center's spectral radius and input scaling are the coarse grid's largest, so the
 fine search goes as far above them as below.
+
+**The fine search** (`20261118-194306-scripted_fine_search`). Of its 81 settings, 69
+cycle in all 40 runs. The 12 others are 11 of the 27 with leak rate 0.055, all nine
+with input scaling 4 among them, and one with leak rate 0.017. The 20 settings with
+the best scores, median curve RMS 0.79 to 0.94 mm, go to the scoring with the untaught
+starts: the nine with leak rate 0.017 and input scaling 4, the nine with leak rate
+0.03 and input scaling 4, and two with leak rate 0.055, spectral radius 1.65, and
+input scaling 2. The best lie on the fine grid's edge, at its smallest leak rate and
+its largest input scaling. The rule does not move the grid, so the search goes on
+from these 20.
 
 ## The analysis (3a)
 
@@ -323,6 +334,7 @@ the machine is shared.
 | --- | --- |
 | `scripted_coarse_search.toml` | the coarse search on the scripted take: 108 settings, seed 0, each on the robot for 40 s from the eight starts on the curve (about 10 minutes with 15 workers) |
 | `scripted_fine_search.toml` | the fine search on the scripted take: 81 settings around the coarse search's best, seeds 1 to 5, alike |
+| `scripted_untaught_search.toml` | the scoring with the untaught starts on the scripted take: the fine search's 20 best settings, seeds 1 to 5, each on the robot for 40 s from the eight starts on the curve and the 36 untaught ones (about 90 minutes with 15 workers) |
 | `coarse_search.toml` | the same on the take by hand; its `run` names the take's import |
 | `hand_esn.toml` | an ESN to tune by hand, trained on the take by hand and run on its own from the eight starts on the curve and the 36 untaught ones; it prints the apps' commands |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay (88 runs) |

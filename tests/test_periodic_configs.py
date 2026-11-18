@@ -132,3 +132,39 @@ def test_the_scripted_fine_search_takes_the_center_and_the_values_halfway_to_its
             upper = grid[k + 1] if k + 1 < len(grid) else center**2 / grid[k - 1]
             expected = [float(f"{np.sqrt(lower * center):.2g}"), center, float(f"{np.sqrt(center * upper):.2g}")]
         assert fine["sweep"][name] == expected, name
+
+
+ESN_NAMES = ["leak_rate", "spectral_radius", "input_scaling", "ridge"]
+
+
+def test_the_scripted_untaught_search_is_the_scripted_fine_search_but_for_its_settings_seeds_and_untaught_starts():
+    again, fine = load(EXPERIMENT / "scripted_untaught_search.toml"), load(EXPERIMENT / "scripted_fine_search.toml")
+
+    settings, sweep, fine_sweep = again.pop("settings"), again.pop("sweep"), fine.pop("sweep")
+    assert len(settings) == 20
+    assert sweep == {"seed": fine_sweep["seed"]}  # seeds 1 to 5, the other values listed in settings
+    starts = again["evaluation"]["extra_starts"]
+    assert list(starts) == ["on_curve", "untaught"]
+    starts.pop("untaught")
+    assert again == fine  # the same take, ESN, tracker, runs, and score
+
+
+def test_the_scripted_untaught_searchs_settings_are_distinct_and_on_the_fine_searchs_grid():
+    again, fine = load(EXPERIMENT / "scripted_untaught_search.toml"), load(EXPERIMENT / "scripted_fine_search.toml")
+
+    settings = [tuple(setting[name] for name in ESN_NAMES) for setting in again["settings"]]
+    assert len(set(settings)) == len(settings) == 20
+    for setting in again["settings"]:
+        assert list(setting) == ESN_NAMES
+        assert all(setting[name] in fine["sweep"][name] for name in ESN_NAMES)
+    assert settings[:2] == [(0.017, 1.35, 4.0, 1e-3), (0.017, 1.5, 4.0, 1e-3)]  # the fine search's two best
+
+
+def test_the_scripted_untaught_search_starts_on_the_fine_searchs_curve_and_from_stage_1s_untaught_starts():
+    starts = load(EXPERIMENT / "scripted_untaught_search.toml")["evaluation"]["extra_starts"]
+    fine = load(EXPERIMENT / "scripted_fine_search.toml")["evaluation"]["extra_starts"]
+
+    assert starts["on_curve"] == fine["on_curve"]
+    assert starts["untaught"] == load(EXPERIMENT / "hand_esn.toml")["evaluation"]["extra_starts"]["untaught"]
+    assert starts["untaught"] == load(STAGE_1 / "hand_esn.toml")["evaluation"]["extra_starts"]["untaught"]
+    assert len(starts["untaught"]) == 36
