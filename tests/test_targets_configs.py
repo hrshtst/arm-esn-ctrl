@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from skelarm import Skeleton, Task, multi_target_specs
 
-from arm_esn_ctrl.autonomous import task_names
+from arm_esn_ctrl.autonomous import start_postures, task_names
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
@@ -222,4 +222,85 @@ def test_the_searchs_header_runs_it_with_15_workers_as_the_machine_is_shared(nam
         f"experiments/manual_demonstration_v2_targets/{name}",
         "--workers",
         "15",
+    ]
+
+
+# ESN #1 and ESN #2, the typical seeds of the two best settings of the untaught search: their
+# files, the place of their setting in its list, and their setting and seed.
+CHOSEN = [
+    ("esn1_lr0.17_sr1.05_is1_ridge10_seed1.toml", 0, (0.17, 1.05, 1.0, 10.0, 1)),
+    ("esn2_lr0.17_sr1.2_is1_ridge10_seed5.toml", 2, (0.17, 1.2, 1.0, 10.0, 5)),  # third in the fine search's order
+]
+SWEPT = (*CENTER, "seed")
+STAGE_1_ESN = MANY_STARTS / "esn1_lr0.055_sr1.2_is1_ridge1_seed4.toml"
+
+
+@pytest.mark.parametrize("name", [name for name, _, _ in CHOSEN])
+def test_each_chosen_esn_parses_as_one_esn_of_three_tasks_run_from_each_takes_start_and_36_untaught_ones(name):
+    config = load(EXPERIMENT / name)
+
+    assert task_names(config["demonstrations"]) == ("A", "B", "C")
+    EsnConfig(**config["esn"])
+    # Of each task: its nine takes' starts, then the 36 untaught starts, run with its context.
+    takes = {take.split(".")[0]: np.zeros((1, 2)) for take in TAKES}
+    starts = start_postures(config["evaluation"], takes)
+    assert [start.group for start in starts] == ["demonstrated"] * 9 + ["untaught"] * 36
+
+
+@pytest.mark.parametrize("name", [name for name, _, _ in CHOSEN])
+def test_each_chosen_esn_is_the_untaught_searchs_in_its_takes_its_esn_and_its_runs_but_for_its_setting_and_seed(
+    name,
+):
+    chosen, again = load(EXPERIMENT / name), load(EXPERIMENT / "untaught_search.toml")
+
+    assert list(chosen) == ["demonstrations", "esn", "evaluation", "apps"]  # no sweep, and no disturbance
+    assert chosen["demonstrations"] == again["demonstrations"]
+    assert without(chosen["esn"], SWEPT) == without(again["esn"], SWEPT)
+    assert set(CONTEXT) <= set(chosen["esn"])
+    # Its duration, its hold, the takes' own starts, and the untaught starts.
+    assert chosen["evaluation"] == again["evaluation"]
+
+
+@pytest.mark.parametrize(("n", "chosen"), list(enumerate(CHOSEN, start=1)), ids=[name for name, _, _ in CHOSEN])
+def test_each_chosen_esns_setting_is_listed_by_the_untaught_search_its_seed_is_one_of_its_and_its_name_states_them(
+    n, chosen
+):
+    name, place, values = chosen
+    esn, again = load(EXPERIMENT / name)["esn"], load(EXPERIMENT / "untaught_search.toml")
+
+    assert tuple(esn[key] for key in SWEPT) == values
+    setting = {key: esn[key] for key in CENTER}
+    assert again["settings"].index(setting) == place  # ESN #1's is the first, the one that held in every run
+    assert esn["seed"] in again["sweep"]["seed"]
+    leak_rate, spectral_radius, input_scaling, ridge, seed = values
+    assert name == f"esn{n}_lr{leak_rate:g}_sr{spectral_radius:g}_is{input_scaling:g}_ridge{ridge:g}_seed{seed}.toml"
+
+
+def test_the_two_chosen_esns_differ_only_in_their_spectral_radius_and_seed():
+    esn1, esn2 = (load(EXPERIMENT / name) for name, _, _ in CHOSEN)
+    different = ("spectral_radius", "seed")
+
+    assert without(esn1, {"esn"}) == without(esn2, {"esn"})
+    assert without(esn1["esn"], different) == without(esn2["esn"], different)
+    for key in different:
+        assert esn1["esn"][key] != esn2["esn"][key]
+
+
+@pytest.mark.parametrize("name", [name for name, _, _ in CHOSEN])
+def test_each_chosen_esns_apps_get_stage_1s_esns_tracker_and_a_take_in_the_repository(name):
+    apps = load(EXPERIMENT / name)["apps"]
+
+    assert apps == load(STAGE_1_ESN)["apps"]
+    arguments = apps["robot_app"].split()
+    assert (REPO_ROOT / arguments[arguments.index("--gains-from") + 1]).exists()
+
+
+@pytest.mark.parametrize("name", [name for name, _, _ in CHOSEN])
+def test_each_chosen_esns_header_trains_and_runs_it_with_autonomous_esn(name):
+    assert header_command(EXPERIMENT / name) == [
+        "uv",
+        "run",
+        "python",
+        "experiments/autonomous_esn.py",
+        f"experiments/manual_demonstration_v2_targets/{name}",
     ]
