@@ -148,6 +148,43 @@ def test_without_seeds_a_setting_has_no_typical_seed():
     assert "seeds" not in score
 
 
+def test_a_settings_runs_are_those_of_all_its_tasks_and_each_tasks_holding_runs_are_given():
+    runs = [
+        run(0.01, 0, 1.10) | {"task": "near"},
+        run(0.01, 0, 1.20) | {"task": "near"},
+        run(0.01, 0, 1.30) | {"task": "far"},
+        run(0.01, 0, 1.40) | {"task": "far"},
+        # Fails one target in both runs: fewer holding runs, whatever its detour ratio.
+        run(0.03, 0, 1.01) | {"task": "near"},
+        run(0.03, 0, 1.02) | {"task": "near"},
+        run(0.03, 0, math.nan, failed=True) | {"task": "far"},
+        run(0.03, 0, math.nan, failed=True) | {"task": "far"},
+    ]
+
+    scores = score_settings(runs, ["leak_rate"])
+
+    assert [score["leak_rate"] for score in scores] == [0.01, 0.03]
+    assert [(score["runs"], score["holding_runs"]) for score in scores] == [(4, 4), (4, 2)]
+    assert [(score["holding_runs_near"], score["holding_runs_far"]) for score in scores] == [(2, 2), (2, 0)]
+    assert scores[0]["median_detour_ratio"] == pytest.approx(1.25)
+    assert list(scores[0]) == [
+        "leak_rate",
+        "runs",
+        "holding_runs",
+        "median_detour_ratio",
+        "holding_runs_near",
+        "holding_runs_far",
+        "seeds",
+        "typical_seed",
+    ]
+
+
+def test_a_setting_of_one_task_has_no_holding_runs_of_each_task():
+    (score,) = score_settings([run(0.03, 0, 1.1), run(0.03, 1, 1.2)], ["leak_rate"])
+
+    assert list(score) == ["leak_rate", "runs", "holding_runs", "median_detour_ratio", "seeds", "typical_seed"]
+
+
 def test_a_sweep_tries_every_combination_of_its_values_the_last_varying_fastest():
     combinations = sweep_combinations({"leak_rate": [0.01, 0.03], "seed": [1, 2]})
 
