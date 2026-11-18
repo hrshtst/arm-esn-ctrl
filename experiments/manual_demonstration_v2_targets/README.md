@@ -45,6 +45,68 @@ The configuration's header gives the recorder's command. The takes that were
 recorded, their starts, and their number per target are reported here after the
 import, before the search.
 
+### The takes as recorded (added after the import, 2026-11-18)
+
+The maintainer recorded 27 takes, `take_001` to `take_027`, nine to each target. All
+pass the import's checks. They are in three runs in the storage root:
+`results/demonstrations/20261118-175915-reach_manual_v2_targets_a`, `…-175916-…_b`, and
+`…-175917-…_c`.
+
+| Target | Demonstration | Take | Start (°) | Hand at the start (m) | To the target (m) | Arrives (s) | Length (s) | |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A | demo_00 | 001 | (13, 71) | (0.53, 0.51) | 1.13 | 8.2 | 18.5 | |
+| A | demo_01 | 002 | (−19, 86) | (0.63, 0.21) | 1.24 | 9.1 | 16.8 | |
+| A | demo_02 | 003 | (−60, 121) | (0.44, −0.08) | 1.15 | 10.9 | 18.5 | |
+| A | demo_03 | 004 | (174, 150) | (−0.17, −0.18) | 0.72 | 7.5 | 19.5 | |
+| A | demo_04 | 005 | (38, 46) | (0.43, 0.71) | 1.08 | 7.0 | 16.5 | |
+| A | demo_05 | 006 | (83, 44) | (−0.18, 0.81) | 0.59 | 6.0 | 17.3 | |
+| A | demo_06 | 007 | (156, 89) | (−0.63, −0.16) | 0.56 | 5.4 | 15.5 | |
+| A | demo_07 | 022 | (55, 80) | (0.00, 0.69) | 0.67 | 5.8 | 18.9 | starts at B |
+| A | demo_08 | 023 | (−23, 115) | (0.45, 0.20) | 1.07 | 9.4 | 18.8 | starts at C |
+| B | demo_00 | 008 | (155, 95) | (−0.59, −0.16) | 1.05 | 7.1 | 17.3 | |
+| B | demo_01 | 009 | (150, 138) | (−0.31, −0.13) | 0.89 | 7.6 | 18.5 | |
+| B | demo_02 | 010 | (−62, 139) | (0.33, −0.05) | 0.82 | 7.5 | 18.6 | |
+| B | demo_03 | 011 | (−18, 88) | (0.61, 0.22) | 0.78 | 7.4 | 18.1 | |
+| B | demo_04 | 012 | (16, 53) | (0.63, 0.51) | 0.65 | 5.7 | 16.6 | |
+| B | demo_05 | 013 | (36, 37) | (0.53, 0.67) | 0.53 | 5.7 | 17.1 | |
+| B | demo_06 | 014 | (75, 57) | (−0.14, 0.78) | 0.16 | 3.2 | 13.7 | |
+| B | demo_07 | 024 | (115, 73) | (−0.60, 0.40) | 0.67 | 6.1 | 18.5 | starts at A |
+| B | demo_08 | 025 | (−24, 115) | (0.45, 0.20) | 0.67 | 7.6 | 20.1 | starts at C |
+| C | demo_00 | 015 | (154, 99) | (−0.57, −0.16) | 1.08 | 9.4 | 20.1 | |
+| C | demo_01 | 016 | (147, 136) | (−0.33, −0.12) | 0.84 | 10.6 | 20.1 | |
+| C | demo_02 | 017 | (−65, 134) | (0.36, −0.08) | 0.30 | 4.3 | 15.1 | |
+| C | demo_03 | 018 | (−14, 65) | (0.73, 0.20) | 0.28 | 3.9 | 15.6 | |
+| C | demo_04 | 019 | (16, 61) | (0.57, 0.53) | 0.35 | 4.0 | 16.6 | |
+| C | demo_05 | 020 | (34, 60) | (0.39, 0.68) | 0.48 | 6.5 | 17.7 | |
+| C | demo_06 | 021 | (76, 57) | (−0.15, 0.78) | 0.83 | 7.7 | 21.8 | |
+| C | demo_07 | 026 | (114, 75) | (−0.60, 0.40) | 1.06 | 9.3 | 20.0 | starts at A |
+| C | demo_08 | 027 | (56, 78) | (0.00, 0.70) | 0.67 | 6.5 | 19.4 | starts at B |
+
+- **The starts are shared between the targets.** The takes to different targets start
+  from about the same seven places, within about 0.15 m, and the last two takes to each target start at
+  the other two targets: all six reaches from one target to another are taught. So
+  the start posture does not tell the ESN which target a take reaches to.
+- **The hand arrives** 3.2 to 10.9 s into a take (median 7.1 s), and every take then
+  holds still for 7 s or more. At 4 s, where claim 5 changes the context, the hands of
+  three takes have arrived (B's demo_06, C's demo_03 and demo_04); at 16 s, claim 4's
+  change, all have.
+- **Every take rests at one posture a target:** (114°, 75°) at A, (55°, 79°) at B, and
+  (−24°, 115°) at C, within 1.5°. No take goes around the base the other way, so stage
+  1's two rest postures for one target do not occur here.
+
+**Joint 2 a whole turn up.** As recorded, takes 004 to 027 have joint 2 between 396°
+and 521°, where takes 001 to 003 have 71° to 166°: while the arm was posed after take
+003, joint 2 went once around, which the arm without limits allows and which looks the
+same, and every later take kept that turn. The ESN reads joint angles, so the same
+motion a turn apart would be different data. The maintainer decided, before any run,
+that the import moves each take by whole turns so that it starts within −180° to 180°
+in every joint (`[recording] start_within_a_turn`): takes 004 to 027 come down by
+360° in joint 2, and all 27 then have joint 2 between 37° and 166°. The hand paths are
+unchanged, to rounding. A first import without the move
+(`…-174509-…_a`, `…-174510-…_b`, `…-174511-…_c`) is in the storage root and is not
+used. The recorder was then changed so that leaving the preparation brings each joint
+back within a turn.
+
 ## The context
 
 The ESN's input holds, after the two joint angles, one value per target: 1 for the
