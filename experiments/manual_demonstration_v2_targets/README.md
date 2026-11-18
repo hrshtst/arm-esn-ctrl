@@ -214,11 +214,13 @@ The fine search ran as `20261118-184536-fine_search`, in two hours with 15 worke
   103.6, 88.1; input scaling 1, 2, 4: 116.1, 112.8, 79.6; ridge 0.1, 1, 10: 94.9,
   108.4, 105.2; spectral radius 1.05, 1.2, 1.35: 104.9, 102.7, 100.9.
 - **Most failing runs reach their target and do not stay the 2 s.** Of the 10,935
-  runs, 2,590 fail: in 897 the hand never comes within 20 mm, and in 1,693 it does and
-  is outside again within the 2 s after; 1,384 of these end within 20 mm. In the 20
-  best settings 127 of 2,700 runs fail (68 at A, 55 at B, 4 at C): 5 never arrive,
-  all at A, and 122 arrive and leave, of which 120 end within 11 mm of the target
-  (median 4 mm).
+  runs, 2,606 fail: in 897 the hand never comes within 20 mm, in 1,693 it does and
+  is outside again within the 2 s after, and in 16 it arrives too late for the 2 s to
+  be seen; 1,384 of those that leave end within 20 mm. In the 20 best settings 128 of
+  2,700 runs fail (69 at A, 55 at B, 4 at C): 5 never arrive, all at A, one arrives
+  too late, and 122 arrive and leave, of which 120 end within 11 mm of the target
+  (median 4 mm). (The counts of this item were corrected after step 8's run: they
+  first left out the runs that arrive too late.)
 
 **Step 8 runs the 20 settings with the best scores.** Its rule names two cases, the
 settings whose every run holds and none such. With one such setting, step 9 would
@@ -227,6 +229,39 @@ holds; the setting that holds in every run is the first of them. This was the
 session's reading of the rule, made before step 8's run. The maintainer confirmed it
 while the run was going, before its outcome was read: ESN #1 and ESN #2 are the best
 and the second best of step 8's ranking.
+
+**ESN #1 and ESN #2 (added after step 8's run, 2026-11-18).** Step 8 ran as
+`20261118-211532-untaught_search`, in 2 hours 40 minutes with 15 workers: 20 settings,
+five reservoirs each, 135 runs a reservoir. No setting holds in all 675 runs. The two
+best:
+
+| | Leak rate | Spectral radius | Input scaling | Ridge | Runs that hold, of 675 | At A, B, C, of 225 | Median detour ratio | Typical seed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ESN #1 | 0.17 | 1.05 | 1 | 10 | 650 | 224, 207, 219 | 1.045 | 1 |
+| ESN #2 | 0.17 | 1.2 | 1 | 10 | 639 | 214, 207, 218 | 1.053 | 5 |
+
+- **ESN #1** is the setting that held in every run of the fine search. From the
+  takes' starts it holds in all 135 runs again, and from the untaught starts in 515
+  of 540: 179 of 180 at A, 162 at B, and 174 at C. Its typical seed, 1, holds in all
+  its 135 runs.
+- **ESN #2** differs from it in the spectral radius only. It holds in 134 of 135 from
+  the takes' starts and in 505 of 540 from the untaught ones: 170 at A, 162 at B, and
+  173 at C. Its typical seed, 5, holds in 131 of its 135 runs: all 27 from the takes'
+  starts, and 35, 36, and 33 of 36 untaught starts at A, B, and C.
+- **The untaught starts fail otherwise than the takes' starts.** Over the 20 settings,
+  2,371 of the 10,800 runs from untaught starts fail, and in 1,542 of them the hand
+  never comes within 20 mm of its target; from the takes' starts 128 of 2,700 fail,
+  and 5 of them never arrive. Of ESN #1's setting's 25 failing runs, 23 never arrive,
+  and 21 of these end 1.24 to 1.28 m from the target. One reservoir (seed 2) of each
+  of the two settings fails from 15 of the 36 untaught starts at B and from none
+  elsewhere.
+- **The third setting** (leak rate 0.055, spectral radius 1.35, input scaling 1,
+  ridge 10) holds in 626; the last of the 20, in 382.
+
+Both ESNs have stage 1's ESN #2's ridge of 10 and a spectral radius near 1; their
+leak rate is the fine grid's largest, where stage 1's two ESNs have 0.055 and 0.1.
+The setting second in the fine search (leak rate 0.055, spectral radius 1.35, input
+scaling 2, ridge 1; 134 of 135 there) is 14th here, with 533.
 
 ## The analysis
 

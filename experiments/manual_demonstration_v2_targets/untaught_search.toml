@@ -6,8 +6,8 @@
 # 27 runs an ESN, and from stage 1's 36 untaught starts with each of the three
 # contexts, 108 runs. Each setting is scored over the 675 runs of its five seeds by how
 # many arrive and hold at the target their context names, then by their median detour
-# ratio; ESN #1 and ESN #2 are the typical seeds of the two best. About two and a
-# half hours with 15 workers. See README.md.
+# ratio; ESN #1 and ESN #2 are the typical seeds of the two best. About two hours
+# and 40 minutes with 15 workers. See README.md.
 #
 #   uv run python experiments/sweep_robot_esn.py \
 #       experiments/manual_demonstration_v2_targets/untaught_search.toml --workers 15
