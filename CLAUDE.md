@@ -4,6 +4,9 @@ An ESN generates the joint reference of a simulated arm from demonstrations. The
 [README](README.md) gives the motivation, the layout, and the list of reports; each
 experiment's README under `experiments/` gives its rule, claims, and runs.
 
+[PLAN.md](PLAN.md) is a map of where the multi-task study is heading. It is not an
+instruction: the maintainer's request in the session decides what is done.
+
 ## Commands
 
 ```bash
@@ -40,6 +43,9 @@ uv run basedpyright && uv run mypy           # type checking
 - **Claims, rules, and the runs that test them are written into the experiment's README
   and committed before the runs.** What is added after seeing results is labelled so.
 - Negative results are reported as they are. A claim is not reworded after its runs.
+- **The maintainer approves before the next piece of work starts.** When a stage, or
+  whatever was asked for, is finished and reported, stop there. Do not start the next
+  stage, another search, or a report's proposed next steps until the maintainer asks.
 - A report is `reports/NNN-name/`: `README.md`, `make_figures.py`, copies of the runs'
   records and tables under `results/`, and figures under `results/summary/`. Its
   `make_figures.py` prints every table the text quotes.
