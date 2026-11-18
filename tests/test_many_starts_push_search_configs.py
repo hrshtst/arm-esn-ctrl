@@ -79,6 +79,16 @@ def test_the_one_take_fine_searchs_pushed_runs_are_the_many_starts_one_take_fine
             "manual_demonstration_v2_many_starts/20261118-005826-one_take_coarse_search",
             "one_take_coarse_pushes",
         ),
+        (
+            "fine_score.toml",
+            "manual_demonstration_v2_many_starts_push_search/20261118-114046-fine_search",
+            "fine_pushes",
+        ),
+        (
+            "one_take_fine_score.toml",
+            "manual_demonstration_v2_many_starts/20261118-012638-one_take_fine_search",
+            "one_take_fine_pushes",
+        ),
     ],
 )
 def test_a_score_names_its_steps_undisturbed_run_and_its_pushed_run(name, undisturbed, pushes):
@@ -87,3 +97,22 @@ def test_a_score_names_its_steps_undisturbed_run_and_its_pushed_run(name, undist
     assert runs["undisturbed"] == f"results/{undisturbed}"
     assert runs["pushes"].startswith(f"results/{EXPERIMENT.name}/")
     assert runs["pushes"].endswith(f"-{pushes}")
+
+
+@pytest.mark.parametrize(("prefix", "fine"), [("", EXPERIMENT / "fine_search.toml"), ("one_take_", None)])
+def test_the_untaught_search_runs_20_settings_of_the_fine_search_from_the_untaught_starts_too(prefix, fine):
+    search = load(EXPERIMENT / f"{prefix}untaught_search.toml")
+    old = load(MANY_STARTS / f"{prefix}untaught_search.toml")
+    grid = load(fine or MANY_STARTS / "one_take_fine_search.toml")["sweep"]
+
+    settings = search["settings"]
+    assert len(settings) == 20
+    assert len({tuple(setting[name] for name in SWEPT) for setting in settings}) == 20
+    for setting in settings:
+        assert all(setting[name] in grid[name] for name in SWEPT)
+    assert search["sweep"] == {"seed": [1, 2, 3, 4, 5]}
+    assert "disturbance" not in search
+    # Otherwise the many-starts search with the untaught starts.
+    for table in ("demonstrations", "esn", "tracker", "evaluation", "ranking"):
+        assert search[table] == old[table]
+    assert len(search["evaluation"]["extra_starts"]["untaught"]) == 36
