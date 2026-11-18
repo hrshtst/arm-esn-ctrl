@@ -299,12 +299,19 @@ in joint space. With the hands on rings, the sets are one, three, six, and nine,
 holding the one before: take 00; takes 00, 02, and 04, every other hand of the outer
 ring; the outer ring; and all nine.
 
+**Longer pushed runs, added after the outcomes (2026-11-18).** Claim 5's pushed runs
+were 24 s long when the claims were fixed and first tested. After those outcomes, the
+maintainer asked for them to be run again for 60 s, because most pushed hands were
+still coming back at 24 s. The claim's wording is unchanged, and both outcomes are
+reported: the runs that end within 20 mm at 24 s, as fixed, and at 60 s.
+
 ### The runs
 
 | Claims | Configurations | What they run |
 | --- | --- | --- |
 | 1 to 4 | `robot_esn1.toml`, `robot_esn2.toml` | ESN #1 and ESN #2 against the replay, undisturbed, from the nine takes' starts and the 36 unseen ones (`robot_esn.py`; 90 runs, about 8 minutes each) |
 | 5 | `pushes1x_robot_esn1.toml`, `pushes2x_…`, `pushes4x_…`, and those of ESN #2 | ESN #1 and ESN #2 against the replay and the progress replay under the three pushes at 1, 2, and 4 times their forces, from each take's start (`robot_esn.py`; 27 runs, about 2 minutes each) |
+| 5, over 60 s | `pushes1x_60s_robot_esn1.toml`, `pushes2x_60s_…`, `pushes4x_60s_…`, and those of ESN #2 | the same runs as the row above, for 60 s in place of 24 s (`robot_esn.py`; 27 runs, about 5 minutes each) |
 | 6 | `one_take_coarse_search.toml`, `one_take_fine_search.toml`, `one_take_untaught_search.toml`, the two chosen ESNs' configurations, and `robot_one_take_esn1.toml`, `robot_one_take_esn2.toml`, written as each step gave the next | the one-take baseline's search, and one-take ESN #1 and ESN #2 against the replay of take 00, undisturbed, from take 00's start, the other eight takes' starts, and the 36 unseen ones (`robot_esn.py`; 90 runs, about 8 minutes each) |
 | 7 | `takes1.toml`, `takes3.toml`, `takes6.toml`, `takes9.toml` | ESN #1's and ESN #2's settings, seeds 1 to 5, trained on one, three, six, and nine takes, each ESN on the robot, undisturbed, from every take's start and the 36 unseen ones (`sweep_robot_esn.py`; about 4 minutes each with 30 workers) |
 

@@ -343,6 +343,19 @@ def test_the_longer_pushed_runs_are_the_pushes_at_their_original_forces_run_for_
     assert long == pushes
 
 
+@pytest.mark.parametrize("n", [1, 2])
+@pytest.mark.parametrize("times", [1, 2, 4])
+def test_the_60_s_pushed_runs_are_the_24_s_ones_at_each_size_run_for_60_s(n, times):
+    sixty, pushes = (
+        load(EXPERIMENT / f"pushes{times}x_60s_robot_esn{n}.toml"),
+        load(EXPERIMENT / f"pushes{times}x_robot_esn{n}.toml"),
+    )
+
+    assert sixty["evaluation"].pop("duration") == 60.0
+    assert pushes["evaluation"].pop("duration") == 24.0
+    assert sixty == pushes
+
+
 @pytest.mark.parametrize(("n_takes", "trained"), [(1, [0]), (3, [0, 2, 4]), (6, [0, 1, 2, 3, 4, 5]), (9, range(9))])
 def test_the_take_counts_train_the_chosen_settings_on_nested_sets_and_run_from_the_same_45_starts(n_takes, trained):
     config, again = load(EXPERIMENT / f"takes{n_takes}.toml"), load(EXPERIMENT / "untaught_search.toml")
