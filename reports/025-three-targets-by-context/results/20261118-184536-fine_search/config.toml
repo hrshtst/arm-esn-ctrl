@@ -1,0 +1,111 @@
+# The fine search: 81 settings around the coarse search's best (leak rate 0.1, spectral
+# radius 1.2, input scaling 2, ridge 1), five reservoirs each (seeds 1 to 5). Each ESN is
+# trained on the 27 takes of the three targets and run on the robot, undisturbed, from
+# each take's start with the context of that take's target: 27 runs an ESN. Each
+# setting is scored over the 135 runs of its five seeds by how many arrive and hold at
+# the target their context names, then by their median detour ratio; the settings that
+# hold in every run, at most the 20 best (the 20 best if none does), go on to
+# untaught_search.toml. About 100 minutes with 15 workers. See README.md.
+#
+#   uv run python experiments/sweep_robot_esn.py \
+#       experiments/manual_demonstration_v2_targets/fine_search.toml --workers 15
+
+[[demonstrations]]
+# The nine takes to target A of reach_manual_v2_targets.toml, filtered at 2 Hz.
+context = "A"
+run = "results/demonstrations/20261118-175915-reach_manual_v2_targets_a"
+train = [
+  "demo_00_filtered.sklog.npz",  # take_001.sklog.npz, from (13, 71) deg
+  "demo_01_filtered.sklog.npz",  # take_002.sklog.npz, from (-19, 86)
+  "demo_02_filtered.sklog.npz",  # take_003.sklog.npz, from (-60, 121)
+  "demo_03_filtered.sklog.npz",  # take_004.sklog.npz, from (174, 150)
+  "demo_04_filtered.sklog.npz",  # take_005.sklog.npz, from (38, 46)
+  "demo_05_filtered.sklog.npz",  # take_006.sklog.npz, from (83, 44)
+  "demo_06_filtered.sklog.npz",  # take_007.sklog.npz, from (156, 89)
+  "demo_07_filtered.sklog.npz",  # take_022.sklog.npz, from (55, 80)
+  "demo_08_filtered.sklog.npz",  # take_023.sklog.npz, from (-23, 115)
+]
+
+[[demonstrations]]
+# The nine takes to target B, filtered at 2 Hz.
+context = "B"
+run = "results/demonstrations/20261118-175916-reach_manual_v2_targets_b"
+train = [
+  "demo_00_filtered.sklog.npz",  # take_008.sklog.npz, from (155, 95) deg
+  "demo_01_filtered.sklog.npz",  # take_009.sklog.npz, from (150, 138)
+  "demo_02_filtered.sklog.npz",  # take_010.sklog.npz, from (-62, 139)
+  "demo_03_filtered.sklog.npz",  # take_011.sklog.npz, from (-18, 88)
+  "demo_04_filtered.sklog.npz",  # take_012.sklog.npz, from (16, 53)
+  "demo_05_filtered.sklog.npz",  # take_013.sklog.npz, from (36, 37)
+  "demo_06_filtered.sklog.npz",  # take_014.sklog.npz, from (75, 57)
+  "demo_07_filtered.sklog.npz",  # take_024.sklog.npz, from (115, 73)
+  "demo_08_filtered.sklog.npz",  # take_025.sklog.npz, from (-24, 115)
+]
+
+[[demonstrations]]
+# The nine takes to target C, filtered at 2 Hz.
+context = "C"
+run = "results/demonstrations/20261118-175917-reach_manual_v2_targets_c"
+train = [
+  "demo_00_filtered.sklog.npz",  # take_015.sklog.npz, from (154, 99) deg
+  "demo_01_filtered.sklog.npz",  # take_016.sklog.npz, from (147, 136)
+  "demo_02_filtered.sklog.npz",  # take_017.sklog.npz, from (-65, 134)
+  "demo_03_filtered.sklog.npz",  # take_018.sklog.npz, from (-14, 65)
+  "demo_04_filtered.sklog.npz",  # take_019.sklog.npz, from (16, 61)
+  "demo_05_filtered.sklog.npz",  # take_020.sklog.npz, from (34, 60)
+  "demo_06_filtered.sklog.npz",  # take_021.sklog.npz, from (76, 57)
+  "demo_07_filtered.sklog.npz",  # take_026.sklog.npz, from (114, 75)
+  "demo_08_filtered.sklog.npz",  # take_027.sklog.npz, from (56, 78)
+]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 800
+spectral_radius = 1.2  # swept; the center's
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.1        # swept; the center's
+input_scaling = 2.0    # swept; the center's
+bias = true
+ridge = 1.0            # swept; the center's
+seed = 1               # swept
+# The context, one value per target after the joint angles, is fed in divided by the
+# input scaling, so that its input weights have the scale 1 whatever the input scaling
+# is. Not swept.
+context_scaling = 1.0
+context_times_input_scaling = false
+
+[sweep]
+# The center's value, and the one halfway to its coarse neighbor on each side: in ratio
+# for the leak rate (0.03 and 0.3), the input scaling (0.5), and the ridge (1e-2), in
+# difference for the spectral radius (0.9 and 1.5). The center's input scaling and
+# ridge are the coarse grid's largest, so the value beyond each is as far from the
+# center as the one below.
+leak_rate = [0.055, 0.1, 0.17]
+spectral_radius = [1.05, 1.2, 1.35]
+input_scaling = [1.0, 2.0, 4.0]
+ridge = [0.1, 1.0, 10.0]
+seed = [1, 2, 3, 4, 5]
+
+[ranking]
+# The most runs that arrive and hold, at the target their context names, then the
+# smallest median detour ratio of the runs that arrive.
+by = "detour_ratio"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 24.0        # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start

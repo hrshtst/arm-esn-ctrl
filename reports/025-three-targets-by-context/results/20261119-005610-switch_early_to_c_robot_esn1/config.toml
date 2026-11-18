@@ -1,0 +1,38 @@
+# ESN #1 of three targets on the robot, undisturbed, its context changed on the way:
+# from each take's start with the context of that take's target, against the replay of
+# that take, the ESN's context changes to target C at 4 s, and the run goes on for 24 s
+# more. The runs of claim 5 that change to C: 27 runs of the ESN, of which the nine from
+# the takes to C do not change, and 27 replays. About 6 minutes: 54 runs of 28 s, one
+# after another. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_targets/switch_early_to_c_robot_esn1.toml
+
+[esn]
+# esn.toml in the run directory of its training, relative to the storage root.
+model = "results/manual_demonstration_v2_targets/20261119-000048-esn1_lr0.17_sr1.05_is1_ridge10_seed1/esn.toml"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 28.0        # task (s), after the warm-up: 4 s before the change and 24 s after it
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start, and no other
+
+[[switch]]
+# The ESN's context changes to target C at 4 s on the task clock, which starts after the
+# warm-up; the hands of all but three takes are still on their way then. In the runs
+# from the takes to C, whose context is C already, nothing changes: they are run, and
+# not counted for the claim.
+time = 4.0
+task = "C"
