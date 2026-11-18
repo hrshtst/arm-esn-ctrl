@@ -7,7 +7,10 @@ targets, on the same arm with no joint limits. The target is named by a context 
 to the ESN's input, not by its coordinates. Its ESNs have 800 neurons.
 
 **Status.** The steps, the search's rule, and the claims below were fixed on 2026-11-18,
-before any take was recorded and before any run. What is added later is labelled so.
+before any take was recorded and before any run. On the same day, after the takes were
+recorded and before any run, the maintainer revised the claims: two were dropped and
+one became a demonstration ([below](#the-revision-of-the-claims)). What is added later
+is labelled so.
 
 ## The robot, the targets, and the takes
 
@@ -105,8 +108,7 @@ then by how directly it goes there.
    scores of step 8. A setting's typical seed is, of its seeds with the most runs
    that hold, the one whose own median detour ratio is nearest the setting's.
 
-The search has no pushes, no change of the context during a run, and no start of
-another target's take with a context other than that take's.
+The search has no pushes and no change of the context during a run.
 
 **If three targets do not work:** if step 8 finds no setting whose runs hold for all
 three targets, the outcome is reported as it is, and the maintainer decides between
@@ -138,9 +140,6 @@ search or scoring of this stage runs from them.
 **The replay** of a run is the replay by time of the take, among those of the target
 the run's context names, that starts nearest the run's start.
 
-**The one-target ESNs** have ESN #1's and ESN #2's settings and seeds and are trained
-on the takes of one target alone, without a context: one for each target.
-
 ### The claims
 
 1. **The takes' starts.** Undisturbed, from each take's start with the context of its
@@ -148,40 +147,51 @@ on the takes of one target alone, without a context: one for each target.
 2. **The unseen starts.** From the 36 unseen starts with each of the three contexts,
    the hand arrives and holds at the target the context names from as many starts as
    the replay's, for each target.
-3. **The context names the target, not the start.** From each take's start with each
-   of the other two contexts, the hand arrives and holds at the target the context
-   names. And no run of claims 1 to 3 ends within 20 mm of a target its context does
-   not name.
-4. **Starting where the arm is, and going directly.** From the 36 unseen starts, for
+3. **Starting where the arm is, and going directly.** From the 36 unseen starts, for
    each target, the reference's fastest joint speed, the largest joint torque, and the
    detour ratio are smaller than the replay's, in their medians over the starts.
-5. **Changing the context at rest.** From each take's start with the context of its
+4. **Changing the context at rest.** From each take's start with the context of its
    target, the context changes at 16 s to each of the other two targets, and the run
    goes on for 24 s more. In every such run the hand arrives and holds at the new
    target.
-6. **Changing the context on the way.** As claim 5, with the change at 4 s, while the
+5. **Changing the context on the way.** As claim 4, with the change at 4 s, while the
    hand is on its way. In every such run the hand arrives and holds at the new
    target.
-7. **Pushes.** Under report 007's three pushes at their forces, at twice, and at four
-   times them, from each take's start with the context of its target, over 60 s, the
-   hand arrives and ends within 20 mm of that target in at least as many runs as the
-   replay's and as the progress replay's, at each size. The first two pushes are
-   placed along each take, where its hand is 18% and 62% of the way to its target,
-   and the third comes at 15 s, as in stage 1.
-8. **Three targets against one.** For each target, from the 36 unseen starts, the
-   hand holds from as many starts as with the one-target ESN of that target.
+
+### A demonstration, without a claim
+
+**Pushes by hand while the target changes.** The maintainer runs ESN #1 in the robot
+app (`tools/robot_app.py`, with the search's tracker), pushes the arm by dragging its
+tip, and changes the target with the app's keys, as he likes. The app saves the run
+as a log, with the force and the context at every step (`Ctrl+S`). The report shows
+that one run: the hand's path, the joint angles and torques, the force, and the
+context over time. Nothing is counted and nothing is compared.
 
 ### What is reported without a claim
 
-- Where each run of claims 5 and 6 is when the context changes, how long it takes to
+- Where each run of claims 4 and 5 is when the context changes, how long it takes to
   the new target from the change, and the reference's fastest joint speed and the
   largest joint torque after the change.
-- The detour ratio, the reference's fastest joint speed, and the largest joint torque
-  of claim 8's runs, with three targets and with one.
-- **An ESN with no context,** of ESN #1's and ESN #2's settings and seeds, trained on
-  the same takes: where its hand ends from each take's start and from the 36 unseen
-  starts. It shows what the starts alone tell the ESN.
 - How far the chosen settings are from stage 1's (report 023's ESN #1 and ESN #2).
+
+### The revision of the claims
+
+The claims were first fixed with eight. On 2026-11-18, after the takes were recorded
+and before any run, the maintainer revised them to the five above:
+
+- **Dropped: the context names the target, not the start** (from each take's start
+  with each of the other two contexts, the hand goes to the target the context names;
+  and no run ends at a target its context does not name). Claim 2 covers it: every
+  unseen start is run with all three contexts.
+- **Made a demonstration: pushes** (report 007's three pushes at one, two, and four times their
+  forces over 60 s, against the replay and the progress replay). Comparing arms under
+  one schedule of forces is not what this stage is to show; the demonstration above
+  takes its place.
+- **Dropped: three targets against one** (for each target, as many unseen starts
+  held as with an ESN trained on that target's takes alone). An ESN of one target
+  cannot reach the other two, so the comparison shows nothing about the context.
+- With them, the ESNs of one target and the ESN with no context, which were to be
+  reported beside those claims, are not trained.
 
 ### The runs
 
@@ -192,12 +202,10 @@ center, and the chosen ESNs are not known yet.
 | --- | --- | --- |
 | the search | `coarse_search.toml`, `fine_search.toml`, `untaught_search.toml` | steps 5, 7, and 8 (`sweep_robot_esn.py`) |
 | | `esn1_….toml`, `esn2_….toml` | ESN #1 and ESN #2, trained and run on their own; they save `esn.toml` for the apps (`autonomous_esn.py`) |
-| 1 to 4 | `robot_esn1.toml`, `robot_esn2.toml` | each context from the starts of every target's takes and from the 36 unseen starts, against the replay, undisturbed (`robot_esn.py`) |
-| 5 | `switch_to_a_robot_esn1.toml`, `switch_to_b_…`, `switch_to_c_…`, and those of ESN #2 | the context changes at 16 s to A, to B, or to C, from each take's start; 40 s |
-| 6 | `switch_early_to_a_robot_esn1.toml`, …, and those of ESN #2 | the same with the change at 4 s; 28 s |
-| 7 | `pushes1x_robot_esn1.toml`, `pushes2x_…`, `pushes4x_…`, and those of ESN #2 | the three pushes at 1, 2, and 4 times their forces, against the replay and the progress replay; 60 s |
-| 8 | `one_target_a_esn1.toml`, …, `robot_one_target_a_esn1.toml`, …, and those of ESN #2 | the one-target ESNs, trained, and run from the 36 unseen starts |
-| no claim | `no_context_esn1.toml`, `robot_no_context_esn1.toml`, and those of ESN #2 | the ESN with no context, trained, and run from every take's start and the 36 unseen starts |
+| 1 to 3 | `robot_esn1.toml`, `robot_esn2.toml` | each context from the starts of its target's takes and from the 36 unseen starts, against the replay, undisturbed (`robot_esn.py`) |
+| 4 | `switch_to_a_robot_esn1.toml`, `switch_to_b_…`, `switch_to_c_…`, and those of ESN #2 | the context changes at 16 s to A, to B, or to C, from each take's start; 40 s |
+| 5 | `switch_early_to_a_robot_esn1.toml`, …, and those of ESN #2 | the same with the change at 4 s; 28 s |
+| the demonstration | the robot app, with `esn1_….toml`'s `esn.toml` | one run pushed by hand while the target changes, saved as a log |
 
-In a run of claims 5 and 6 whose change names the context it already has, nothing
+In a run of claims 4 and 5 whose change names the context it already has, nothing
 changes; those runs are kept as they come and are not part of the claims.
