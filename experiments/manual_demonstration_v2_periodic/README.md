@@ -20,8 +20,8 @@ stand here. 3b's are a proposal: the maintainer confirms them before 3b starts.
 The scripted take is made and imported
 (`results/demonstrations/20261118-171132-ellipse_scripted_v2_no_limits`). Two takes by
 hand were refused by the import, their samples uneven while sweeps loaded the machine,
-and the take is recorded again. On the scripted take the coarse and the fine search
-are run; no claim has been run.
+and the take is recorded again. On the scripted take the search is run and has given its two
+ESNs; no claim has been run.
 
 **Checks of the runners.** Before the search, the runners were tried in a scratch
 directory, on the scripted take and on a made-up take in place of the hand's, with
@@ -173,6 +173,25 @@ starts: the nine with leak rate 0.017 and input scaling 4, the nine with leak ra
 input scaling 2. The best lie on the fine grid's edge, at its smallest leak rate and
 its largest input scaling. The rule does not move the grid, so the search goes on
 from these 20.
+
+**The scoring with the untaught starts** (`20261118-205822-scripted_untaught_search`).
+All 20 settings cycle in all 220 runs, but for one run of the last (leak rate 0.055,
+spectral radius 1.65, input scaling 2, ridge 10⁻², seed 1, from one untaught start,
+where the hand stays put). The order is the fine search's: the median curve RMS runs
+from 0.79 to 0.94 mm, and the first four settings lie within 0.01 mm of each other.
+
+**The chosen ESNs of the scripted take** are the typical seeds of the two best:
+
+| | leak rate | spectral radius | input scaling | ridge | seed | median curve RMS |
+| --- | --- | --- | --- | --- | --- | --- |
+| ESN #1 | 0.017 | 1.35 | 4 | 10⁻³ | 5 | 0.79 mm |
+| ESN #2 | 0.017 | 1.5 | 4 | 10⁻³ | 5 | 0.79 mm |
+
+They differ in the spectral radius alone and share the seed, so the two are nearly
+one ESN. Seen in the search's runs, before the claims' runs: from the untaught starts
+every one of the 20 settings sends the reference to the curve at once, with a fastest
+joint speed near 6,000 deg/s and a largest torque of 270 to 340 N m in the median, and
+the hand is on the curve within a second. Claim 2 compares these with the replay's.
 
 ## The analysis (3a)
 
@@ -335,6 +354,7 @@ the machine is shared.
 | `scripted_coarse_search.toml` | the coarse search on the scripted take: 108 settings, seed 0, each on the robot for 40 s from the eight starts on the curve (about 10 minutes with 15 workers) |
 | `scripted_fine_search.toml` | the fine search on the scripted take: 81 settings around the coarse search's best, seeds 1 to 5, alike |
 | `scripted_untaught_search.toml` | the scoring with the untaught starts on the scripted take: the fine search's 20 best settings, seeds 1 to 5, each on the robot for 40 s from the eight starts on the curve and the 36 untaught ones (about 90 minutes with 15 workers) |
+| `scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5.toml`, `scripted_esn2_lr0.017_sr1.5_is4_ridge0.001_seed5.toml` | the scripted take's ESN #1 and ESN #2, trained and run on their own from the eight starts on the curve and the 36 untaught ones (`autonomous_esn.py`) |
 | `scripted_robot_esn{1,2}.toml` | claims 1 and 2 for the scripted take's ESNs: each on the robot against the replay, undisturbed, for 120 s from the eight starts on the curve. The ESN's run is filled in when the search has given it, here and in the next three rows |
 | `scripted_untaught_robot_esn{1,2}.toml` | claims 2 and 3: the same for 60 s from the 36 untaught starts |
 | `scripted_pushes{1,2,4}x_robot_esn{1,2}.toml` | claim 4: each under the three pushes at 1, 2, and 4 times their forces, for 80 s from the eight starts on the curve |

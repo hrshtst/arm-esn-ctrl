@@ -3,6 +3,7 @@
 
 """The periodic motion's configurations agree with each other, with the ellipse's takes, and with stage 1's."""
 
+import re
 import tomllib
 
 import numpy as np
@@ -170,6 +171,38 @@ def test_the_scripted_untaught_search_starts_on_the_fine_searchs_curve_and_from_
     assert len(starts["untaught"]) == 36
 
 
+# The scripted take's chosen ESNs, the typical seeds of the two best settings of the scoring with the untaught starts
+# (run 20261118-205822-scripted_untaught_search): the stems of their configurations.
+SCRIPTED_ESNS = {
+    1: "scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5",
+    2: "scripted_esn2_lr0.017_sr1.5_is4_ridge0.001_seed5",
+}
+
+
+@pytest.mark.parametrize("n", [1, 2])
+def test_the_scripted_takes_esn_n_is_trained_as_the_untaught_searchs_esns_with_its_nth_setting_and_seed_5(n):
+    esn, search = load(EXPERIMENT / f"{SCRIPTED_ESNS[n]}.toml"), load(EXPERIMENT / "scripted_untaught_search.toml")
+
+    assert esn["demonstrations"] == search["demonstrations"]  # the scripted take, as it is made
+    assert esn["esn"] == search["esn"] | search["settings"][n - 1] | {"seed": 5}
+
+
+def test_the_scripted_takes_two_esns_differ_only_in_the_spectral_radius():
+    one, two = (load(EXPERIMENT / f"{stem}.toml") for stem in SCRIPTED_ESNS.values())
+
+    assert (one["esn"].pop("spectral_radius"), two["esn"].pop("spectral_radius")) == (1.35, 1.5)
+    assert one == two
+
+
+@pytest.mark.parametrize("n", [1, 2])
+def test_the_scripted_takes_esns_run_on_their_own_as_the_hand_esn(n):
+    esn, hand = load(EXPERIMENT / f"{SCRIPTED_ESNS[n]}.toml"), load(EXPERIMENT / "hand_esn.toml")
+
+    # For 40 s, from the eight starts on the curve and the 36 untaught ones, with the same apps' commands.
+    assert esn["evaluation"] == hand["evaluation"]
+    assert esn["apps"] == hand["apps"]
+
+
 # The analysis of the scripted take's two ESNs: each kind of run, with a configuration for ESN #1 and one for ESN #2.
 CLAIM_RUNS = [
     "scripted_robot",  # claims 1 and 2
@@ -183,16 +216,19 @@ CLAIM_RUNS = [
 CONSISTENT = REPO_ROOT / "experiments/manual_demonstration_v2_consistent_search"
 REPORT_017_PUSHES = CONSISTENT / "pushes_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml"
 REPORT_017_BLOCK = CONSISTENT / "block_robot_esn1_lr0.03_sr1.2_is1.5_seed8.toml"
-# Each ESN's model, until the search has given the ESNs.
-MODEL = "results/manual_demonstration_v2_periodic/YYYYMMDD-HHMMSS-scripted_esn{n}/esn.toml"
+# The time stamp of an ESN's run: a placeholder until the ESN is trained, then the run's.
+STAMP = r"(YYYYMMDD-HHMMSS|\d{8}-\d{6})"
 
 
 @pytest.mark.parametrize("name", CLAIM_RUNS)
-def test_each_claims_run_of_esn_2_is_esn_1s_but_for_the_model(name):
+def test_each_claims_run_takes_each_esn_from_the_run_of_its_configuration_and_is_alike_for_both(name):
     one, two = load(EXPERIMENT / f"{name}_esn1.toml"), load(EXPERIMENT / f"{name}_esn2.toml")
 
-    assert one.pop("esn") == {"model": MODEL.format(n=1)}
-    assert two.pop("esn") == {"model": MODEL.format(n=2)}
+    for n, config in ((1, one), (2, two)):
+        esn = config.pop("esn")
+        assert list(esn) == ["model"]  # esn.toml in the run of the ESN's configuration
+        run = rf"results/manual_demonstration_v2_periodic/{STAMP}-{re.escape(SCRIPTED_ESNS[n])}"
+        assert re.fullmatch(rf"{run}/esn\.toml", esn["model"])
     assert one == two
 
 

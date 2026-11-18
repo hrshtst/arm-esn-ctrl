@@ -1,14 +1,15 @@
-# The scripted take's ESN #1 on the robot with the tip held from 10 s to 13 s, three
-# quarters of a loop, then let go, from the eight starts on the curve, against the
-# replay of its take, which goes on without end through the take's taught loop:
-# claim 5. About 5 minutes: 16 runs of 60 s, one after another. See README.md.
+# The scripted take's ESN #1 (leak rate 0.017, spectral radius 1.35, input scaling 4,
+# ridge 0.001, seed 5) on the robot with the tip held from 10 s to 13 s, three quarters
+# of a loop, then let go, from the eight starts on the curve, against the replay of its
+# take, which goes on without end through the take's taught loop: claim 5. About 5
+# minutes: 16 runs of 60 s, one after another. See README.md.
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_periodic/scripted_block_robot_esn1.toml
 
 [esn]
 # A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py, relative
 # to the storage root.
-model = "results/manual_demonstration_v2_periodic/YYYYMMDD-HHMMSS-scripted_esn1/esn.toml"  # EDIT: the ESN's run
+model = "results/manual_demonstration_v2_periodic/YYYYMMDD-HHMMSS-scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5/esn.toml"  # EDIT: the ESN's run
 
 [tracker]
 # The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
