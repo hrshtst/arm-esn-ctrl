@@ -4,7 +4,9 @@
 """The targets experiment's configurations agree with each other, with the takes, and with the many-starts ones."""
 
 import itertools
+import sys
 import tomllib
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -15,6 +17,10 @@ from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.sweeps import sweep_combinations
+
+# The runners import each other as modules of their own directory, as they run.
+sys.path.insert(0, str(REPO_ROOT / "experiments"))
+from robot_esn import switch_schedule
 
 TARGETS = REPO_ROOT / "experiments/demonstrations/reach_manual_v2_targets.toml"
 EXPERIMENT = REPO_ROOT / "experiments/manual_demonstration_v2_targets"
@@ -302,5 +308,106 @@ def test_each_chosen_esns_header_trains_and_runs_it_with_autonomous_esn(name):
         "run",
         "python",
         "experiments/autonomous_esn.py",
+        f"experiments/manual_demonstration_v2_targets/{name}",
+    ]
+
+
+# The analysis's runs on the robot: claims 1 to 3 from the takes' starts and the unseen ones, and
+# claims 4 and 5 with the context changed to each target. Each kind of change, its time and its
+# duration (s): it changes at 16 s or at 4 s on the task clock, and the run goes on 24 s after it.
+SWITCHES = {"switch_to": (16.0, 40.0), "switch_early_to": (4.0, 28.0)}
+SWITCHED = [(kind, target) for kind in SWITCHES for target in ("A", "B", "C")]
+PREFIXES = ["", *(f"{kind}_{target.lower()}_" for kind, target in SWITCHED)]
+ROBOT_RUNS = [f"{prefix}robot_esn{n}.toml" for prefix in PREFIXES for n in (1, 2)]
+
+
+def test_the_analysis_has_14_runs_on_the_robot_two_for_claims_1_to_3_and_six_each_for_claims_4_and_5():
+    assert sorted(path.name for path in EXPERIMENT.glob("*robot_esn*.toml")) == sorted(ROBOT_RUNS)
+    assert len(ROBOT_RUNS) == 14
+
+
+@pytest.mark.parametrize("name", ROBOT_RUNS)
+def test_each_robot_run_names_the_model_saved_by_the_training_of_the_esn_its_file_name_states(name):
+    n = int(name.removesuffix(".toml")[-1])
+    chosen = Path(CHOSEN[n - 1][0])
+
+    esn = load(EXPERIMENT / name)["esn"]
+    assert list(esn) == ["model"]
+    assert esn["model"].startswith("results/manual_demonstration_v2_targets/")
+    assert esn["model"].endswith(f"-{chosen.stem}/esn.toml")
+    assert chosen.name.startswith(f"esn{n}_")
+
+
+@pytest.mark.parametrize("name", ROBOT_RUNS)
+def test_each_robot_run_tracks_holds_and_starts_from_each_takes_own_start_as_the_untaught_search(name):
+    config, again = load(EXPERIMENT / name), load(EXPERIMENT / "untaught_search.toml")
+
+    assert config["tracker"] == again["tracker"]
+    for key in ("hold", "start_offsets_deg"):
+        assert config["evaluation"][key] == again["evaluation"][key]
+    assert not {"disturbance", "progress"} & set(config)
+
+
+@pytest.mark.parametrize("n", [1, 2])
+def test_claims_1_to_3_run_each_context_for_24_s_from_its_nine_takes_starts_and_stage_1s_36_unseen_starts(n):
+    config = load(EXPERIMENT / f"robot_esn{n}.toml")
+
+    assert list(config) == ["esn", "tracker", "evaluation"]  # no change of the context
+    evaluation = config["evaluation"]
+    assert evaluation["duration"] == 24.0
+    assert list(evaluation["extra_starts"]) == ["unseen"]
+    assert evaluation["extra_starts"] == load(MANY_STARTS / "robot_esn1.toml")["evaluation"]["extra_starts"]
+    # Of each task: its nine takes' starts, then the 36 unseen starts, run with its context.
+    takes = {take.split(".")[0]: np.zeros((1, 2)) for take in TAKES}
+    starts = start_postures(evaluation, takes)
+    assert [start.group for start in starts] == ["demonstrated"] * 9 + ["unseen"] * 36
+
+
+def test_the_unseen_starts_are_none_of_the_untaught_ones_and_none_is_nearer_than_67_mm_to_a_target():
+    unseen = load(EXPERIMENT / "robot_esn1.toml")["evaluation"]["extra_starts"]["unseen"]
+    untaught = load(EXPERIMENT / "untaught_search.toml")["evaluation"]["extra_starts"]["untaught"]
+    skeleton = Skeleton.from_toml(TARGETS)
+    targets = [pos for pos, _, _, _ in multi_target_specs(Task.from_dict(load(TARGETS)["task"]))]
+
+    assert len(unseen) == 36
+    assert not [posture for posture in unseen if posture in untaught]
+    hands = endpoint_positions(skeleton, np.radians(unseen))
+    assert min(np.linalg.norm(hands - target, axis=1).min() for target in targets) >= 0.067
+
+
+@pytest.mark.parametrize("n", [1, 2])
+@pytest.mark.parametrize(("kind", "target"), SWITCHED)
+def test_each_switch_changes_the_context_once_to_its_files_target_and_is_otherwise_claims_1_to_3s_without_unseen_starts(
+    kind, target, n
+):
+    switched = load(EXPERIMENT / f"{kind}_{target.lower()}_robot_esn{n}.toml")
+    robot = load(EXPERIMENT / f"robot_esn{n}.toml")
+    time, duration = SWITCHES[kind]
+
+    assert switched["switch"] == [{"time": time, "task": target}]
+    names = task_names(load(EXPERIMENT / CHOSEN[n - 1][0])["demonstrations"])
+    assert switch_schedule(switched.pop("switch"), names) == [(time, names.index(target))]
+    assert switched["evaluation"].pop("duration") == duration == time + 24.0
+    assert "extra_starts" not in switched["evaluation"]  # each take's own start only
+    robot["evaluation"].pop("duration")
+    robot["evaluation"].pop("extra_starts")
+    assert switched == robot
+
+
+@pytest.mark.parametrize("prefix", PREFIXES)
+def test_each_esn_2_run_is_the_esn_1_run_but_for_the_model(prefix):
+    esn1, esn2 = load(EXPERIMENT / f"{prefix}robot_esn1.toml"), load(EXPERIMENT / f"{prefix}robot_esn2.toml")
+
+    assert esn1.pop("esn") != esn2.pop("esn")
+    assert esn1 == esn2
+
+
+@pytest.mark.parametrize("name", ROBOT_RUNS)
+def test_each_robot_runs_header_runs_it_with_robot_esn(name):
+    assert header_command(EXPERIMENT / name) == [
+        "uv",
+        "run",
+        "python",
+        "experiments/robot_esn.py",
         f"experiments/manual_demonstration_v2_targets/{name}",
     ]
