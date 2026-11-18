@@ -1,0 +1,12 @@
+# The one-take baseline's coarse search's score: each of the 108 settings (seed 0) over
+# its undisturbed run, which is the many-starts one-take coarse search's, and its pushed
+# run: how many pass, then the detour ratio of the undisturbed run if it arrives. The
+# best is the center of the one-take fine search. See README.md.
+#
+#   uv run python experiments/score_sweeps.py \
+#       experiments/manual_demonstration_v2_many_starts_push_search/one_take_coarse_score.toml
+
+[runs]
+# Runs of sweep_robot_esn.py, relative to the storage root.
+undisturbed = "results/manual_demonstration_v2_many_starts/20261118-005826-one_take_coarse_search"
+pushes = "results/manual_demonstration_v2_many_starts_push_search/20261118-110940-one_take_coarse_pushes"
