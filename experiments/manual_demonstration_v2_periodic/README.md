@@ -1,0 +1,259 @@
+# A periodic motion, v2 (stage 3 of the multi-task study)
+
+Reports 023 and 024 taught one reach from many start postures. This experiment is the
+third stage of the multi-task study ([PLAN.md](../../PLAN.md)): the hand goes around an
+ellipse, again and again, on v2's arm with no joint limits. Its ESNs have 800 neurons.
+It has two parts:
+
+- **3a, the periodic motion alone.** One take teaches the motion. Is it a limit cycle
+  of the ESN and the robot together: does the hand keep to the curve, join it from
+  elsewhere, and come back to it after a push or a block?
+- **3b, the reach and the periodic motion in one ESN.** Does the context choose the
+  task, and does changing it during a run switch between them?
+
+**Status.** The maintainer decided the curve, its pace, and the takes on 2026-11-18.
+The measures, the search's rule, and the claims below were written on 2026-11-18,
+before any take of this experiment was recorded and before any ESN was trained on one.
+Nothing has been run.
+
+## The robot, the curve, and the takes
+
+**The robot** is stage 1's: v2's arm with no joint limits
+([`reach_manual_v2_no_limits.toml`](../demonstrations/reach_manual_v2_no_limits.toml)).
+
+**The curve** is an ellipse centered at (−0.1, 0.55) m, with semi-axes of 0.20 m along
+x and 0.12 m along y: 0.40 m wide, 0.24 m high, and 1.02 m around. The hand goes around
+it counterclockwise, at 4 s a loop. On it the hand is 0.44 to 0.68 m from the base,
+joint 1 goes from 34° to 79° and joint 2 from 82° to 123°, and the nearest the hand
+comes to stage 1's target at (−0.6, 0.4) m is 0.33 m.
+
+**The takes** are two, each imported into a demonstration run of its own:
+
+| Take | Configuration | What it is |
+| --- | --- | --- |
+| by hand | [`ellipse_manual_v2_no_limits.toml`](../demonstrations/ellipse_manual_v2_no_limits.toml) | recorded with skelarm's recorder, which draws the curve as a guide. The hand starts at rest on the curve's point at angle 0, (0.1, 0.55) m, and goes around ten times or more, at about 4 s a loop |
+| by a script | [`ellipse_scripted_v2_no_limits.toml`](../demonstrations/ellipse_scripted_v2_no_limits.toml) | the joint angles that put the hand on the curve at an even angle rate, 4 s a loop, for 40 s, from the same start posture (`make_periodic_take.py`). It moves at its full pace from its first sample |
+
+Each configuration's header gives its commands. Neither take starts away from the
+curve: joining the curve from elsewhere is tested, not taught. An ESN is trained on a
+take's copy filtered at 2 Hz, as in stage 1, and normalizes the joint angles by the
+range the take covers.
+
+**A take's loops.** A loop is whole when the hand's angle about the curve's center has
+grown by a turn since the last one ended, counted from the take's first sample. The
+first loop holds the start from rest. The **taught loops** are the whole loops after
+the first, the **taught path** is the hand's path over them, and the **taught period**
+is the median of their times.
+
+## The start postures
+
+All have joint 2 positive, as every start of stage 1.
+
+| Starts | What they are |
+| --- | --- |
+| eight on the curve | the hand on the ellipse at angles 0°, 45°, …, 315°, an eighth of a loop apart; the first is the takes' start. A take passes through all of them |
+| 36 untaught | stage 1's untaught starts, hands spread evenly over the workspace (`tools/tip_starts.py <takes> --counts 18 12 6 --first-angle 53.3`). The search scores from them in its last step |
+| 36 unseen | stage 1's unseen starts, the same rings turned 15° back (`--first-angle 38.3`). No search or scoring of this experiment runs from them |
+
+## The runs and their measures
+
+**The tracker** is stage 1's: report 017's joint PD (ω = 20 rad/s, damping ratio 0.4,
+given the reference's velocity, its torque computed every 10 ms), its gains set where
+the take of reports 005 to 020 ends.
+
+**The arms** of a run are the ESN, fed the arm's measured joint angles, and two replays
+of the take that go on without end:
+
+- **the replay** repeats the take by time. It plays the take from its first sample, and
+  after the end of a later loop it goes back to the end of the first loop. Of the later
+  loops' ends, it is the one whose posture is nearest that at the end of the first, so
+  that the step at the seam is the smallest the take offers. The step is reported.
+- **the progress replay** is report 014's, on the same loop: it never goes far ahead of
+  the arm's progress along the taught joint path.
+
+**The measures** of a run:
+
+- **Off the path** is the hand's distance from the taught path (m).
+- **A run cycles** if, over its last five taught periods (20 s at the taught pace), the
+  hand stays within 20 mm of the taught path, and its angle about the curve's center
+  grows by four to six turns: five at the taught pace, so within a fifth of it. The
+  20 mm is stage 1's goal radius.
+- **The path RMS** of a run is the RMS of off the path over those five periods.
+- **The period** of a run is the median time of its whole loops in those five periods,
+  reported over the taught period.
+- **The joining time** is the time from which the hand stays within 20 mm of the taught
+  path to the end of the run.
+- **How a run starts** is measured as in stage 1, by the reference's fastest joint
+  speed and by the run's largest joint torque.
+
+## The search (3a)
+
+The search chooses two ESNs by how reliably the hand cycles, and then by how closely it
+keeps to the taught path. It is stage 1's one-take search with the cycle in place of
+the arrival, and it is run twice by the same rule: once for the take by hand and once
+for the scripted take.
+
+1. **The runs.** Each ESN is trained on the take and generates the reference of the
+   simulated robot, undisturbed, from each of the eight starts on the curve: eight runs
+   of 40 s.
+2. **A setting's score** is how many of its runs cycle, the most first; then the median
+   path RMS of its runs that cycle, the smallest first.
+3. **The coarse search:** stage 1's 108 settings with one reservoir each (seed 0):
+
+   | Parameter | Values |
+   | --- | --- |
+   | leak rate | 0.01, 0.03, 0.1, 0.3 |
+   | spectral radius | 0.9, 1.2, 1.5 |
+   | input scaling | 0.1, 0.5, 2 |
+   | ridge | 10⁻⁴, 10⁻², 1 |
+
+   The rest is stage 1's: 800 neurons, sparsity 0.05, a bias, a warm-up of 1 s, 10 ms.
+   Report 023's ESNs (leak rates 0.055 and 0.1, spectral radii 1.2 and 1.05, input
+   scalings 1 and 0.5, ridges 1 and 10) lie inside this grid but for the ridge of 10.
+4. **The center** is the coarse setting with the best score.
+5. **The fine search:** 81 settings around the center, with five reservoirs each (seeds
+   1 to 5), laid out as in stage 1: each parameter takes the center's value and the one
+   halfway to its coarse neighbor on each side, in ratio for the leak rate, the input
+   scaling, and the ridge, and in difference for the spectral radius; beyond an edge of
+   the coarse grid, as far as on the other side. A setting's runs are the 40 of its
+   five seeds.
+6. **Scoring again with the untaught starts.** The 20 fine settings with the best
+   scores, each with its five reservoirs again, run from the eight starts on the curve
+   and from the 36 untaught ones: 44 runs an ESN, 220 a setting, scored as in step 2.
+7. **The chosen ESNs** are the typical seeds of the two settings with the best scores
+   in step 6: ESN #1 and ESN #2 of that take. A setting's typical seed is, of its
+   seeds with the most runs that cycle, the one whose own median path RMS is nearest
+   the setting's.
+
+The search leaves out the pushes, the block, the unseen starts, and held-out seeds.
+
+## The analysis (3a)
+
+The chosen ESNs are tested on the robot against the two replays. No size is fixed in
+advance: every claim is a count or a direction against a replay, and the sizes are
+reported. Each claim is tested for the ESNs of the take by hand and for the ESNs of
+the scripted take, and its outcome is given for each take: it holds for a take if it
+holds for that take's ESN #1 and ESN #2. No direction is claimed between the two
+takes; their settings and their measures are reported side by side.
+
+### The claims
+
+1. **On the curve.** Undisturbed, from each of the eight starts on the curve, the hand
+   still cycles at the end of 120 s, 30 taught loops, as the replay's does.
+2. **Starting where the arm is.** From the seven starts on the curve other than the
+   take's, and from the 36 unseen starts, the reference's fastest joint speed and the
+   largest joint torque are smaller than the replay's, in their medians over each
+   group of starts. The replay begins at the take's start wherever the arm is.
+3. **Joining the curve.** From the 36 unseen starts, in runs of 60 s, the hand cycles
+   at the end from as many starts as the replay's.
+4. **Pushes.** Under three pushes at report 007's forces, at twice, and at four times
+   them, from each of the eight starts on the curve, in runs of 80 s, the hand cycles
+   at the end in at least as many of the eight runs as the replay's and as the
+   progress replay's, at each size.
+5. **A block.** With the tip held for 3 s, three quarters of a loop, from each of the
+   eight starts on the curve, in runs of 60 s: the hand cycles at the end in at least
+   as many of the eight runs as the replay's and as the progress replay's; and in the
+   2 s after the release, the largest joint torque and the largest off the path are
+   smaller than the replay's, in their medians over the eight runs.
+
+Reported beside the claims, without a claim: each arm's period and path RMS; the
+joining times; how far each push sends the hand off the path and when it is back; and
+the delay a push or the block leaves, which is how far behind its own undisturbed run
+the hand is at the end of the run, in seconds. A replay by time leaves none, and an
+arm that goes on from where it is keeps the delay.
+
+**The pushes** are report 007's three, of 0.5 s at the tip: 3 N at 10°, 5 N at 80°,
+and 4 N at −80°, at 8.0 s, 20.5 s, and 33.0 s. A reach's push is turned from the
+direction toward its target. The periodic motion has no target, so its pushes are
+turned, counterclockwise, from the direction from the run's start hand toward the
+curve's center, fixed for the run. The pushes are 12.5 s apart, three loops and an
+eighth: the replay is pushed at three places an eighth of a loop apart, and over the
+eight starts the pushes' directions turn once around the curve. A run goes on for 47 s
+after the last push, since stage 1's pushed hands took 5 to 18 s to come back.
+
+**The block** is a stiff spring-damper, the consistent search's (report 017: 20,000 N/m,
+100 N s/m), that holds the tip from 10 s to 13 s where it was at 10 s.
+
+### The runs
+
+The configurations are written before their runs, each chosen ESN's when the search
+has given it.
+
+| Claims | What runs |
+| --- | --- |
+| the search | the coarse search, the fine search, and the scoring with the untaught starts, for each take (`sweep_robot_esn.py`) |
+| 1, 2 | each ESN against the replay, undisturbed, from the eight starts on the curve, for 120 s (`robot_esn.py`) |
+| 2, 3 | each ESN against the replay, undisturbed, from the 36 unseen starts, for 60 s |
+| 4 | each ESN against the replay and the progress replay under the three pushes at 1, 2, and 4 times their forces, from the eight starts on the curve, for 80 s |
+| 5 | each ESN against the replay and the progress replay under the block, from the eight starts on the curve, for 60 s |
+
+## The reach and the periodic motion in one ESN (3b)
+
+**The ESN** is trained on two tasks: stage 1's nine takes of the reach to (−0.6, 0.4) m
+(context `reach`) and the take of the ellipse by hand (context `ellipse`). Its input
+holds, after the joint angles, one value per task: 1 for the task being done and 0 for
+the other (context scaling 1, not searched). The scripted take is not used in 3b.
+
+**The search** is 3a's, with both tasks in the score:
+
+1. **The runs.** Each ESN runs on the robot, undisturbed, with the context `reach` from
+   each of the nine reach takes' starts for 24 s, and with the context `ellipse` from
+   each of the eight starts on the curve for 40 s: 17 runs.
+2. **A run passes** if it holds, for a reach (the hand arrives within 20 mm of the
+   target and stays within it for 2 s, as in stage 1), or if it cycles, for the ellipse.
+3. **A setting's score** is how many of its runs pass, the most first. Settings with as
+   many are ranked twice among themselves: by the median detour ratio of their reach
+   runs that arrive, and by the median path RMS of their ellipse runs that cycle. The
+   worse of a setting's two ranks decides, the smaller first, so that neither task's
+   measure is weighed against the other's in its own unit.
+4. **The coarse search, the center, and the fine search** are 3a's: the same 108
+   settings with seed 0, and 81 settings around the best with seeds 1 to 5.
+5. **Scoring again with the untaught starts.** The 20 fine settings with the best
+   scores, each with its five reservoirs again, run from the starts of step 1 and from
+   the 36 untaught ones with each context: 89 runs an ESN, scored as in step 3.
+6. **The chosen ESNs,** two-task ESN #1 and ESN #2, are the typical seeds of the two
+   settings with the best scores in step 5: of a setting's seeds with the most runs
+   that pass, the one whose median path RMS is nearest the setting's.
+
+### The claims
+
+A claim holds if it holds for two-task ESN #1 and for two-task ESN #2.
+
+6. **Each task by its context.** With the context `reach`, from the nine reach takes'
+   starts and the 36 unseen starts, the hand arrives and holds from as many starts as
+   it did for report 023's ESN #1 and ESN #2, which is all 45. With the context
+   `ellipse`, from the eight starts on the curve and the 36 unseen starts, in runs of
+   60 s, the hand cycles at the end from at least as many starts as for the fewer of
+   3a's ESN #1 and ESN #2 of the take by hand.
+7. **From the periodic motion to the reach.** The run starts with the context
+   `ellipse` from each of the eight starts on the curve, and the context changes to
+   `reach` at 16 s, which meets a hand that went on from where it started at eight
+   places around the curve. The hand arrives at the target and holds, in all eight runs of 40 s.
+8. **From the reach to the periodic motion.** The run starts with the context `reach`
+   from each of the nine reach takes' starts, and the context changes to `ellipse` at
+   20 s, after every reach of stage 1 has arrived and held. The hand cycles at the end
+   of the run, in all nine runs of 60 s.
+9. **Back and forth.** From each of the eight starts on the curve, the context goes
+   from `ellipse` to `reach` at 16 s, back to `ellipse` at 36 s, and to `reach` again
+   at 66 s. The hand cycles over the five taught periods before the last change, and
+   arrives and holds after it, in all eight runs of 90 s.
+
+The replays keep to their take, so these claims are counts of the ESN's runs alone.
+
+**Two rest postures.** Stage 1's takes 03 and 04 go around the base clockwise and rest
+at the target with joint 1 at −246°, a whole turn below the others' 114°. The ellipse
+is taught with joint 1 from 34° to 79°. A reach that ends at −246° is then asked to go
+to a curve it was taught a whole turn away. What the hand does there is reported with
+claim 8.
+
+### The runs
+
+| Claims | What runs |
+| --- | --- |
+| the search | the coarse search, the fine search, and the scoring with the untaught starts, on both tasks |
+| 6 | each two-task ESN with one context for the whole run: `reach` from the nine reach takes' starts and the 36 unseen ones for 24 s, `ellipse` from the eight starts on the curve and the 36 unseen ones for 60 s (`robot_esn.py`) |
+| 7, 8, 9 | each two-task ESN with the changes of context above (`robot_esn.py`, `[[switch]]`) |
+
+## The configurations
+
+None yet. Each is listed here when it is written, before its run.
