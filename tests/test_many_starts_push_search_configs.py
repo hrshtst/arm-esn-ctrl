@@ -126,3 +126,47 @@ def test_the_untaught_search_runs_20_settings_of_the_fine_search_from_the_untaug
     for table in ("demonstrations", "esn", "tracker", "evaluation", "ranking"):
         assert search[table] == old[table]
     assert len(search["evaluation"]["extra_starts"]["untaught"]) == 36
+
+
+CHOSEN = {
+    "esn1_lr0.03_sr0.9_is2_ridge1_seed5": ([0.03, 0.9, 2.0, 1.0], 5, "untaught_search.toml"),
+    "esn2_lr0.017_sr1.05_is4_ridge10_seed5": ([0.017, 1.05, 4.0, 10.0], 5, "untaught_search.toml"),
+    "one_take_esn1_lr0.017_sr1.05_is0.045_ridge0.1_seed5": (
+        [0.017, 1.05, 0.045, 0.1],
+        5,
+        "one_take_untaught_search.toml",
+    ),
+    "one_take_esn2_lr0.017_sr1.05_is0.1_ridge0.1_seed1": ([0.017, 1.05, 0.1, 0.1], 1, "one_take_untaught_search.toml"),
+}
+
+
+@pytest.mark.parametrize("name", CHOSEN)
+def test_a_chosen_esn_is_a_setting_and_a_seed_of_its_search_run_as_the_many_starts_ones(name):
+    values, seed, search_name = CHOSEN[name]
+    chosen = load(EXPERIMENT / f"{name}.toml")
+    search = load(EXPERIMENT / search_name)
+    old = "one_take_esn1_lr0.017_sr1.05_is0.045_ridge0.1_seed5" if name.startswith("one_take") else None
+    old = load(MANY_STARTS / f"{old or 'esn1_lr0.055_sr1.2_is1_ridge1_seed4'}.toml")
+
+    assert [chosen["esn"][key] for key in SWEPT] == values
+    assert dict(zip(SWEPT, values, strict=True)) in search["settings"]
+    assert chosen["esn"]["seed"] == seed
+    assert seed in search["sweep"]["seed"]
+    assert {k: v for k, v in chosen["esn"].items() if k not in (*SWEPT, "seed")} == {
+        k: v for k, v in search["esn"].items() if k not in (*SWEPT, "seed")
+    }
+    for table in ("demonstrations", "evaluation", "apps"):
+        assert chosen[table] == old[table]
+
+
+@pytest.mark.parametrize("n_takes", [1, 3, 6, 9])
+def test_the_take_counts_are_the_many_starts_ones_at_the_chosen_settings(n_takes):
+    takes = load(EXPERIMENT / f"takes{n_takes}.toml")
+    old = load(MANY_STARTS / f"takes{n_takes}.toml")
+
+    assert takes.pop("settings") == [
+        dict(zip(SWEPT, CHOSEN[name][0], strict=True))
+        for name in ("esn1_lr0.03_sr0.9_is2_ridge1_seed5", "esn2_lr0.017_sr1.05_is4_ridge10_seed5")
+    ]
+    old.pop("settings")
+    assert takes == old

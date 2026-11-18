@@ -162,7 +162,7 @@ uv run python experiments/autonomous_esn.py \
 ```
 
 **The one-take ESNs.** Of the one-take fine search's 81 settings, 70 hold undisturbed in
-all five runs, 56 pass the pushes in all five, and FINE_BOTH do both
+all five runs, 36 pass the pushes in all five, and 32 do both
 (`20261118-111145-one_take_fine_pushes`, `20261118-120352-one_take_fine_score`). Scored
 again with the untaught starts (`20261118-123329-one_take_untaught_search`,
 `20261118-125450-one_take_untaught_score`), every one of the 20 passes its five pushed
