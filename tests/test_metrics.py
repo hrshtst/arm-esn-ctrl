@@ -7,11 +7,11 @@ import numpy as np
 import pytest
 
 from arm_esn_ctrl.metrics import (
+    _nearest_on_path,
     arrival_index,
     count_speed_peaks,
     cycle_metrics,
     directness,
-    distances_in_chunks,
     distances_to_path,
     disturbance_following,
     disturbance_returns,
@@ -652,11 +652,11 @@ def test_a_hand_that_joins_the_path_late_joins_when_it_comes_within_the_toleranc
     assert m["cycles"]  # on the path over the last 20 s
 
 
-def test_the_distances_in_chunks_are_the_distances_to_the_path():
-    _, hand = ellipse_run(wider=0.01)
+def test_the_distances_of_many_points_to_a_path_are_those_of_the_nearest_points_on_it_exactly():
+    _, hand = ellipse_run(wider=0.01)  # 4001 points, in five parts
     path = taught_path(ellipse_take(3.5)[2], CENTER)
 
-    assert distances_in_chunks(hand, path) == pytest.approx(distances_to_path(hand, path))
+    assert np.array_equal(distances_to_path(hand, path), _nearest_on_path(hand, path)[2])
 
 
 def test_the_largest_value_after_each_disturbance_is_over_its_window_from_its_end():

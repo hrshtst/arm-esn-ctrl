@@ -164,7 +164,6 @@ from arm_esn_ctrl.disturbances import (
 from arm_esn_ctrl.drawing import OffsetMap, draw_postures, spread_along_path
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import (
-    distances_in_chunks,
     distances_to_path,
     disturbance_following,
     disturbance_returns,
@@ -729,7 +728,7 @@ def arm_metrics(
     taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
     returns: list[tuple[float, float]] = []
     if spans:  # a periodic task's hand is measured from its taught path
-        off_path = distances_to_path(hand, taught_hand) if cycle is None else distances_in_chunks(hand, cycle.path)
+        off_path = distances_to_path(hand, taught_hand if cycle is None else cycle.path)
         returns = disturbance_returns(setup.times, off_path, spans, tolerance)
     reference_hand = None
     followed = [nan] * len(spans)
@@ -796,7 +795,7 @@ def cycle_columns(
     if spans:
         torque = np.abs(log.channel("tau")).max(axis=1)
         torque_after = largest_after(log.times, torque, spans, cycle.after)
-        off_path_after = largest_after(setup.times, distances_in_chunks(hand, cycle.path), spans, cycle.after)
+        off_path_after = largest_after(setup.times, distances_to_path(hand, cycle.path), spans, cycle.after)
     columns: dict[str, Any] = {"settling_time_s": nan}
     columns |= {name: nan for name in per_disturbance("reference_lead", len(spans))}
     columns |= cycle_run_metrics(hand, setup, cycle)
@@ -1155,7 +1154,7 @@ def plot_cycle_timeline(
                 log = StateLog.load(path)
                 color, zorder = ARM_COLORS[arm], ARM_ZORDERS[arm]
                 q = task_joint_angles(log, period, duration)
-                off = distances_in_chunks(endpoint_positions(setup.skeleton, q), cycle.path)
+                off = distances_to_path(endpoint_positions(setup.skeleton, q), cycle.path)
                 ax_distance.plot(
                     setup.times, 1000 * off, color=color, linewidth=1.3, label=ARM_LABELS[arm], zorder=zorder
                 )

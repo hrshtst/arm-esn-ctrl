@@ -39,8 +39,8 @@ PATH_SPACING = 0.005
 # Normalized time at which a minimum-jerk speed profile first exceeds
 # MOVING_THRESHOLD: the solution of 16 tau^2 (1 - tau)^2 = MOVING_THRESHOLD.
 _MINIMUM_JERK_ONSET = 0.5 * (1.0 - np.sqrt(1.0 - np.sqrt(MOVING_THRESHOLD)))
-# Distances from a long path are measured this many points at a time: a run of 120 s against
-# a taught path of ten loops would otherwise take gigabytes at once.
+# Distances to a path are measured this many points at a time: an 80-s run against a take of
+# 44 s would otherwise take 3 GB at once.
 _CHUNK = 1000
 
 
@@ -195,9 +195,12 @@ def distances_to_path(points: NDArray[np.float64], reference: NDArray[np.float64
     """Return the distance from each of ``points`` to the nearest point on the polyline through ``reference``.
 
     Both are sequences of points of any dimension, shaped ``(n, d)``, such as hand
-    positions or joint angles.
+    positions or joint angles. The points are taken a thousand at a time, so that a
+    long run against a long path takes little memory.
     """
-    return _nearest_on_path(points, reference)[2]
+    return np.concatenate(
+        [_nearest_on_path(points[k : k + _CHUNK], reference)[2] for k in range(0, len(points), _CHUNK)]
+    )
 
 
 def route_spread(paths: list[NDArray[np.float64]]) -> NDArray[np.float64]:
@@ -568,7 +571,7 @@ def cycle_metrics(
           of the path to the end of the run, NaN if it ends outside.
     """
     nan = float("nan")
-    off = distances_in_chunks(hand, path)
+    off = distances_to_path(hand, path)
     window = times > times[-1] - cycle_periods * period - 1e-9
     phase = loop_phase(hand[window], center)
     turns = float((phase[-1] - phase[0]) / (2 * np.pi))
@@ -589,11 +592,6 @@ def cycle_metrics(
         "period_ratio": period_s / period,
         "joining_time_s": joining,
     }
-
-
-def distances_in_chunks(points: NDArray[np.float64], reference: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Return :func:`distances_to_path`, a thousand ``points`` at a time, so that a long run takes little memory."""
-    return np.concatenate([distances_to_path(points[k : k + _CHUNK], reference) for k in range(0, len(points), _CHUNK)])
 
 
 def largest_after(
