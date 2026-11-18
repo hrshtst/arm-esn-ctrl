@@ -55,7 +55,9 @@ def storage_root(repo_root: Path = REPO_ROOT) -> Path:
     return (repo_root / Path(value).expanduser()).resolve()
 
 
-def start_run(config_path: str | Path) -> tuple[dict[str, Any], Path]:
+def start_run(
+    config_path: str | Path, *, name: str | None = None, text: str | None = None
+) -> tuple[dict[str, Any], Path]:
     """Load a configuration file and create a run directory that records it.
 
     The run directory is ``<storage root>/results/<experiment>/<date>-<time>-<config name>/``,
@@ -65,15 +67,20 @@ def start_run(config_path: str | Path) -> tuple[dict[str, Any], Path]:
     - ``config.toml``: an exact copy of the configuration file, as loaded;
     - ``run.toml``: when, where, and with which code the run was started.
 
+    A run made from part of a configuration, as each target's run of an import of
+    takes of several targets, is given its own ``name`` in place of the
+    configuration's, and its own configuration ``text``, which ``config.toml`` then
+    holds; ``run.toml`` still names the configuration file it was made from.
+
     Returns the loaded configuration and the run directory, where the
     experiment then writes its outputs.
     """
     config_path = Path(config_path)
-    text = config_path.read_text(encoding="utf-8")
+    text = config_path.read_text(encoding="utf-8") if text is None else text
     config = tomllib.loads(text)
 
     started = datetime.now().astimezone().replace(microsecond=0)
-    run_dir = _new_run_dir(started, config_path.parent.resolve().name, config_path.stem)
+    run_dir = _new_run_dir(started, config_path.parent.resolve().name, name or config_path.stem)
     (run_dir / "config.toml").write_text(text, encoding="utf-8")
 
     commit, uncommitted_changes = git_state()

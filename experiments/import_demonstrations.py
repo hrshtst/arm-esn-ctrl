@@ -18,6 +18,22 @@ They are imported together, as ``demo_00``, ``demo_01``, ..., each with its filt
 copy, only if every one passes; the figure then draws them together. A task without
 a target, such as a periodic motion, has no arrival to check or to measure.
 
+Takes of several targets have a ``[task]`` of type ``multi_target_reaching``, whose
+``targets`` the recorder shows, and ``takes`` is a pattern instead of a list, such
+as ``data/reach_manual_v2_targets/take_*.sklog.npz``: every file under the storage
+root that matches it is read, in the order of their names. Each take reaches the
+target that its log records as active, from where the arm was posed in the
+recorder, its own first sample, so there is no start posture to check. A take whose
+log records no multi-target task, or other targets than the configuration's, is not
+imported, as a take that fails a check. The takes are imported into one run per
+target that has takes, named after the configuration and the target's label
+(``reach_manual_v2_targets_a``, ...), each as a configuration of that target alone
+would import them: its ``config.toml`` has a ``reaching`` ``[task]`` toward the
+target, lists the target's takes in ``[recording]`` ``takes`` and where each begins
+in ``[demonstrations]`` ``start_q`` (deg), and keeps the rest. An ESN's
+``[[demonstrations]]`` tables then name the runs as any others; the import prints
+each run's directory.
+
 A take that passes is imported, its pause before moving included, into a new run
 directory, as two demonstrations that a configuration's ``[demonstrations]`` names
 as any others:
@@ -35,7 +51,8 @@ and their measurements:
   :func:`arm_esn_ctrl.metrics.reach_metrics`), when the hand starts to move (5 mm
   from where it started) and when it arrives, its joint jitter, how the take was
   sampled (the number of samples, the length, the requested and achieved rates,
-  and the longest interval), and the SHA-256 of the take, which ties the run to it;
+  and the longest interval), and the take's file, relative to the storage root, and
+  its SHA-256, which ties the run to it;
 - ``demonstrations.png``: the hand path, the joint angles and the hand speed over
   time of both, and the sampling intervals of the take.
 """
@@ -51,15 +68,16 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import tomli_w
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
-from skelarm import Skeleton, StateLog, Task
+from skelarm import Skeleton, StateLog, Task, active_target_index, multi_target_specs
 
 from arm_esn_ctrl.demonstrations import check_take, endpoint_positions, smooth_take
 from arm_esn_ctrl.metrics import hand_speed, hold_metrics, jitter, onset_index, reach_metrics
 from arm_esn_ctrl.postures import joint_columns
-from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, start_run
+from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, start_run, storage_root
 
 TAKE_COLOR = "#2a78d6"
 RECORDED_COLOR = "#a3a29d"
@@ -73,6 +91,9 @@ GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
 # The line style of each joint's angle, and its name in the panel's title.
 JOINT_STYLES = [("-", "solid"), ("--", "dashed"), (":", "dotted"), ("-.", "dash-dot")]
+MULTI_TARGET_TASK = "multi_target_reaching"  # the [task] type of takes of several targets
+# The keys of a multi-target [task] that the [task] of one of its targets does not have.
+MULTI_TARGET_KEYS = ("type", "active", "targets")
 
 
 def main() -> None:
@@ -80,22 +101,148 @@ def main() -> None:
     parser.add_argument("config", type=Path, help="demonstration configuration file (TOML)")
     args = parser.parse_args()
 
-    # Check the take before creating a run, so that a take that fails leaves nothing behind.
+    # Check the takes before creating a run, so that a take that fails leaves nothing behind.
     with args.config.open("rb") as f:
         config = tomllib.load(f)
-    recording = config["recording"]
+    skeleton = Skeleton.from_toml(args.config)
+    several_targets = config["task"]["type"] == MULTI_TARGET_TASK
+    if several_targets:
+        takes = sorted(storage_root().glob(config["recording"]["takes"]))
+        if not takes:
+            msg = f"no take under {storage_root()} matches [recording] takes = {config['recording']['takes']!r}"
+            raise FileNotFoundError(msg)
+        runs, problems = target_configs(config, takes, args.config.stem)
+    else:
+        takes = listed_takes(config["recording"])
+        runs, problems = {args.config.stem: config}, {}
+    # What tells one run's demonstrations from another's where they are printed: the target.
+    of = {name: f" of target {run['task']['target']['label']}" if several_targets else "" for name, run in runs.items()}
+    imports = {name: load_demos(run, skeleton) for name, run in runs.items()}
+    for name, (demos, start_of, take_of) in imports.items():
+        checked = check_demos(demos, start_of, skeleton, runs[name])
+        problems |= {f"{demo}{of[name]} ({take_of[demo].name})": checked[demo] for demo in demos}
+    if any(problems.values()):
+        print("Not imported: " + ", ".join(str(take) for take in takes))
+        for where, found in problems.items():
+            for problem in found:
+                print(f"  - {where}: {problem}")
+        raise SystemExit(1)
+
+    run_dirs = {}
+    for name, (demos, start_of, take_of) in imports.items():
+        run = runs[name]
+        _, run_dir = start_run(args.config, name=name, text=None if run is config else target_text(args.config, run))
+        run_dirs[name] = run_dir
+        for demo, log in demos.items():
+            if demo.endswith("_filtered"):
+                log.save(run_dir / f"{demo}.sklog.npz")
+            else:
+                shutil.copy2(take_of[demo], run_dir / f"{demo}.sklog.npz")
+        task = Task.from_dict(run["task"])
+        hands = {demo: endpoint_positions(skeleton, joint_angles(log)) for demo, log in demos.items()}
+        rows = [
+            {"demo": demo}
+            | demo_metrics(log, hands[demo], start_of[demo], task, run["recording"]["hold"])
+            | sampling_metrics(demos[demo.removesuffix("_filtered")])
+            | {"take": str(take_of[demo].relative_to(storage_root())), "take_sha256": sha256_of(take_of[demo])}
+            for demo, log in demos.items()
+        ]
+        with (run_dir / "metrics.csv").open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        if several_targets:
+            print(f"\nThe takes{of[name]}:")
+        print_metrics(rows)
+        plot_take(demos, hands, task, rows, title=name).savefig(run_dir / "demonstrations.png", dpi=150)
+
+    print()
+    for name, run_dir in run_dirs.items():
+        n_takes = len(imports[name][0]) // 2
+        print(f"Imported {n_takes} take{'s' if n_takes > 1 else ''}{of[name]} to {run_dir}")
+    first = next(iter(run_dirs.values()))
+    player = (REPO_ROOT / "third_party/skelarm/tools/player.py").relative_to(REPO_ROOT)
+    print(f"Replay them with:\n  uv run python {player} {first / 'demo_00.sklog.npz'}")
+    print(f"  uv run python {player} {first / 'demo_00_filtered.sklog.npz'}")
+
+
+def listed_takes(recording: dict[str, Any]) -> list[Path]:
+    """The takes that ``[recording]`` names: one ``take``, or a list of ``takes``, relative to the storage root."""
     if ("take" in recording) == ("takes" in recording):
         msg = "[recording] names one take, or lists several takes, not both"
         raise ValueError(msg)
-    takes = [resolve_run_path(path) for path in recording.get("takes", [recording.get("take")])]
+    return [resolve_run_path(path) for path in recording.get("takes", [recording.get("take")])]
+
+
+def target_configs(
+    config: dict[str, Any], takes: list[Path], stem: str
+) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    """A configuration of one target for each target that has takes, by its run's name; and why a take has none.
+
+    ``config`` has a multi-target ``[task]``. A take reaches the target its log
+    records as active, from its own first sample. Each target's configuration is
+    ``config`` with a ``reaching`` ``[task]`` toward that target, its takes in
+    ``[recording]`` ``takes`` (relative to the storage root, in the order of
+    ``takes``), and where each begins in ``[demonstrations]`` ``start_q`` (deg). A take
+    whose log records no multi-target task, or other targets than ``config``'s, has
+    no target: why is given by the take's file name instead.
+    """
+    targets = config["task"]["targets"]
+    if any("label" not in target for target in targets):
+        msg = "each [task] target needs a label, which names its run"
+        raise ValueError(msg)
+    places = target_places(config["task"])
+    by_target: dict[int, list[Path]] = {}
+    start_of: dict[Path, list[float]] = {}
+    problems: dict[str, list[str]] = {}
+    for take in takes:
+        log = StateLog.load(take)
+        recorded = log.extra.get("playback", {}).get("task", {})
+        if recorded.get("type") != MULTI_TARGET_TASK:
+            problems[take.name] = ["the take records no multi-target [task], so not which target it reaches"]
+        elif target_places(recorded) != places:
+            problems[take.name] = ["the take records other targets than the configuration's [task]"]
+        else:
+            by_target.setdefault(active_target_index(Task.from_dict(recorded)), []).append(take)
+            start_of[take] = np.degrees(joint_angles(log)[0]).tolist()
+    rest = {key: value for key, value in config["task"].items() if key not in MULTI_TARGET_KEYS}
+    root = storage_root()
+    configs = {}
+    for index, target_takes in sorted(by_target.items()):
+        configs[f"{stem}_{targets[index]['label'].lower()}"] = config | {
+            "recording": config["recording"] | {"takes": [str(take.relative_to(root)) for take in target_takes]},
+            "demonstrations": {"start_q": [start_of[take] for take in target_takes]},
+            "task": {"type": "reaching", "target": targets[index]} | rest,
+        }
+    return configs, problems
+
+
+def target_places(task: dict[str, Any]) -> list[tuple[float | None, ...]]:
+    """The position and the tolerance of each target of a multi-target ``[task]`` table."""
+    return [(*pos.tolist(), tolerance) for pos, _, _, tolerance in multi_target_specs(Task.from_dict(task))]
+
+
+def target_text(config_path: Path, config: dict[str, Any]) -> str:
+    """The ``config.toml`` of one target's run: its configuration, under a comment that says where it comes from."""
+    return (
+        f"# The takes of target {config['task']['target']['label']} of {config_path.name}, as a configuration of\n"
+        "# that target alone, written by experiments/import_demonstrations.py: [demonstrations]\n"
+        "# start_q lists where each take of [recording] takes begins (deg), as recorded.\n\n"
+    ) + tomli_w.dumps(config)
+
+
+def load_demos(
+    config: dict[str, Any], skeleton: Skeleton
+) -> tuple[dict[str, StateLog], dict[str, list[float]], dict[str, Path]]:
+    """The demonstrations of a configuration of one target, by name: each take as recorded and filtered.
+
+    Also each one's start posture, from ``[demonstrations]`` ``start_q`` (deg), and its take.
+    """
+    recording = config["recording"]
+    takes = listed_takes(recording)
     starts_deg = config["demonstrations"]["start_q"]
     if len(starts_deg) != len(takes):
         msg = f"[demonstrations] start_q lists {len(starts_deg)} start postures for {len(takes)} takes"
-        raise ValueError(msg)
-    skeleton = Skeleton.from_toml(args.config)
-    task = Task.from_dict(config["task"])
-    if task.target is not None and task.tolerance is None:
-        msg = "the [task] target needs a tolerance, which is the goal radius"
         raise ValueError(msg)
     demos: dict[str, StateLog] = {}
     start_of: dict[str, list[float]] = {}
@@ -107,7 +254,24 @@ def main() -> None:
             (f"demo_{i:02d}_filtered", smooth_take(recorded, skeleton, config["task"], recording["filter"])),
         ):
             demos[name], start_of[name], take_of[name] = log, start_deg, take
-    problems = {
+    return demos, start_of, take_of
+
+
+def check_demos(
+    demos: dict[str, StateLog], start_of: dict[str, list[float]], skeleton: Skeleton, config: dict[str, Any]
+) -> dict[str, list[str]]:
+    """Why each demonstration of a configuration of one target cannot be one, by name: nothing if it can.
+
+    See :func:`arm_esn_ctrl.demonstrations.check_take`. A configuration without
+    ``start_tolerance_deg``, as that of each target of takes of several targets,
+    whose takes begin where the arm was posed, has no start posture to check.
+    """
+    recording = config["recording"]
+    task = Task.from_dict(config["task"])
+    if task.target is not None and task.tolerance is None:
+        msg = "the [task] target needs a tolerance, which is the goal radius"
+        raise ValueError(msg)
+    return {
         name: check_take(
             log,
             skeleton,
@@ -115,43 +279,11 @@ def main() -> None:
             target=task.target,
             radius=task.tolerance or 0.0,
             hold=recording["hold"],
-            start_tolerance=float(np.radians(recording["start_tolerance_deg"])),
+            start_tolerance=float(np.radians(recording.get("start_tolerance_deg", np.inf))),
             max_tip_speed=recording["max_tip_speed"],
         )
         for name, log in demos.items()
     }
-    if any(problems.values()):
-        print("Not imported: " + ", ".join(str(take) for take in takes))
-        for name, found in problems.items():
-            for problem in found:
-                print(f"  - {name} ({take_of[name].name}): {problem}")
-        raise SystemExit(1)
-
-    _, run_dir = start_run(args.config)
-    for name, log in demos.items():
-        if name.endswith("_filtered"):
-            log.save(run_dir / f"{name}.sklog.npz")
-        else:
-            shutil.copy2(take_of[name], run_dir / f"{name}.sklog.npz")
-    hands = {name: endpoint_positions(skeleton, joint_angles(log)) for name, log in demos.items()}
-    rows = [
-        {"demo": name}
-        | demo_metrics(log, hands[name], start_of[name], task, recording["hold"])
-        | sampling_metrics(demos[name.removesuffix("_filtered")])
-        | {"take_sha256": sha256_of(take_of[name])}
-        for name, log in demos.items()
-    ]
-    with (run_dir / "metrics.csv").open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-    print_metrics(rows)
-    plot_take(demos, hands, task, rows, title=args.config.stem).savefig(run_dir / "demonstrations.png", dpi=150)
-
-    print(f"\nImported {len(takes)} take{'s' if len(takes) > 1 else ''} to {run_dir}")
-    player = (REPO_ROOT / "third_party/skelarm/tools/player.py").relative_to(REPO_ROOT)
-    print(f"Replay them with:\n  uv run python {player} {run_dir / 'demo_00.sklog.npz'}")
-    print(f"  uv run python {player} {run_dir / 'demo_00_filtered.sklog.npz'}")
 
 
 def joint_angles(log: StateLog) -> NDArray[np.float64]:

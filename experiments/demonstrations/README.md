@@ -61,6 +61,16 @@ target, from start postures whose hands are spread evenly over the workspace
 `start_q`. Its header gives the recorder's command for each, with `--pose=` for the
 start posture, and they are imported together into one run, `demo_00` to `demo_08`.
 
+`reach_manual_v2_targets.toml` is of reaches to three targets, A (the target of
+`reach_manual_v2_no_limits.toml`), B, and C, on the same arm: a `[task]` of type
+`multi_target_reaching`, and no start postures fixed in advance. In the recorder, the
+maintainer poses the start of each take and chooses its target, and records as many
+takes as he likes; `[recording]` `takes` is a pattern that every take's file matches.
+Each take starts at its own first sample and records its target, and the import puts
+the takes of each target into a run of their own (`reach_manual_v2_targets_a`, `_b`,
+`_c`), as a configuration of that target alone with those takes and start postures
+would. Its header gives the recorder's command and its keys.
+
 ## Runs
 
 Under `results/demonstrations/` in the storage:
