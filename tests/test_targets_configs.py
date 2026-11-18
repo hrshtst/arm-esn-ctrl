@@ -6,10 +6,12 @@
 import itertools
 import tomllib
 
+import numpy as np
 import pytest
-from skelarm import Task, multi_target_specs
+from skelarm import Skeleton, Task, multi_target_specs
 
 from arm_esn_ctrl.autonomous import task_names
+from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.sweeps import sweep_combinations
@@ -164,7 +166,53 @@ def test_the_fine_searchs_esn_is_the_coarse_searchs_with_its_context_but_for_the
     assert list(fine) == list(coarse)  # the same tables, and no disturbance
 
 
-@pytest.mark.parametrize("name", ["coarse_search.toml", "fine_search.toml"])
+def test_the_untaught_search_parses_as_a_sweep_of_20_settings_of_five_seeds_of_three_tasks():
+    config = load(EXPERIMENT / "untaught_search.toml")
+
+    assert task_names(config["demonstrations"]) == ("A", "B", "C")
+    combinations = sweep_combinations(config["sweep"], config["settings"])
+    assert len(combinations) == 20 * 5
+    for combination in combinations:
+        EsnConfig(**config["esn"] | combination)
+
+
+def test_the_untaught_search_lists_20_settings_of_the_fine_searchs_values_with_its_seeds():
+    again, fine = load(EXPERIMENT / "untaught_search.toml"), load(EXPERIMENT / "fine_search.toml")
+    names = list(CENTER)
+
+    settings = [tuple(setting[name] for name in names) for setting in again["settings"]]
+    assert len(set(settings)) == len(settings) == 20
+    for setting in again["settings"]:
+        assert list(setting) == names
+        assert all(setting[name] in fine["sweep"][name] for name in names)
+    assert settings[0] == (0.17, 1.05, 1.0, 10.0)  # the only one of the fine search's that holds in every run
+    assert again["sweep"] == {"seed": fine["sweep"]["seed"]}
+
+
+def test_the_untaught_search_is_the_fine_search_but_for_its_settings_its_seeds_and_the_untaught_starts():
+    again, fine = load(EXPERIMENT / "untaught_search.toml"), load(EXPERIMENT / "fine_search.toml")
+
+    again.pop("settings")
+    again.pop("sweep")
+    fine.pop("sweep")
+    again["evaluation"].pop("extra_starts")
+    # The same takes, ESN, score, tracker, and runs from the takes' starts, and no disturbance.
+    assert again == fine
+
+
+def test_the_untaught_starts_are_stage_1s_36_and_none_is_nearer_than_85_mm_to_a_target():
+    extra = load(EXPERIMENT / "untaught_search.toml")["evaluation"]["extra_starts"]
+    skeleton = Skeleton.from_toml(TARGETS)
+    targets = [pos for pos, _, _, _ in multi_target_specs(Task.from_dict(load(TARGETS)["task"]))]
+
+    assert list(extra) == ["untaught"]
+    assert extra == load(MANY_STARTS / "untaught_search.toml")["evaluation"]["extra_starts"]
+    assert len(extra["untaught"]) == 36
+    hands = endpoint_positions(skeleton, np.radians(extra["untaught"]))
+    assert min(np.linalg.norm(hands - target, axis=1).min() for target in targets) >= 0.085
+
+
+@pytest.mark.parametrize("name", ["coarse_search.toml", "fine_search.toml", "untaught_search.toml"])
 def test_the_searchs_header_runs_it_with_15_workers_as_the_machine_is_shared(name):
     assert header_command(EXPERIMENT / name) == [
         "uv",

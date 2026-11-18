@@ -202,6 +202,31 @@ The center's input scaling and ridge are the coarse grid's largest, so the fine 
 goes as far above them as below. Stage 1's center was leak rate 0.1, spectral radius
 1.2, input scaling 0.5, and ridge 1, so the two differ in the input scaling only.
 
+**The fine search, and what step 8 runs (added after the fine search, 2026-11-18).**
+The fine search ran as `20261118-184536-fine_search`, in two hours with 15 workers.
+
+- **One of its 81 settings holds in all 135 runs** (five reservoirs, 27 takes' starts
+  each): leak rate 0.17, spectral radius 1.05, input scaling 1, ridge 10. Ten settings
+  hold in 130 runs or more. The center holds in 119 (39 of 45 at A, 35 at B, 45 at C)
+  and is 24th. In stage 1's fine search, 20 of the 81 settings held in every run.
+- **C is the easy target.** 39 settings hold in all 45 runs at C, 5 at B, and 2 at A.
+- **By parameter,** the mean holding runs of 135: leak rate 0.055, 0.1, 0.17: 116.8,
+  103.6, 88.1; input scaling 1, 2, 4: 116.1, 112.8, 79.6; ridge 0.1, 1, 10: 94.9,
+  108.4, 105.2; spectral radius 1.05, 1.2, 1.35: 104.9, 102.7, 100.9.
+- **Most failing runs reach their target and do not stay the 2 s.** Of the 10,935
+  runs, 2,590 fail: in 897 the hand never comes within 20 mm, and in 1,693 it does and
+  is outside again within the 2 s after; 1,384 of these end within 20 mm. In the 20
+  best settings 127 of 2,700 runs fail (68 at A, 55 at B, 4 at C): 5 never arrive,
+  all at A, and 122 arrive and leave, of which 120 end within 11 mm of the target
+  (median 4 mm).
+
+**Step 8 runs the 20 settings with the best scores.** Its rule names two cases, the
+settings whose every run holds and none such. With one such setting, step 9 would
+have no second setting to choose from. So step 8 runs the 20 best, as when none
+holds; the setting that holds in every run is the first of them. This is the
+session's reading of the rule, made before step 8's run; the maintainer has not
+confirmed it.
+
 ## The analysis
 
 ESN #1 and ESN #2 are tested on the robot with the search's tracker. No size is fixed
