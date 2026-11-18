@@ -40,6 +40,7 @@ import csv
 import filecmp
 import functools
 import hashlib
+import itertools
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -93,6 +94,11 @@ CHANGES = [(first, new) for first in LABELS for new in LABELS if first != new]  
 TAKE_SHOWN = "demo_00_filtered"
 UNSEEN_SHOWN = {"A": "unseen 18", "B": "unseen 17", "C": "unseen 6"}
 NAMES = ("leak_rate", "spectral_radius", "input_scaling", "ridge")
+# A reference that jumps: its fastest joint speed above this (deg/s), and the run's largest torque above this (N m).
+JUMP_SPEED = 500.0
+JUMP_TORQUE = 20.0
+NEAR = 45.0  # an unseen start near the start of the take the replay plays: within this, over both joints (deg)
+PUSH_FORCE = 1.0  # a push by hand in the demonstration: the tip force above this (N)
 
 TEXT_COLOR = "#52514e"
 TITLE_COLOR = "#0b0b0b"
@@ -126,14 +132,17 @@ def main() -> None:
         for channel in ("joints", "torques"):
             figures[f"{channel}_esn{n}.png"] = functools.partial(plot_series, name, channel)
             figures[f"switch_{channel}_esn{n}.png"] = functools.partial(plot_switch_series, name, channel)
-    # The demonstration is not recorded yet; this branch goes once its log is under data/.
-    if DEMONSTRATION.exists():
+    # The demonstration is not recorded yet; these branches go once its log is under data/.
+    recorded = DEMONSTRATION.exists()
+    if recorded:
         figures["demonstration.png"] = functools.partial(plot_demonstration, DEMONSTRATION)
     else:
         print(f"The demonstration is not recorded yet ({DEMONSTRATION.relative_to(REPORT)}): no demonstration.png")
     for name, plot in figures.items():
         plot().savefig(SUMMARY / name, dpi=DPI)
     print_tables()
+    if recorded:
+        print_demonstration(DEMONSTRATION)
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -334,6 +343,23 @@ def joint_distance(task: str, row: dict[str, Any]) -> float:
 def rest_postures(task: str) -> NDArray[np.float64]:
     """Where each of a target's nine takes ends (deg)."""
     return np.degrees(np.array([take(task, index)[-1] for index in range(N_TAKES)]))
+
+
+def named_targets(
+    state: StateLog, points: NDArray[np.float64]
+) -> tuple[list[str], NDArray[np.intp], NDArray[np.float64]]:
+    """The context of a robot app's log: its targets in the order of its columns, the index of the one it names at
+    each step, and the hand's distance to that one at each step (m), from the hand's ``points``."""
+    labels = state.extra["robot_app"]["tasks"]
+    named = np.argmax(state.channel("context"), axis=1)
+    places = np.array([TARGETS[label] for label in labels])[named]
+    return labels, named, np.linalg.norm(points - places, axis=1)
+
+
+def stretches(mask: NDArray[np.bool_]) -> list[tuple[int, int]]:
+    """The stretches of a mask where it holds, each as its first index and the index after its last."""
+    edges = np.flatnonzero(np.diff(np.concatenate(([0], mask.astype(int), [0]))))
+    return [(int(first), int(after)) for first, after in zip(edges[::2], edges[1::2], strict=True)]
 
 
 # ---------------------------------------------------------------------------- figures
@@ -803,14 +829,12 @@ def plot_demonstration(log_path: Path) -> Figure:
     color of the target its context names, and over time the joint angles and their reference, the torques, the
     tip force, the hand's distance to that target, and the context."""
     state = StateLog.load(log_path)
-    labels = state.extra["robot_app"]["tasks"]  # the targets in the order of the log's context
     times = state.times
     task = times > -1e-9
-    named = np.argmax(state.channel("context"), axis=1)  # the index of the target the context names, at each step
-    changes = times[1:][np.diff(named) != 0]
     points = hand(state.channel("q"))
+    labels, named, distance = named_targets(state, points)
+    changes = times[1:][np.diff(named) != 0]
     force = np.linalg.norm(state.channel("ext_force"), axis=1)
-    distance = np.linalg.norm(points - np.array([TARGETS[labels[k]] for k in named]), axis=1)
 
     fig = Figure(figsize=(17, 10), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(
@@ -876,6 +900,48 @@ def plot_demonstration(log_path: Path) -> Figure:
     handles += [Line2D([], [], color=TARGET_COLORS[label], linewidth=2.0, label=f"target {label}") for label in labels]
     fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), frameon=False, labelcolor=TEXT_COLOR)
     return fig
+
+
+def print_demonstration(log_path: Path) -> None:
+    """The run pushed by hand in the robot app, from its saved log: where it starts, the changes of context, the
+    pushes, whether the hand arrives at each target the context names, and the reference's fastest joint speed and
+    the largest torque."""
+    print("\n== The demonstration: ESN #1 in the robot app, pushed by hand while the target changes")
+    state = StateLog.load(log_path)
+    times = state.times
+    task = times > -1e-9
+    points = hand(state.channel("q"))
+    labels, named, distance = named_targets(state, points)
+    first = int(np.flatnonzero(task)[0])
+    start = np.degrees(state.channel("q")[first])
+    print(
+        f"{times[-1]:.1f} s after a warm-up of {-times[0]:.1f} s; from ({start[0]:.0f}, {start[1]:.0f}) deg, the hand"
+        f" at ({points[first, 0]:.2f}, {points[first, 1]:.2f}) m, with the context {labels[named[first]]}"
+    )
+    changes = [first + 1 + int(k) for k in np.flatnonzero(np.diff(named[first:]))]
+    for k in changes:
+        print(f"  at {times[k]:.2f} s the context changes from {labels[named[k - 1]]} to {labels[named[k]]}")
+    force = np.linalg.norm(state.channel("ext_force"), axis=1)
+    pushes = stretches(task & (force > PUSH_FORCE))
+    print(f"{len(pushes)} pushes, where the tip force is above {PUSH_FORCE:g} N:")
+    for a, b in pushes:
+        moved = np.linalg.norm(points[a:b] - points[a], axis=1).max()
+        print(
+            f"  from {times[a]:.2f} s for {(b - a) * state.extra['robot_app']['dt']:.2f} s, at most"
+            f" {force[a:b].max():.1f} N, with the context {labels[named[a]]}: the hand goes {1e3 * moved:.0f} mm"
+            " from where it was at the onset"
+        )
+    print("Each stretch of one context: when the hand arrives within the goal from the stretch's start, and its end")
+    for a, b in itertools.pairwise([first, *changes, len(times)]):
+        label = labels[named[a]]
+        inside = np.flatnonzero(distance[a:b] <= TOLERANCE)
+        arrival = f"arrives after {times[a + inside[0]] - times[a]:.2f} s" if len(inside) else "never arrives"
+        print(
+            f"  {times[a]:.2f} to {times[b - 1]:.2f} s, the context {label}: {arrival};"
+            f" at the end {1e3 * distance[b - 1]:.1f} mm from {label}"
+        )
+    speed, torque = peaks(state, task)
+    print(f"over the run: the reference's fastest joint speed {speed:.1f} deg/s, the largest torque {torque:.2f} N m")
 
 
 # ---------------------------------------------------------------------------- tables
@@ -1061,6 +1127,52 @@ def print_claim_3() -> None:
                     f" | torque {median(torque):6.2f} ({max(torque):6.2f}) N m"
                     f" | arrival {median(column(runs, 'arrival_time_s')):5.2f} s"
                 )
+    print("From how many unseen starts the ESN's measure is smaller than the replay's from the same start (of 36;")
+    print("the detour ratio over the starts from which both arrive)")
+    for label in LABELS:
+        for name, n in ESNS.items():
+            pairs = list(
+                zip(group(robot(n), "esn", label, "unseen"), group(robot(n), "replay", label, "unseen"), strict=True)
+            )
+            arriving = [(run, replay) for run, replay in pairs if run["arrived"] and replay["arrived"]]
+            cells = []
+            for key, those in (
+                ("detour_ratio", arriving),
+                ("peak_reference_speed_dps", pairs),
+                ("peak_torque_nm", pairs),
+            ):
+                cells.append(f"{key} {sum(run[key] < replay[key] for run, replay in those)} of {len(those)}")
+            print(f"{label} {name}: {', '.join(cells)}")
+    print(
+        f"A reference that jumps: runs whose reference's fastest joint speed is above {JUMP_SPEED:g} deg/s, whose"
+        f" largest torque is above {JUMP_TORQUE:g} N m, and both"
+    )
+    for label in LABELS:
+        for which, of in (("demo", N_TAKES), ("unseen", 36)):
+            cells = []
+            for name, stem, arm in arms:
+                runs = group(stem, arm, label, which)
+                fast = [run["peak_reference_speed_dps"] > JUMP_SPEED for run in runs]
+                strong = [run["peak_torque_nm"] > JUMP_TORQUE for run in runs]
+                both = sum(f and s for f, s in zip(fast, strong, strict=True))
+                cells.append(f"{name} {sum(fast)}, {sum(strong)}, {both}")
+            print(f"{label} {'takes' if which == 'demo' else 'unseen':6s} (of {of}): {'; '.join(cells)}")
+    print(
+        f"Medians from the unseen starts within {NEAR:g} deg of the start of the take the replay plays (over both"
+        " joints), and from those farther"
+    )
+    for label in LABELS:
+        distances = np.array([joint_distance(label, replay) for replay in group(robot("1"), "replay", label, "unseen")])
+        for name, stem, arm in arms:
+            runs = group(stem, arm, label, "unseen")
+            cells = []
+            for heading, side in (("within", distances <= NEAR), ("farther", distances > NEAR)):
+                chosen = [run for run, here in zip(runs, side, strict=True) if here]
+                cells.append(
+                    f"{heading} ({len(chosen)}): speed {median(column(chosen, 'peak_reference_speed_dps')):7.1f} dps,"
+                    f" torque {median(column(chosen, 'peak_torque_nm')):6.2f} N m"
+                )
+            print(f"{label} {name:6s}: {' | '.join(cells)}")
     print("The unseen starts shown over time (the replay's largest torque is the lower middle of the 36):")
     for label, origin in UNSEEN_SHOWN.items():
         replay = next(row for row in rows(robot("1"), "replay", label) if row["origin"] == origin)
