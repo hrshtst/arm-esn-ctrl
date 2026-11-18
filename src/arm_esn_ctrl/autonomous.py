@@ -21,9 +21,15 @@ per task, each naming a demonstration run, its ``train`` files, and the task's n
 as its ``context``. :func:`load_setups` loads one setup per task, each as that of a
 single task, with its own target; :func:`training_set` gathers their demonstrations
 and each one's task for :meth:`arm_esn_ctrl.esn.ReachingEsn.fit`. A task without a
-target, such as a periodic motion, has a setup whose target and goal radius are NaN:
-no run arrives, and its own measures are those of
+target, such as a periodic motion, has a setup whose target, goal radius, and hold are
+NaN: no run arrives, and its own measures are those of
 :func:`arm_esn_ctrl.metrics.loop_periods` and :func:`arm_esn_ctrl.metrics.mean_loop`.
+
+A periodic motion (a ``[task]`` of type ``periodic_curve``) is taught by one take.
+:func:`task_cycle` gives what its runs are measured against, its take's taught path
+and period, and the loop its replays go around; :func:`cycle_run_metrics` measures
+whether a run cycles (see :func:`arm_esn_ctrl.metrics.cycle_metrics`), with
+``[evaluation]``'s ``path_tolerance``, ``cycle_periods``, and ``cycle_turns``.
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import (
     arrival_index,
     count_speed_peaks,
+    cycle_metrics,
     directness,
     distances_to_path,
     hold_metrics,
@@ -50,6 +57,9 @@ from arm_esn_ctrl.metrics import (
     onset_index,
     path_distance,
     path_rmse,
+    taught_loop,
+    taught_path,
+    taught_period,
 )
 from arm_esn_ctrl.postures import joint_limits_deg
 from arm_esn_ctrl.storage import resolve_run_path
@@ -68,7 +78,14 @@ EVALUATION_KEYS = {
     "ringing_window",
     "following_window",
     "warmup",  # robot_esn.py: the start posture held this long, in place of the ESN's warm-up (s)
+    "path_tolerance",  # a periodic task: see task_cycle
+    "cycle_periods",
+    "cycle_turns",
+    "after_window",
 }
+# How long after a disturbance's end the largest torque and the largest distance from the taught path of a
+# periodic task's run are measured, unless [evaluation] gives an after_window (s).
+AFTER_WINDOW = 2.0
 # A demonstrator's reach this close to the training path, on average, has no course of its own to
 # compare with: from a start along the demonstrated path, the ratio would divide by almost nothing (rad).
 # The same holds for a start this close to it, which has no offset to retain.
@@ -209,7 +226,7 @@ def load_setup(config: dict[str, Any]) -> Setup:
 
     Demonstrations whose configuration has no ``[controller]``, as one taught by
     hand, have no demonstrator: nothing is simulated. A task without a target has a
-    target and a goal radius of NaN.
+    target, a goal radius, and a hold of NaN, and its ``[evaluation]`` no ``hold``.
     """
     dt = config["esn"]["dt"]
     evaluation = config["evaluation"]
@@ -243,7 +260,7 @@ def load_setup(config: dict[str, Any]) -> Setup:
         task=demo_config["task"],
         target=np.full(2, np.nan) if task.target is None else task.target,
         radius=float("nan") if task.tolerance is None else task.tolerance,
-        hold=evaluation["hold"],
+        hold=float("nan") if task.target is None else evaluation["hold"],
         times=dt * np.arange(n_steps + 1),
     )
 
@@ -463,7 +480,8 @@ def taught_metrics(run: Run, setup: Setup, arrival: int | None) -> dict[str, flo
         "jitter_deg": jitter_degrees(run.q[first:reach_end], window),
         "taught_jitter_deg": jitter_degrees(taught[first:taught_end], window),
         "speed_peaks": peaks(setup.times[first:reach_end], run.hand[first:reach_end]),
-        "taught_speed_peaks": peaks(setup.times[first:taught_end], taught_hand[first:taught_end]),
+        # The take's own times: a take that never arrives, as a periodic one, may be longer than the run.
+        "taught_speed_peaks": peaks(dt * np.arange(first, taught_end, dtype=np.float64), taught_hand[first:taught_end]),
     }
 
 
@@ -485,3 +503,61 @@ def training_path_distance(q: NDArray[np.float64], training: list[NDArray[np.flo
 def rms_degrees(error: NDArray[np.float64]) -> float:
     """Root mean square of an angle error given in radians, in degrees."""
     return float(np.degrees(np.sqrt(np.mean(error**2))))
+
+
+@dataclass(frozen=True)
+class Cycle:
+    """What the runs of a periodic task are measured against, and the loop its take is replayed around."""
+
+    center: NDArray[np.float64]  # the curve's center (m)
+    path: NDArray[np.float64]  # the taught path: the take's hand over its taught loops, at the ESN's period
+    period: float  # the taught period (s)
+    loop: tuple[int, int]  # the taught loop's first sample and one past its last, at the ESN's period
+    tolerance: float  # a hand that cycles keeps this near the taught path (m)
+    periods: int  # it is measured over this many taught periods at the end of a run
+    turns: tuple[float, float]  # and goes around this many turns over them, the least and the most
+    after: float  # after a disturbance, its largest torque and distance from the path are measured this long (s)
+
+
+def task_cycle(setup: Setup, evaluation: dict[str, Any]) -> Cycle | None:
+    """What the runs of a periodic task are measured against; None for any other task.
+
+    The task is taught by one take, sampled at the ESN's period: its taught path,
+    taught period, and taught loop (see :func:`arm_esn_ctrl.metrics.taught_path`,
+    :func:`arm_esn_ctrl.metrics.taught_period`, and
+    :func:`arm_esn_ctrl.metrics.taught_loop`) are that take's, around the center of the
+    task's curve. ``[evaluation]`` gives the rest: ``path_tolerance`` (m),
+    ``cycle_periods``, ``cycle_turns``, and ``after_window`` (s; ``AFTER_WINDOW`` by
+    default).
+    """
+    if setup.task.get("type") != "periodic_curve":
+        return None
+    (q,) = setup.demos.values()
+    (hand,) = setup.demo_hands.values()
+    center = np.asarray(setup.task["center"], dtype=np.float64)
+    dt = float(setup.times[1] - setup.times[0])
+    least, most = evaluation["cycle_turns"]
+    return Cycle(
+        center=center,
+        path=taught_path(hand, center),
+        period=taught_period(dt * np.arange(len(hand), dtype=np.float64), hand, center),
+        loop=taught_loop(q, hand, center),
+        tolerance=float(evaluation["path_tolerance"]),
+        periods=int(evaluation["cycle_periods"]),
+        turns=(float(least), float(most)),
+        after=float(evaluation.get("after_window", AFTER_WINDOW)),
+    )
+
+
+def cycle_run_metrics(hand: NDArray[np.float64], setup: Setup, cycle: Cycle) -> dict[str, Any]:
+    """The measures of a run of a periodic task, its hand at ``setup``'s times, to add to :func:`run_metrics`'.
+
+    A periodic task has no target to arrive at and hold: ``arrived``, ``left_goal``,
+    and ``success`` are left empty and ``hold_observed_s`` NaN, as the other measures
+    of the arrival and the hold are already. Then whether the run cycles, and the rest
+    of :func:`arm_esn_ctrl.metrics.cycle_metrics`.
+    """
+    unreached = {"arrived": "", "left_goal": "", "success": "", "hold_observed_s": float("nan")}
+    return unreached | cycle_metrics(
+        setup.times, hand, cycle.path, cycle.center, cycle.period, cycle.tolerance, cycle.periods, cycle.turns
+    )

@@ -68,6 +68,25 @@ arrives at the last task's target and holds there (``switch_arrived``,
 ``switch_arrival_time_s`` from the change, ``switch_left_goal``, ``switch_success``,
 and ``switch_final_distance_m``; empty for the replays, which keep to their take).
 
+A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) has no
+target. Its replay and progress replay go on without end through the take's taught
+loop, at the ESN's period (see :func:`arm_esn_ctrl.metrics.taught_loop`): from the
+take's first sample, whatever the start posture. Its pushes are turned from the
+direction from the start hand toward the curve's center, and given by their
+``onset``. Its metrics say whether each run cycles, by ``[evaluation]``'s
+``path_tolerance``, ``cycle_periods``, and ``cycle_turns`` (see
+:func:`arm_esn_ctrl.autonomous.task_cycle`): ``cycles``, ``turns``, ``path_rms_m``,
+``off_path_max_m``, ``period_s``, ``period_ratio``, and ``joining_time_s``. The
+measures of the arrival, the hold, the detour, the settling, the distance to the
+target, and the progress along the demonstrated path and the reference's lead are
+empty or NaN. After a disturbance, the hand's distance is from the taught path, its
+following gain is against where the looping replay is at the same time, and two
+measures are added: the largest joint torque (``torque_after_nm``) and the hand's
+largest distance from the taught path (``off_path_after_m``) over ``after_window``
+seconds (in ``[evaluation]``; 2 s by default) from its end. ``paths.png`` draws the
+curve, ``timeline.png`` the hand's distance from the taught path and its turns
+about the curve's center, and ``metrics.png`` is not drawn.
+
 Every run is compared with the demonstrator's undisturbed reach from the same
 start posture, and the run directory receives:
 
@@ -121,16 +140,19 @@ from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog
 
 from arm_esn_ctrl.autonomous import (
+    Cycle,
     Reference,
     Run,
     Setup,
+    cycle_run_metrics,
     demonstration_tables,
     load_setups,
     rms_degrees,
     run_metrics,
+    task_cycle,
     task_names,
 )
-from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach
+from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach, task_path
 from arm_esn_ctrl.disturbances import (
     check_recorded_arm,
     disturbance_spans,
@@ -142,12 +164,15 @@ from arm_esn_ctrl.disturbances import (
 from arm_esn_ctrl.drawing import OffsetMap, draw_postures, spread_along_path
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import (
+    distances_in_chunks,
     distances_to_path,
     disturbance_following,
     disturbance_returns,
     disturbance_ringing,
     hand_speed,
     hold_metrics,
+    largest_after,
+    loop_phase,
     motor_effort,
     path_progress,
     path_rmse,
@@ -160,6 +185,7 @@ from arm_esn_ctrl.tracking import (
     ReplaySource,
     TrackerConfig,
     gains_posture,
+    loop_sample,
     nearest_demonstration,
     task_joint_angles,
     track,
@@ -193,6 +219,8 @@ RINGING_WINDOW = 2.0
 # How much the reference follows the arm is measured from a disturbance's onset to this long after its
 # end, unless [evaluation] gives a following_window (s): the block's effort window, 0.5 s past its release.
 FOLLOWING_WINDOW = 0.5
+# A periodic task's curve is drawn as a polygon of this many sides.
+CURVE_SIDES = 360
 
 
 def main() -> None:
@@ -325,6 +353,9 @@ def run_task(
     ringing = ringing_settings(evaluation)
     following = evaluation.get("following_window", FOLLOWING_WINDOW)
     period = esn.config.dt
+    cycle = task_cycle(setup, evaluation)
+    if cycle is not None:
+        print_taught_loop(setup, cycle, period)
 
     def disturbance_of(i: int) -> Any:
         """The disturbance's tables for a run from start posture ``i``, its pushes placed along the taught motion."""
@@ -334,7 +365,8 @@ def run_task(
     def disturbance_from(i: int) -> Any:
         """A fresh disturbance for a run from start posture ``i``."""
         start_hand = endpoint_positions(setup.skeleton, setup.starts[i].q[np.newaxis])[0]
-        return make_disturbance(disturbance_of(i), start_hand, setup.target, dt=demo_config["simulator"]["dt"])
+        aim = push_aim(setup, cycle)
+        return make_disturbance(disturbance_of(i), start_hand, aim, dt=demo_config["simulator"]["dt"])
 
     spans = [disturbance_spans(disturbance_of(i)) for i in range(len(setup.starts))]
     switched = schedule is not None and len(schedule) > 1 and final is not None
@@ -349,7 +381,7 @@ def run_task(
         rows.append(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
-            | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following)
+            | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following, cycle)
             | (switch_metrics(None, setup, 0.0, period) if switched else {})
         )
 
@@ -380,12 +412,13 @@ def run_task(
         setting_dir.mkdir()
         for i, start in enumerate(setup.starts):
             replayed = nearest_demonstration(start.q, setup.demos)
+            loop = None if cycle is None else cycle.loop  # a periodic take is replayed without end
             sources: dict[str, ReferenceSource] = {
                 "esn": EsnSource(esn, schedule),
-                "replay": ReplaySource(setup.demos[replayed]),
+                "replay": ReplaySource(setup.demos[replayed], loop),
             }
             if progress is not None:
-                sources["progress"] = progress_source(progress, setup.demos[replayed], period)
+                sources["progress"] = progress_source(progress, setup.demos[replayed], period, loop)
             for arm, source in sources.items():
                 log = track(
                     posed(setup.skeleton, start.q),
@@ -418,22 +451,30 @@ def run_task(
                     | {"arm": arm, "start": i}
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm in ("replay", "progress") else ""}
-                    | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following)
+                    | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following, cycle)
                 )
                 if switched and schedule is not None and final is not None:
                     rows[-1] |= switch_metrics(log if arm == "esn" else None, final, schedule[-1][0], period)
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
-    print_summary(rows, len(setup.starts), window, setup.reference)
+    if cycle is None:
+        print_summary(rows, len(setup.starts), window, setup.reference)
+    else:
+        print_cycle_summary(rows, len(setup.starts))
 
     title = f"ESN on the robot: {name}"
-    if settings[0].omega is not None:  # given gains have no natural frequency or damping ratio to plot against
+    # Given gains have no natural frequency or damping ratio to plot against, and a periodic task's runs neither
+    # arrive nor hold.
+    if settings[0].omega is not None and cycle is None:
         swept = "damping" if len(tracker.get("dampings", [1.0])) > 1 else "omega"
         plot_metrics(rows, tracker["laws"], len(setup.starts), window, swept, setup.reference, title).savefig(
             run_dir / "metrics.png", dpi=150
         )
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
-    plot_timeline(run_dir, setup, settings, spans[0], title).savefig(run_dir / "timeline.png", dpi=150)
+    if cycle is None:
+        plot_timeline(run_dir, setup, settings, spans[0], title).savefig(run_dir / "timeline.png", dpi=150)
+    else:
+        plot_cycle_timeline(run_dir, setup, settings, spans[0], title, cycle).savefig(run_dir / "timeline.png", dpi=150)
     plot_joints(run_dir, setup, settings, spans[0], title).savefig(run_dir / "joints.png", dpi=150)
     plot_torques(run_dir, setup, settings, spans[0], title).savefig(run_dir / "torques.png", dpi=150)
     for offset in config.get("plots", {}).get("offsets_deg", []):
@@ -450,13 +491,35 @@ def run_task(
     return rows
 
 
-def progress_source(table: dict[str, Any], q_demo: NDArray[np.float64], period: float) -> ProgressReplaySource:
-    """The progress-based replay of ``q_demo`` that a ``[progress]`` table configures: ``lead_deg``, ``window`` (s)."""
+def progress_source(
+    table: dict[str, Any], q_demo: NDArray[np.float64], period: float, loop: tuple[int, int] | None = None
+) -> ProgressReplaySource:
+    """The progress-based replay of ``q_demo`` that a ``[progress]`` table configures: ``lead_deg``, ``window`` (s).
+
+    A periodic take is replayed without end through its ``loop`` (see
+    :class:`arm_esn_ctrl.tracking.ProgressReplaySource`).
+    """
     unknown = set(table) - {"lead_deg", "window"}
     if unknown:
         msg = f"[progress] takes lead_deg and window, not {', '.join(sorted(unknown))}"
         raise ValueError(msg)
-    return ProgressReplaySource(q_demo, np.radians(table["lead_deg"]), round(table["window"] / period))
+    return ProgressReplaySource(q_demo, np.radians(table["lead_deg"]), round(table["window"] / period), loop)
+
+
+def print_taught_loop(setup: Setup, cycle: Cycle, period: float) -> None:
+    """Print the taught loop the replays of a periodic task go around, the step where it closes, and the period."""
+    (q,) = setup.demos.values()
+    first, end = cycle.loop
+    step = float(np.degrees(np.linalg.norm(q[end] - q[first])))
+    print(
+        f"The replays go around the take's taught loop from {first * period:.2f} s to {end * period:.2f} s, then"
+        f" again, a step of {step:.3f} deg where it closes; the taught period is {cycle.period:.3f} s"
+    )
+
+
+def push_aim(setup: Setup, cycle: Cycle | None) -> NDArray[np.float64]:
+    """Where a push's direction is turned from, from the start hand: a reach's target, or a periodic task's center."""
+    return setup.target if cycle is None else cycle.center
 
 
 @dataclass(frozen=True)
@@ -573,6 +636,7 @@ def arm_metrics(
     tolerance: float,
     ringing: tuple[float, float],
     following: float,
+    cycle: Cycle | None = None,
 ) -> dict[str, Any]:
     """The metrics of one arm's run from start posture ``i``, compared with the demonstrator's undisturbed reach.
 
@@ -628,6 +692,9 @@ def arm_metrics(
     configured (see :func:`per_disturbance`).
 
     The demonstrator tracks no reference, so its tracking metrics are NaN.
+
+    A periodic task's run, given its ``cycle``, is measured as :func:`cycle_columns`
+    says: from its taught path after a disturbance, and whether it cycles.
     """
     q = task_joint_angles(log, period, setup.times[-1])
     hand = endpoint_positions(setup.skeleton, q)
@@ -660,14 +727,20 @@ def arm_metrics(
             leads[n] = float(ahead[0] - progress(log.channel("q")[k : k + 1], setup.starts[i].q, setup)[0])
             gaps[n] = float(np.degrees(np.linalg.norm(log.channel("q_ref")[k] - log.channel("q")[k])))
     taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
-    returns = disturbance_returns(setup.times, distances_to_path(hand, taught_hand), spans, tolerance) if spans else []
+    returns: list[tuple[float, float]] = []
+    if spans:  # a periodic task's hand is measured from its taught path
+        off_path = distances_to_path(hand, taught_hand) if cycle is None else distances_in_chunks(hand, cycle.path)
+        returns = disturbance_returns(setup.times, off_path, spans, tolerance)
     reference_hand = None
     followed = [nan] * len(spans)
     if tracked:
         reference_hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1], "q_ref"))
         if spans:
-            # Where the taught motion is at each time, as the replay's reference: its last posture once it ends.
+            # Where the taught motion is at each time, as the replay's reference: its last posture once it ends,
+            # or, of a periodic take, its taught loop again and again.
             taught_now = taught_hand[np.minimum(np.arange(len(setup.times)), len(taught_hand) - 1)]
+            if cycle is not None:
+                taught_now = taught_hand[[loop_sample(k, cycle.loop) for k in range(len(setup.times))]]
             followed = disturbance_following(setup.times, hand, reference_hand, taught_now, spans, following)
     measured = {
         "reference_lead": leads,
@@ -682,6 +755,7 @@ def arm_metrics(
         disturbance_metrics |= dict(zip(per_disturbance(metric, len(spans)), values or [nan], strict=True))
     reference_path_rmse = nan if reference_hand is None else path_rmse(reference_hand, taught_hand)
     task_torque, task_effort, task_work = motor_effort(times[task], tau[task], log.channel("dq")[task])
+    periodic = {} if cycle is None else cycle_columns(log, hand, setup, spans, cycle)  # in place of a reach's
     return run_metrics(run, setup) | {
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
         "reference_path_rmse_m": reference_path_rmse,
@@ -696,7 +770,39 @@ def arm_metrics(
         "effort_n2m2s": float(np.sum(tau[in_window] ** 2) * np.diff(times).mean()),
         "peak_external_force_n": float(np.linalg.norm(force[in_window], axis=1).max()),
         **disturbance_metrics,
+        **periodic,
     }
+
+
+def cycle_columns(
+    log: StateLog, hand: NDArray[np.float64], setup: Setup, spans: list[tuple[float, float]], cycle: Cycle
+) -> dict[str, Any]:
+    """The metrics of a periodic task's run, its ``hand`` at ``setup``'s times, that :func:`arm_metrics` adds.
+
+    A periodic task has no target: the settling time and each disturbance's
+    ``reference_lead`` are NaN, and the arrival and the hold are left empty or NaN
+    (see :func:`arm_esn_ctrl.autonomous.cycle_run_metrics`). Then whether the run
+    cycles and the rest of the cycle measures, and, for each disturbance (``spans``,
+    when each acts on the task clock), over ``cycle.after`` seconds from its end:
+
+    - ``torque_after_nm``: the largest joint torque;
+    - ``off_path_after_m``: the hand's largest distance from the taught path.
+
+    Without a disturbance, these are NaN. With several, ``torque_after_nm_1``, ... (see
+    :func:`per_disturbance`).
+    """
+    nan = float("nan")
+    torque_after, off_path_after = [nan], [nan]
+    if spans:
+        torque = np.abs(log.channel("tau")).max(axis=1)
+        torque_after = largest_after(log.times, torque, spans, cycle.after)
+        off_path_after = largest_after(setup.times, distances_in_chunks(hand, cycle.path), spans, cycle.after)
+    columns: dict[str, Any] = {"settling_time_s": nan}
+    columns |= {name: nan for name in per_disturbance("reference_lead", len(spans))}
+    columns |= cycle_run_metrics(hand, setup, cycle)
+    columns |= dict(zip(per_disturbance("torque_after_nm", len(spans)), torque_after, strict=True))
+    columns |= dict(zip(per_disturbance("off_path_after_m", len(spans)), off_path_after, strict=True))
+    return columns
 
 
 def per_disturbance(metric: str, count: int) -> list[str]:
@@ -752,6 +858,31 @@ def print_summary(rows: list[dict[str, Any]], n_starts: int, window: list[float]
             f" {sum(r['success'] for r in group):2d}/{n_starts:<3d} {m['settling_time_s']:6.2f}"
             f" {1000 * m['final_distance_m']:6.1f} {m['peak_reference_speed_dps']:6.0f} {m['peak_hand_speed_mps']:5.2f}"
             f" {m['peak_torque_nm']:6.1f} {m['effort_n2m2s']:8.1f} {m['peak_external_force_n']:6.1f}"
+        )
+
+
+def print_cycle_summary(rows: list[dict[str, Any]], n_starts: int) -> None:
+    """Print, for each arm and tracker setting of a periodic task, how many runs cycle, and two medians over its runs.
+
+    The medians are of the path RMS and of the period ratio, a run without a whole
+    loop at the end left out of the latter (see :func:`arm_esn_ctrl.metrics.cycle_metrics`).
+    """
+    print(f"\nOf the {n_starts} start postures: the runs that cycle, and the medians over the runs")
+    print(f"{'law':<16}{'ω':<6}{'ζ':<5}{'arm':<12}{'cycle':>7}{'path RMS':>10}{'period':>8}")
+    print(f"{'':<16}{'rad/s':<6}{'':<17}{'':>7}{'(mm)':>10}{'ratio':>8}")
+    keys = ("law", "omega", "damping", "arm")
+    for key in dict.fromkeys(tuple(r[name] for name in keys) for r in rows):
+        group = [r for r in rows if tuple(r[name] for name in keys) == key]
+        law, omega, damping, arm = key
+        if omega == "":  # given gains
+            setting = f"{law.replace('_', ' '):<15} {'kp, kd':<10}"
+        else:
+            setting = f"{law.replace('_', ' '):<15} {omega:<5g} {damping:<4g}"
+        ratios = np.array([r["period_ratio"] for r in group], dtype=np.float64)
+        ratio = float(np.median(ratios[np.isfinite(ratios)])) if np.isfinite(ratios).any() else float("nan")
+        print(
+            f"{setting:<26} {arm:<12} {sum(r['cycles'] for r in group):2d}/{n_starts:<3d}"
+            f" {1000 * np.median([r['path_rms_m'] for r in group]):9.1f} {ratio:7.3f}"
         )
 
 
@@ -859,10 +990,12 @@ def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str)
     """Plot the hand paths of every run, over the demonstrator's undisturbed reaches (or the taught motion).
 
     Faint postures of the arm driven by the ESN from the first start (the first, the
-    last, and three between them, spread along its path) show where the arm was.
+    last, and three between them, spread along its path) show where the arm was. A
+    periodic task's curve is drawn where a reach's target would be.
     """
     rows = by_law(settings)
     columns = len(rows[0])
+    curve = task_path(setup.task, CURVE_SIDES)
     width = max(3.2 * columns, 4.8)  # wide enough for the arm with a single column
     fig = Figure(figsize=(width, 3.3 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(title, color="#0b0b0b")
@@ -893,6 +1026,8 @@ def plot_paths(run_dir: Path, setup: Setup, settings: list[Setting], title: str)
             q = log.channel("q").reshape(len(log.times), -1)
             draw_postures(ax, setup.skeleton, q[spread_along_path(hand)])
             ax.plot(*setup.target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
+            if curve is not None:
+                ax.plot(*curve.T, color="#0b0b0b", linewidth=0.8, linestyle="--", label="the task's curve")
             ax.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
             ax.set_aspect("equal")
     handles, labels = axes[0, 0].get_legend_handles_labels()
@@ -977,6 +1112,74 @@ def plot_timeline(
     handles, labels = axes[0, 0].get_legend_handles_labels()
     handles.append(axes[1, 0].plot([], [], color=TEXT_COLOR, linestyle="--", linewidth=1.3)[0])
     labels.append("its reference (progress)")
+    ncol = 4 if columns > 2 else columns  # a narrow figure wraps the legend
+    fig.legend(handles, labels, loc="outside lower center", ncol=ncol, frameon=False, labelcolor=TEXT_COLOR)
+    return fig
+
+
+def plot_cycle_timeline(
+    run_dir: Path, setup: Setup, settings: list[Setting], spans: list[tuple[float, float]], title: str, cycle: Cycle
+) -> Figure:
+    """Plot a periodic task's timeline from the first start: the hand off the taught path, its turns, and the torque.
+
+    The hand's distance from the taught path and its turns about the curve's center,
+    counted from the run's start, are drawn at the ESN's period, the turns for the
+    arms (solid) and for their references (dashed); the taught motion's turns are drawn
+    thick and gray. The dotted line is the path tolerance; the shaded bands are when
+    the disturbances act.
+    """
+    rows = by_law(settings)
+    columns = len(rows[0])
+    fig = Figure(figsize=(3.6 * columns + 1.0, 7.2 * len(rows) + 0.8), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(f"{title}, from {setup.starts[0].origin}", color="#0b0b0b")
+    axes = np.asarray(fig.subplots(3 * len(rows), columns, sharex=True)).reshape(3 * len(rows), columns)
+    period, duration = float(setup.times[1] - setup.times[0]), float(setup.times[-1])
+    ref_times, ref_q, ref_label = demonstrated_motion(setup)
+
+    def turns(q: NDArray[np.float64]) -> NDArray[np.float64]:
+        phase = loop_phase(endpoint_positions(setup.skeleton, q), cycle.center)
+        return (phase - phase[0]) / (2 * np.pi)
+
+    for row, law_settings in enumerate(rows):
+        for col, setting in enumerate(law_settings):
+            ax_distance, ax_turns, ax_torque = axes[3 * row : 3 * row + 3, col]
+            for ax in (ax_distance, ax_turns, ax_torque):
+                style(ax)
+                for span in spans:
+                    ax.axvspan(*span, color=DISTURBANCE_COLOR, zorder=0)
+            ax_turns.plot(ref_times, turns(ref_q), color=ARM_COLORS["demonstrator"], linewidth=4, alpha=0.3)
+            for arm in TRACKED:
+                path = run_dir / setting.name / f"{arm}_00.sklog.npz"
+                if not path.exists():
+                    continue
+                log = StateLog.load(path)
+                color, zorder = ARM_COLORS[arm], ARM_ZORDERS[arm]
+                q = task_joint_angles(log, period, duration)
+                off = distances_in_chunks(endpoint_positions(setup.skeleton, q), cycle.path)
+                ax_distance.plot(
+                    setup.times, 1000 * off, color=color, linewidth=1.3, label=ARM_LABELS[arm], zorder=zorder
+                )
+                ax_turns.plot(setup.times, turns(q), color=color, linewidth=1.3, zorder=zorder)
+                reference_zorder = REFERENCE_ZORDER if arm == "esn" else zorder
+                q_ref = task_joint_angles(log, period, duration, "q_ref")
+                ax_turns.plot(
+                    setup.times, turns(q_ref), color=color, linewidth=1.3, linestyle="--", zorder=reference_zorder
+                )
+                tau = np.linalg.norm(log.channel("tau"), axis=1)
+                ax_torque.plot(log.times, tau, color=color, linewidth=1.3, zorder=zorder)
+            ax_distance.axhline(1000 * cycle.tolerance, color="#0b0b0b", linewidth=0.8, linestyle=":")
+            ax_distance.set(xlim=(-0.3, duration), ylim=(0, None))
+            ax_distance.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
+            ax_torque.set_xlabel("time (s)", color=TEXT_COLOR, fontsize=8)
+            if col == 0:
+                ax_distance.set_ylabel("hand off the taught path (mm)", color=TEXT_COLOR)
+                ax_turns.set_ylabel("turns about the\ncurve's center", color=TEXT_COLOR)
+                ax_torque.set_ylabel("joint torque norm (N m)", color=TEXT_COLOR)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    handles.append(axes[1, 0].plot([], [], color=ARM_COLORS["demonstrator"], linewidth=4, alpha=0.3)[0])
+    labels.append(f"{ref_label} (turns)")
+    handles.append(axes[1, 0].plot([], [], color=TEXT_COLOR, linestyle="--", linewidth=1.3)[0])
+    labels.append("its reference (turns)")
     ncol = 4 if columns > 2 else columns  # a narrow figure wraps the legend
     fig.legend(handles, labels, loc="outside lower center", ncol=ncol, frameon=False, labelcolor=TEXT_COLOR)
     return fig

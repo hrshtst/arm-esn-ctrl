@@ -16,7 +16,11 @@ A disturbance is configured by a ``[disturbance]`` table, and several by
   from the run's start: when its hand has come that fraction of the way to the
   target, 1 less its distance to the target over the distance at its start, so
   that takes of different lengths are pushed at the same stage of their reach
-  (:func:`placed` turns it into the onset).
+  (:func:`placed` turns it into the onset). A periodic motion has no target. Its
+  pushes are turned from the direction from the start hand position toward the
+  center of its curve, fixed for the run: the runners give the center in place of
+  the target. They are given by their ``onset``, since there is no way to a target
+  to place them along.
 - ``type = "block"``: from ``onset`` until ``release``, a stiff spring-damper
   (``stiffness`` in N/m, ``damping`` in N s/m) holds the tip where it was at
   ``onset``, like a hand gripping the arm; then it lets go.

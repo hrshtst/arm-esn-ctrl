@@ -38,6 +38,13 @@ An ESN of several tasks is trained on the demonstrations of each, named by one
 that task's start postures. The metrics then have a ``task`` column, and each task
 has its own figures, ``autonomous_<task>.png`` and ``grid_<task>.png``.
 
+A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) has no
+target: each run's metrics say whether it cycles, by ``[evaluation]``'s
+``path_tolerance``, ``cycle_periods``, and ``cycle_turns`` (see
+:func:`arm_esn_ctrl.autonomous.cycle_run_metrics`), the arrival and the hold are left
+empty or NaN, the printed summary counts the runs that cycle, and the figure draws
+the task's curve.
+
 The commands that run the trained ESN live in the apps of ``tools/`` are printed at
 the end. An optional ``[apps]`` table gives the robot app's other arguments as
 ``robot_app``, such as its tracker: ``"--law pd --omega 20 --damping 0.4
@@ -65,15 +72,17 @@ from arm_esn_ctrl.autonomous import (
     Run,
     Setup,
     Start,
+    cycle_run_metrics,
     demonstration_tables,
     load_setups,
     rms_degrees,
     run_autonomously,
     run_metrics,
+    task_cycle,
     task_names,
     training_set,
 )
-from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log
+from arm_esn_ctrl.demonstrations import endpoint_positions, joint_trajectory_log, task_path
 from arm_esn_ctrl.drawing import OffsetMap
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import hand_speed
@@ -90,6 +99,7 @@ OUTCOME_COLORS = ["#2a78d6", "#eb6834", "#52514e"]  # arrive and hold, leave the
 OUTCOMES = ["arrive and hold", "leave the goal", "never arrive"]
 _MAX_TABLE_ROWS = 40
 _MAX_RATIO_SHOWN = 1.5  # the training path ratio's color scale ends here
+_CURVE_SIDES = 360  # a periodic task's curve is drawn as a polygon of this many sides
 
 
 def main() -> None:
@@ -123,6 +133,7 @@ def main() -> None:
             esn.set_context(task)
             print(f"\nTask {names[task]}")
         runs = run_autonomously(esn, setup)
+        cycle = task_cycle(setup, config["evaluation"])
         task_rows: list[dict[str, Any]] = []
         for run in runs:
             i = len(rows) + len(task_rows)
@@ -136,14 +147,19 @@ def main() -> None:
                 | {"start": i, "origin": run.start.origin}
                 | joint_columns("start_q{j}_deg", np.degrees(run.start.q))
                 | run_metrics(run, setup)
+                | ({} if cycle is None else cycle_run_metrics(run.hand, setup, cycle))
             )
         rows += task_rows
-        print_metrics(task_rows, setup.starts, setup.reference)
+        if cycle is None:
+            print_metrics(task_rows, setup.starts, setup.reference)
+        else:
+            print_cycles(task_rows, setup.starts)
 
         suffix = f"_{names[task]}" if names else ""
         title = f"Autonomous ESN: {args.config.stem}" + (f", task {names[task]}" if names else "")
         training = [(q, endpoint_positions(setup.skeleton, q)) for q in setup.demos.values()]
-        plot_runs(setup.times, runs, training, setup.target, title).savefig(
+        curve = task_path(setup.task, _CURVE_SIDES)
+        plot_runs(setup.times, runs, training, setup.target, title, curve).savefig(
             run_dir / f"autonomous{suffix}.png", dpi=150
         )
         if "start_grid" in config["evaluation"]:
@@ -205,6 +221,33 @@ def print_metrics(rows: list[dict[str, Any]], starts: list[Start], reference: Re
         )
 
 
+def print_cycles(rows: list[dict[str, Any]], starts: list[Start]) -> None:
+    """Print the cycle measures of a periodic task's runs, one start posture per line, then a summary by kind of start.
+
+    The table is left out when there are many start postures (see ``metrics.csv``).
+    """
+    if len(rows) > _MAX_TABLE_ROWS:
+        print(f"{len(rows)} start postures: see metrics.csv for each")
+    else:
+        print("start  origin                cycles  turns  path RMS  off the path  period  joining")
+        print("                                            (mm)      at most (mm)  ratio   time (s)")
+        for r in rows:
+            print(
+                f"{r['start']:5d}  {r['origin']:<20}  {'yes' if r['cycles'] else 'no':>6}  {r['turns']:5.2f}"
+                f"  {1000 * r['path_rms_m']:8.1f}  {1000 * r['off_path_max_m']:12.1f}  {r['period_ratio']:6.3f}"
+                f"  {r['joining_time_s']:8.2f}"
+            )
+    for name in dict.fromkeys(s.group for s in starts):  # the groups, in the order of the table
+        group = [r for r, s in zip(rows, starts, strict=True) if s.group == name]
+        ratios = np.array([r["period_ratio"] for r in group], dtype=np.float64)
+        ratio = float(np.median(ratios[np.isfinite(ratios)])) if np.isfinite(ratios).any() else float("nan")
+        print(
+            f"{len(group)} {name} starts: {sum(r['cycles'] for r in group)} of {len(group)} cycle,"
+            f" median path RMS {1000 * np.median([r['path_rms_m'] for r in group]):.1f} mm,"
+            f" median period ratio {ratio:.3f}"
+        )
+
+
 def print_table(rows: list[dict[str, Any]], reference: Reference) -> None:
     """Print the metrics of each start posture; the path distance, joint error, and delay are from the ``reference``."""
     print(f"Path distance, joint error, and arrival delay: from the {reference.name}")
@@ -227,12 +270,14 @@ def plot_runs(
     training: list[tuple[np.ndarray, np.ndarray]],
     target: np.ndarray,
     title: str,
+    curve: np.ndarray | None = None,
 ) -> Figure:
     """Plot hand paths, joint angles, and hand speeds of the ESN against the demonstrator.
 
     ``training`` holds the joint angles and hand positions of each training
     demonstration, which are highlighted underneath the runs. Filled markers show
     where a training demonstration starts; hollow ones, start postures it does not.
+    A periodic task's ``curve`` is drawn where a reach's target would be.
     """
     n_joints = runs[0].q.shape[1]
     rows = 1 + (n_joints + 1) // 2  # the hand paths and speeds, then two joints a row
@@ -278,6 +323,8 @@ def plot_runs(
             ax.plot(times, np.degrees(run.q[:, j]), **esn_line)
 
     ax_hand.plot(*target, marker="+", markersize=12, color="#0b0b0b", markeredgewidth=1.5)
+    if curve is not None:
+        ax_hand.plot(*curve.T, color="#0b0b0b", linewidth=0.8, linestyle="--", label="the task's curve")
     ax_hand.set(title="Hand paths", xlabel="x (m)", ylabel="y (m)", aspect="equal")
     handles, labels = ax_hand.get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncol=3, frameon=False, labelcolor=TEXT_COLOR)

@@ -9,13 +9,17 @@ import pytest
 from arm_esn_ctrl.metrics import (
     arrival_index,
     count_speed_peaks,
+    cycle_metrics,
     directness,
+    distances_in_chunks,
+    distances_to_path,
     disturbance_following,
     disturbance_returns,
     disturbance_ringing,
     hold_metrics,
     jitter,
     join_index,
+    largest_after,
     loop_periods,
     loop_phase,
     mean_loop,
@@ -27,6 +31,7 @@ from arm_esn_ctrl.metrics import (
     reach_metrics,
     route_spread,
     taught_loop,
+    taught_path,
     taught_period,
 )
 
@@ -549,3 +554,116 @@ def test_a_take_of_fewer_than_two_whole_loops_has_no_taught_loop():
 
     with pytest.raises(ValueError, match="fewer than the two"):
         taught_loop(q, hand, center=[-0.1, 0.55])
+
+
+def test_the_taught_path_runs_from_the_end_of_the_first_whole_loop_to_the_end_of_the_last():
+    _, _, hand = ellipse_take(3.5)
+
+    path = taught_path(hand, center=[-0.1, 0.55])
+
+    assert path == pytest.approx(hand[400:1201])  # from 4 s to 12 s, the second and third loops
+
+
+def test_a_take_of_fewer_than_two_whole_loops_has_no_taught_path():
+    _, _, hand = ellipse_take(1.8)
+
+    with pytest.raises(ValueError, match="fewer than the two"):
+        taught_path(hand, center=[-0.1, 0.55])
+
+
+CENTER = np.array([-0.1, 0.55])
+
+
+def ellipse_run(period=4.0, duration=40.0, clockwise=False, wider=0.0):
+    """A hand going around the taught ellipse, ``period`` seconds a turn, for ``duration`` seconds, every 10 ms.
+
+    ``wider`` widens both its semi-axes by that much (m), off the taught path.
+    """
+    times = np.arange(0.0, duration + 0.005, 0.01)
+    angle = (-1 if clockwise else 1) * 2 * np.pi * times / period
+    return times, CENTER + np.column_stack([(0.2 + wider) * np.cos(angle), (0.12 + wider) * np.sin(angle)])
+
+
+def measured(times, hand):
+    """The cycle measures against the taught path of an ellipse taken 4 s a loop: within 20 mm, over five loops."""
+    path = taught_path(ellipse_take(3.5)[2], CENTER)
+    return cycle_metrics(times, hand, path, CENTER, period=4.0, tolerance=0.02, cycle_periods=5, cycle_turns=[4.0, 6.0])
+
+
+def test_a_hand_on_the_taught_path_at_the_taught_pace_cycles():
+    m = measured(*ellipse_run())
+
+    assert m["cycles"]
+    assert m["turns"] == pytest.approx(5.0, abs=1e-6)  # over the last 20 s
+    assert m["path_rms_m"] == pytest.approx(0.0, abs=1e-5)
+    assert m["off_path_max_m"] == pytest.approx(0.0, abs=1e-5)
+    assert m["period_s"] == pytest.approx(4.0, abs=1e-6)
+    assert m["period_ratio"] == pytest.approx(1.0, abs=1e-6)
+    assert m["joining_time_s"] == 0.0
+
+
+@pytest.mark.parametrize(
+    ("run", "turns"),
+    [
+        (ellipse_run(period=6.0), 20.0 / 6.0),  # too slow: fewer than four turns in the last 20 s
+        (ellipse_run(period=3.0), 20.0 / 3.0),  # too fast: more than six
+        (ellipse_run(clockwise=True), -5.0),  # the wrong way around
+        (ellipse_run(wider=0.03), 5.0),  # 30 mm off the taught path
+    ],
+    ids=["too slow", "too fast", "clockwise", "off the path"],
+)
+def test_a_hand_too_slow_too_fast_clockwise_or_off_the_path_does_not_cycle(run, turns):
+    m = measured(*run)
+
+    assert not m["cycles"]
+    # The angle about the center is not the ellipse's own: they differ between the ends of its axes.
+    assert m["turns"] == pytest.approx(turns, abs=0.1)
+
+
+def test_a_hand_off_the_path_is_measured_by_how_far_it_is_and_never_joins():
+    m = measured(*ellipse_run(wider=0.03))
+
+    assert 0.02 < m["path_rms_m"] < 0.03  # 30 mm off at the ends of the axes, less between
+    assert m["off_path_max_m"] == pytest.approx(0.03, abs=1e-3)
+    assert m["period_ratio"] == pytest.approx(1.0, abs=1e-6)
+    assert np.isnan(m["joining_time_s"])  # it ends outside
+
+
+def test_a_stopped_hand_does_not_cycle_and_has_no_period():
+    times = np.arange(0.0, 40.005, 0.01)
+    hand = np.tile(CENTER + np.array([0.2, 0.0]), (len(times), 1))  # at rest on the curve
+
+    m = measured(times, hand)
+
+    assert not m["cycles"]
+    assert m["turns"] == 0.0
+    assert m["path_rms_m"] == pytest.approx(0.0, abs=1e-9)
+    assert np.isnan(m["period_s"]) and np.isnan(m["period_ratio"])
+
+
+def test_a_hand_that_joins_the_path_late_joins_when_it_comes_within_the_tolerance_for_good():
+    times, on_path = ellipse_run()
+    _, wide = ellipse_run(wider=0.05)
+    hand = np.where((times < 12.0)[:, np.newaxis], wide, on_path)  # 50 mm off until 12 s, then on the path
+
+    m = measured(times, hand)
+
+    assert m["joining_time_s"] == pytest.approx(12.0)
+    assert m["cycles"]  # on the path over the last 20 s
+
+
+def test_the_distances_in_chunks_are_the_distances_to_the_path():
+    _, hand = ellipse_run(wider=0.01)
+    path = taught_path(ellipse_take(3.5)[2], CENTER)
+
+    assert distances_in_chunks(hand, path) == pytest.approx(distances_to_path(hand, path))
+
+
+def test_the_largest_value_after_each_disturbance_is_over_its_window_from_its_end():
+    times = np.arange(0.0, 10.05, 0.1)
+    values = np.abs(times - 6.0)  # largest far from 6 s
+
+    largest = largest_after(times, values, [(1.0, 2.0), (5.0, 5.5), (10.0, 10.5)], window=2.0)
+
+    assert largest[:2] == pytest.approx([4.0, 1.5])  # at 2 s, and at 7.5 s
+    assert np.isnan(largest[2])  # the run ends before this one does
