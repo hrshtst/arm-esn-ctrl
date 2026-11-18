@@ -1,0 +1,75 @@
+# A periodic motion taught by a script: the hand goes around an ellipse,
+# counterclockwise, exactly 4 s a loop, on the v2 arm with no joint limits. One take,
+# made by experiments/make_periodic_take.py: the joint angles that put the hand on the
+# curve, its angle growing at an even rate, for ten loops, from the start posture of
+# ellipse_manual_v2_no_limits.toml, which teaches the same ellipse by hand. The robot,
+# the task, the start posture, and the checks of the import are that file's.
+#
+# 1. Make the take, into the storage root's data/, as the recorder would. It is
+#    written once and never overwritten: to make it again, remove its file first.
+#
+#   uv run python experiments/make_periodic_take.py experiments/demonstrations/ellipse_scripted_v2_no_limits.toml
+#
+# 2. Import it into a demonstration run, which checks and measures the take, as made
+#    (demo_00) and filtered (demo_00_filtered), its loops among the rest, as a take
+#    recorded by hand:
+#
+#   uv run python experiments/import_demonstrations.py experiments/demonstrations/ellipse_scripted_v2_no_limits.toml
+
+[recording]
+# The take the script makes, relative to the storage root.
+takes = ["data/ellipse_scripted_v2_no_limits/take_00.sklog.npz"]
+# What the import checks of the take, as ellipse_manual_v2_no_limits.toml's.
+start_tolerance_deg = 0.2
+max_tip_speed = 3.0  # m/s: a faster step between two samples is a jump, not a motion
+min_loops = 8        # the hand goes around the ellipse's center at least this many whole times, counterclockwise
+
+# The filter of the filtered copy, as ellipse_manual_v2_no_limits.toml's.
+[recording.filter]
+kind = "lowpass"
+cutoff_hz = 2.0
+
+# How experiments/make_periodic_take.py makes the take.
+[script]
+dt = 0.01  # the take's sampling period (s), the recorder's 100 Hz
+
+[demonstrations]
+# The start posture of the take: joint angles in degrees. The take's first sample is
+# the posture that puts the hand on the curve exactly, 0.05 deg from this one.
+start_q = [
+  [35.8, 104.1],  # demo_00: hand (0.0996, 0.5501) m, the curve's point at angle 0
+]
+
+[initial]
+q = [35.8, 104.1]  # as ellipse_manual_v2_no_limits.toml's (deg)
+
+# reach_manual_v2_no_limits.toml's two-link planar arm, with no joint limits: ten
+# turns each way, which nothing comes near.
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 0.5
+mass = 0.5
+inertia = 0.0125
+com = [0.25, 0.0]
+limits = [-3600.0, 3600.0]
+
+[[skeleton.link]]
+length = 0.4
+mass = 0.4
+inertia = 0.0064
+com = [0.2, 0.0]
+limits = [-3600.0, 3600.0]
+
+[task]
+type = "periodic_curve"
+curve = "ellipse"
+center = [-0.1, 0.55]  # m
+a = 0.2                # the semi-axis along x (m)
+b = 0.12               # the semi-axis along y (m)
+period = 4.0           # one loop (s), counterclockwise from angle 0, the right end
+duration = 40.0        # ten loops: the take's length (s)
+
+[simulator]
+dt = 0.002  # the robot's control and integration step (s)

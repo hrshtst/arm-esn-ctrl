@@ -419,14 +419,49 @@ def loop_periods(times: NDArray[np.float64], points: NDArray[np.float64], center
     whole turn past where the last one ended, in the direction of the motion; its time
     is interpolated between the two samples. Fewer than one loop gives nothing.
     """
+    ends = [times[i - 1] + fraction * (times[i] - times[i - 1]) for i, fraction in _loop_ends(points, center)]
+    return np.diff(np.concatenate([[times[0]], ends]))
+
+
+def taught_loop(q: NDArray[np.float64], points: NDArray[np.float64], center: ArrayLike) -> tuple[int, int]:
+    """Return the samples of a periodic take to replay without end: the loop's first and one past its last.
+
+    ``q`` are the take's joint angles and ``points`` its hand positions, both shaped
+    ``(n, d)``, going around ``center``. Its loops end as in :func:`loop_periods`,
+    each at the sample nearest where its whole turn is complete. The first is the
+    end of the first loop; the other is, of the ends of the later loops, the one
+    whose posture is nearest to the first's. Replayed again and again, as
+    ``ReplaySource(loop=(first, end))`` does, the samples from the first to the one
+    before the other close with the smallest step the take offers: the replay goes
+    on to ``q[first]`` where the take went on to ``q[end]``, and their distance,
+    ``np.linalg.norm(q[end] - q[first])``, is the loop's closing mismatch.
+
+    Raises
+    ------
+    ValueError
+        If the take has fewer than two whole loops.
+    """
+    ends = [i - 1 if fraction < 0.5 else i for i, fraction in _loop_ends(points, center)]
+    if len(ends) < 2:
+        msg = f"the take has {len(ends)} whole loops, fewer than the two a taught loop needs"
+        raise ValueError(msg)
+    first, later = ends[0], np.array(ends[1:])
+    return first, int(later[np.argmin(np.linalg.norm(q[later] - q[first], axis=1))])
+
+
+def _loop_ends(points: NDArray[np.float64], center: ArrayLike) -> list[tuple[int, float]]:
+    """Where each whole loop of ``points`` around ``center`` ends, as :func:`loop_periods` defines it.
+
+    For each loop, the first sample at or past its whole turn, and how far between
+    the sample before and that one the turn is complete (0 to 1).
+    """
     phase = loop_phase(points, center)
     turned = np.sign(phase[-1] - phase[0]) * (phase - phase[0])
     ends = []
     for k in range(1, int(turned.max() // (2 * np.pi)) + 1):
         i = int(np.argmax(turned >= 2 * np.pi * k))
-        fraction = (2 * np.pi * k - turned[i - 1]) / (turned[i] - turned[i - 1])
-        ends.append(times[i - 1] + fraction * (times[i] - times[i - 1]))
-    return np.diff(np.concatenate([[times[0]], ends]))
+        ends.append((i, float((2 * np.pi * k - turned[i - 1]) / (turned[i] - turned[i - 1]))))
+    return ends
 
 
 def mean_loop(points: NDArray[np.float64], center: ArrayLike, n: int = 360) -> tuple[NDArray[np.float64], float]:

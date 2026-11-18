@@ -1,0 +1,102 @@
+# A periodic motion taught by hand: the hand goes around an ellipse, counterclockwise,
+# about 4 s a loop, on the v2 arm with no joint limits. One take, recorded from a
+# start on the curve. ellipse_scripted_v2_no_limits.toml teaches the same ellipse by a
+# script instead, from the same start.
+#
+# The robot is reach_manual_v2_no_limits.toml's. The ellipse is centered at
+# (-0.1, 0.55) m, of semi-axes 0.2 m in x and 0.12 m in y, within the ring the hand
+# reaches. The start posture puts the hand on its point at angle 0, (0.1, 0.55) m,
+# its right end, with joint 2 positive, the elbow on the side of the reaches' takes;
+# it is rounded to 0.1 deg, which moves the hand by 0.46 mm.
+#
+# 0. See the start posture and the curve before recording:
+#
+#   uv run python tools/starts_figure.py experiments/demonstrations/ellipse_manual_v2_no_limits.toml --output starts.png
+#
+# 1. Record the take, into the storage root's data/ (what cannot be regenerated).
+#    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
+#    names; the recorder does not create the directory. --pose= is the start
+#    posture of [demonstrations] start_q, and --output the file of [recording]
+#    takes:
+#
+#   mkdir -p "$STORAGE/data/ellipse_manual_v2_no_limits"
+#   uv run python third_party/skelarm/tools/trajectory_recorder.py \
+#       experiments/demonstrations/ellipse_manual_v2_no_limits.toml --mode ik --sample-rate 100 \
+#       --duration 0 --show-tip-trail --pose=35.8,104.1 \
+#       --output "$STORAGE/data/ellipse_manual_v2_no_limits/take_00.sklog.npz"
+#
+#    Maximize the window: its pixels are the steps the tip moves in. The gray ellipse
+#    is the [task] curve, and the tip starts on it, at its right end. Space starts
+#    the take; let a second pass before the tip moves, so that the filtered copy
+#    still begins at the start posture (see [recording]). Grab the tip within the
+#    dashed circle around it and take it around the gray ellipse counterclockwise,
+#    up over the top first, at about 4 s a loop, at least ten times without
+#    stopping, then let go. S saves the take; R discards an attempt before saving
+#    it; Q closes. A file is written once and never overwritten: to record the take
+#    again, remove its file first. The import needs eight whole loops ([recording]
+#    min_loops); ten leave a margin.
+#
+# 2. Import it into a demonstration run, which checks and measures the take, as
+#    recorded (demo_00) and filtered (demo_00_filtered), its loops among the rest. It
+#    is not imported unless it passes:
+#
+#   uv run python experiments/import_demonstrations.py experiments/demonstrations/ellipse_manual_v2_no_limits.toml
+
+[recording]
+# The take taught by hand, relative to the storage root. It is imported unchanged:
+# the human's pause before moving stays in.
+takes = ["data/ellipse_manual_v2_no_limits/take_00.sklog.npz"]
+# What the import checks of the take (experiments/import_demonstrations.py), as
+# reach_manual_v2_no_limits.toml's: it begins at its start posture within
+# start_tolerance_deg in every joint, the filter moving the first sample of a take
+# whose hand moves within about half a second of its beginning, and the hand never
+# jumps.
+start_tolerance_deg = 0.2
+max_tip_speed = 3.0  # m/s: a faster step between two samples is a jump, not a motion
+min_loops = 8        # the hand goes around the ellipse's center at least this many whole times, counterclockwise
+
+# The filter of the filtered copy, as reach_manual_v2_no_limits.toml's: a first-order
+# low-pass at 2 Hz, run forward and backward.
+[recording.filter]
+kind = "lowpass"
+cutoff_hz = 2.0
+
+[demonstrations]
+# The start posture of the take: joint angles in degrees.
+start_q = [
+  [35.8, 104.1],  # demo_00: hand (0.0996, 0.5501) m, the curve's point at angle 0
+]
+
+[initial]
+q = [35.8, 104.1]  # where the recorder starts without --pose (deg)
+
+# reach_manual_v2_no_limits.toml's two-link planar arm, with no joint limits: ten
+# turns each way, which nothing comes near.
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 0.5
+mass = 0.5
+inertia = 0.0125
+com = [0.25, 0.0]
+limits = [-3600.0, 3600.0]
+
+[[skeleton.link]]
+length = 0.4
+mass = 0.4
+inertia = 0.0064
+com = [0.2, 0.0]
+limits = [-3600.0, 3600.0]
+
+[task]
+type = "periodic_curve"
+curve = "ellipse"
+center = [-0.1, 0.55]  # m
+a = 0.2                # the semi-axis along x (m)
+b = 0.12               # the semi-axis along y (m)
+period = 4.0           # one loop (s), counterclockwise from angle 0, the right end
+duration = 40.0        # ten loops: the scripted take's length (s); the recorder does not use it
+
+[simulator]
+dt = 0.002  # the robot's control and integration step (s)

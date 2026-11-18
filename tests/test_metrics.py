@@ -26,6 +26,7 @@ from arm_esn_ctrl.metrics import (
     path_rmse,
     reach_metrics,
     route_spread,
+    taught_loop,
 )
 
 START = np.array([0.5, 1.2])
@@ -494,3 +495,45 @@ def test_the_mean_loop_fills_in_the_angles_no_point_falls_at():
     loop, _ = mean_loop(hand, center=[0.3, 0.1])
 
     assert np.linalg.norm(loop - [0.3, 0.1], axis=1) == pytest.approx(0.2, abs=1e-9)
+
+
+def ellipse_take(turns: float, drift=None):
+    """A hand going around (-0.1, 0.55) on an ellipse of 0.2 by 0.12 m, 4 s a turn, sampled every 10 ms.
+
+    The posture follows the ellipse's angle, the same at the same place of every
+    turn, plus ``drift``, a function of time added to joint 1.
+    """
+    times = np.arange(0.0, 4.0 * turns + 0.005, 0.01)
+    angle = 2 * np.pi * times / 4.0
+    hand = np.array([-0.1, 0.55]) + np.column_stack([0.2 * np.cos(angle), 0.12 * np.sin(angle)])
+    q = np.column_stack([0.6 + 0.4 * np.cos(angle), 1.8 + 0.3 * np.sin(angle)])
+    if drift is not None:
+        q[:, 0] += drift(times)
+    return times, q, hand
+
+
+def test_the_taught_loop_of_an_exact_ellipse_closes_where_its_first_loop_ends():
+    _, q, hand = ellipse_take(3.5)
+
+    first, end = taught_loop(q, hand, center=[-0.1, 0.55])
+
+    assert first == 400  # the end of the first loop, at 4 s
+    assert end in (800, 1200)
+    assert np.linalg.norm(q[end] - q[first]) < 1e-9
+
+
+def test_the_taught_loop_ends_at_the_later_loop_end_whose_posture_is_nearest_the_first():
+    # Joint 1 drifts by 0.3, 0.05, and 0.2 rad at the ends of the second, third, and fourth loops.
+    _, q, hand = ellipse_take(4.5, drift=lambda times: np.interp(times, [4.0, 8.0, 12.0, 16.0], [0.0, 0.3, 0.05, 0.2]))
+
+    first, end = taught_loop(q, hand, center=[-0.1, 0.55])
+
+    assert (first, end) == (400, 1200)
+    assert np.linalg.norm(q[end] - q[first]) == pytest.approx(0.05)
+
+
+def test_a_take_of_fewer_than_two_whole_loops_has_no_taught_loop():
+    _, q, hand = ellipse_take(1.8)
+
+    with pytest.raises(ValueError, match="fewer than the two"):
+        taught_loop(q, hand, center=[-0.1, 0.55])

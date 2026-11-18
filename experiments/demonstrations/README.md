@@ -61,6 +61,16 @@ target, from start postures whose hands are spread evenly over the workspace
 `start_q`. Its header gives the recorder's command for each, with `--pose=` for the
 start posture, and they are imported together into one run, `demo_00` to `demo_08`.
 
+`ellipse_manual_v2_no_limits.toml` and `ellipse_scripted_v2_no_limits.toml` teach a
+periodic motion instead, on the same arm: skelarm's `periodic_curve` task, the hand
+going around an ellipse centered at (-0.1, 0.55) m, of semi-axes 0.2 m in x and
+0.12 m in y, counterclockwise, about 4 s a loop. The first is one take taught by
+hand, from a start on the curve. The second is one take that
+`experiments/make_periodic_take.py` makes from the same start: the hand exactly on
+the curve, 4 s a loop, ten loops. Their headers give the commands. The import checks
+that the hand goes around the curve's center at least `[recording]` `min_loops`
+whole times, counterclockwise, and measures its loops instead of a reach.
+
 ## Runs
 
 Under `results/demonstrations/` in the storage:

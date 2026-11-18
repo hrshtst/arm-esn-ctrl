@@ -37,7 +37,7 @@ from skelarm import (
     smooth,
 )
 
-from arm_esn_ctrl.metrics import hold_metrics
+from arm_esn_ctrl.metrics import hold_metrics, loop_periods, loop_phase
 from arm_esn_ctrl.storage import resolve_run_path
 
 # The configuration tables that make up a skelarm scenario (see skelarm's
@@ -217,6 +217,8 @@ def check_take(
     hold: float,
     start_tolerance: float,
     max_tip_speed: float,
+    center: ArrayLike | None = None,
+    min_loops: int = 0,
 ) -> list[str]:
     """Return why a take taught by hand cannot be a demonstration, or nothing if it can.
 
@@ -227,6 +229,10 @@ def check_take(
     - the hand arrives within ``radius`` of the ``target`` and stays there for
       ``hold`` seconds, before the take ends; a task without a target, such as a
       periodic motion, has no arrival to check (``target`` is None);
+    - the hand of a periodic motion goes around its curve's ``center`` at least
+      ``min_loops`` whole times (see :func:`arm_esn_ctrl.metrics.loop_periods`),
+      counterclockwise, the way the curve's angle grows; a reach has no center to go
+      around (``center`` is None);
     - the hand never moves faster than ``max_tip_speed`` (m/s) between two samples,
       which would be a jump rather than a reach.
     """
@@ -253,6 +259,13 @@ def check_take(
                 f"the take ends {times[-1] - held['arrival_time_s']:.2f} s after the hand arrives,"
                 f" before {hold:g} s of holding"
             )
+    if center is not None:
+        phase = loop_phase(hand, center)
+        loops = len(loop_periods(times, hand, center))
+        if phase[-1] < phase[0]:
+            problems.append("the hand goes around the curve's center clockwise, not counterclockwise")
+        elif loops < min_loops:
+            problems.append(f"the hand goes around the curve's center {loops} whole times, fewer than {min_loops}")
     speed = np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(times)
     if speed.max() > max_tip_speed:
         k = int(np.argmax(speed))
