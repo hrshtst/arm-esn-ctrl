@@ -73,11 +73,11 @@ goal, whatever the take's path. The run directory then also receives
 the seed is swept; and ``sweep.csv`` gives each combination's median detour ratio.
 
 A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) is
-measured as in ``robot_esn.py``: a run fails if it does not cycle (see
+measured as in ``robot_esn.py``, from its curve: a run fails if it does not cycle (see
 :func:`arm_esn_ctrl.metrics.cycle_metrics`), ``runs.csv`` has the cycle measures,
-and ``sweep.csv`` gives each combination's runs that cycle and their median path
-RMS. With a ``[ranking]`` table of ``by = "path_rms_m"``, the settings are scored by
-how many of their runs cycle, the most first, then by the median path RMS of those
+and ``sweep.csv`` gives each combination's runs that cycle and their median curve
+RMS. With a ``[ranking]`` table of ``by = "curve_rms_m"``, the settings are scored by
+how many of their runs cycle, the most first, then by the median curve RMS of those
 runs, the smallest first (see :func:`arm_esn_ctrl.sweeps.score_cycles`), into
 ``scores.csv`` as above.
 
@@ -213,8 +213,8 @@ def main() -> None:
     listed: list[dict[str, Any]] | None = config.get("settings")
     swept = [*(listed[0] if listed else {}), *sweep]  # the hyperparameters that differ between combinations
     ranking = config.get("ranking", {}).get("by")
-    if ranking not in (None, "detour_ratio", "path_rms_m"):
-        msg = f'[ranking] by must be "detour_ratio" or "path_rms_m", not {ranking!r}'
+    if ranking not in (None, "detour_ratio", "curve_rms_m"):
+        msg = f'[ranking] by must be "detour_ratio" or "curve_rms_m", not {ranking!r}'
         raise ValueError(msg)
     context = sweep_context(config)
     disturbance = config.get("disturbance")
@@ -250,7 +250,7 @@ def main() -> None:
         if context.cycle is not None:  # a periodic task's runs cycle or not
             print(
                 f"[{k + 1:3d}/{len(combinations)}] {values}: {row['cycling_runs']} of {row['runs']} runs cycle;"
-                f" median path RMS {1000 * row['median_path_rms_m']:6.2f} mm{returns}",
+                f" median curve RMS {1000 * row['median_curve_rms_m']:6.2f} mm{returns}",
                 flush=True,
             )
             continue
@@ -267,7 +267,7 @@ def main() -> None:
     if "seed" in sweep:
         tables["seeds.csv"] = summarize_seeds(rows, names)
     if ranking:
-        score = score_cycles if ranking == "path_rms_m" else score_settings
+        score = score_cycles if ranking == "curve_rms_m" else score_settings
         tables["scores.csv"] = score(run_rows, names)
     for name, table in tables.items():
         with (run_dir / name).open("w", newline="") as f:
@@ -276,7 +276,7 @@ def main() -> None:
             writer.writerows(table)
     if context.cycle is None:  # a periodic task's runs neither arrive nor hold
         print_ranking(rows, swept, settings)
-    if ranking == "path_rms_m":
+    if ranking == "curve_rms_m":
         print_cycle_scores(tables["scores.csv"], names)
     elif ranking:
         print_scores(tables["scores.csv"], names)
@@ -478,11 +478,11 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances:
 
 
 def summarize_cycles(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    """A periodic task's combination: its runs that cycle, and their median path RMS (NaN if none does)."""
-    cycling = [run["path_rms_m"] for run in runs if run["cycles"]]
+    """A periodic task's combination: its runs that cycle, and their median curve RMS (NaN if none does)."""
+    cycling = [run["curve_rms_m"] for run in runs if run["cycles"]]
     return {
         "cycling_runs": len(cycling),
-        "median_path_rms_m": float(np.median(cycling)) if cycling else float("nan"),
+        "median_curve_rms_m": float(np.median(cycling)) if cycling else float("nan"),
     }
 
 
@@ -520,14 +520,14 @@ def print_scores(scores: list[dict[str, Any]], names: list[str], count: int = 10
 
 
 def print_cycle_scores(scores: list[dict[str, Any]], names: list[str], count: int = 10) -> None:
-    """Print the settings with the most runs that cycle, then the smallest median path RMS of those runs."""
-    print("\nThe most runs that cycle, then the smallest median path RMS of the runs that cycle:")
+    """Print the settings with the most runs that cycle, then the smallest median curve RMS of those runs."""
+    print("\nThe most runs that cycle, then the smallest median curve RMS of the runs that cycle:")
     for score in scores[:count]:
         values = ", ".join(f"{name}={score[name]:g}" for name in names)
         seed = f"; typical seed {score['typical_seed']}" if "typical_seed" in score else ""
         print(
             f"  {values}: {score['cycling_runs']} of {score['runs']} cycle,"
-            f" median path RMS {1000 * score['median_path_rms_m']:.2f} mm{seed}"
+            f" median curve RMS {1000 * score['median_curve_rms_m']:.2f} mm{seed}"
         )
 
 

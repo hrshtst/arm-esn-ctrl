@@ -1,7 +1,7 @@
 # The ESN tuned by hand on the robot, undisturbed, for 40 s from the eight starts on
-# the curve and from hand_esn.toml's 36 untaught starts, against the replay and the
-# progress replay of its take, which go on without end through the take's taught loop.
-# About 20 minutes: 132 runs, one after another. See README.md.
+# the curve and from hand_esn.toml's 36 untaught starts, against the replay of its take,
+# which goes on without end through the take's taught loop. About 15 minutes: 88 runs,
+# one after another. See README.md.
 #
 #   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_periodic/hand_robot.toml
 
@@ -23,17 +23,13 @@ reference_velocity = true
 control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
 gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
 
-[progress]
-# A third arm, report 014's progress replay of the take, on the same loop.
-lead_deg = 2.5
-window = 1.0  # s
-
 [evaluation]
 duration = 40.0           # task (s), after the warm-up: ten taught periods
-# A run cycles if, over its last cycle_periods taught periods, the hand stays within
-# path_tolerance of the taught path, stage 1's goal radius, and its angle about the
-# curve's center grows by cycle_turns turns, five at the taught pace.
-path_tolerance = 0.02     # m
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
 cycle_periods = 5
 cycle_turns = [4.0, 6.0]  # the least and the most
 start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0

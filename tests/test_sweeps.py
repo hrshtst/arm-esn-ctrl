@@ -181,15 +181,15 @@ def test_listed_settings_must_give_the_same_hyperparameters_and_none_that_is_swe
 
 
 def loop_run(leak, seed, rms, *, cycles=True):
-    return {"leak_rate": leak, "seed": seed, "cycles": cycles, "path_rms_m": rms}
+    return {"leak_rate": leak, "seed": seed, "cycles": cycles, "curve_rms_m": rms}
 
 
-def test_settings_are_scored_by_their_runs_that_cycle_then_by_the_median_path_rms_of_those_runs():
+def test_settings_are_scored_by_their_runs_that_cycle_then_by_the_median_curve_rms_of_those_runs():
     runs = [
         loop_run(0.01, 0, 0.004),
         loop_run(0.01, 0, 0.006),
         loop_run(0.03, 0, 0.002),
-        loop_run(0.03, 0, 0.001, cycles=False),  # close to the path, at the wrong pace: its path RMS does not count
+        loop_run(0.03, 0, 0.001, cycles=False),  # close to the curve, at the wrong pace: its curve RMS does not count
         loop_run(0.1, 0, 0.003),
         loop_run(0.1, 0, 0.300, cycles=False),
         loop_run(0.3, 0, 0.003),
@@ -201,7 +201,7 @@ def test_settings_are_scored_by_their_runs_that_cycle_then_by_the_median_path_rm
     assert [score["leak_rate"] for score in scores] == [0.3, 0.01, 0.03, 0.1]
     assert [score["cycling_runs"] for score in scores] == [2, 2, 1, 1]
     assert [score["runs"] for score in scores] == [2] * 4
-    assert [score["median_path_rms_m"] for score in scores] == pytest.approx([0.0035, 0.005, 0.002, 0.003])
+    assert [score["median_curve_rms_m"] for score in scores] == pytest.approx([0.0035, 0.005, 0.002, 0.003])
 
 
 def test_a_setting_whose_runs_never_cycle_comes_last_and_equal_settings_keep_the_sweeps_order():
@@ -214,10 +214,10 @@ def test_a_setting_whose_runs_never_cycle_comes_last_and_equal_settings_keep_the
     scores = score_cycles(runs, ["leak_rate"])
 
     assert [score["leak_rate"] for score in scores] == [0.03, 0.1, 0.01]
-    assert math.isnan(scores[-1]["median_path_rms_m"])
+    assert math.isnan(scores[-1]["median_curve_rms_m"])
 
 
-def test_a_settings_typical_seed_cycles_the_most_and_its_median_path_rms_is_nearest_the_settings():
+def test_a_settings_typical_seed_cycles_the_most_and_its_median_curve_rms_is_nearest_the_settings():
     runs = [
         *(loop_run(0.03, 1, rms) for rms in (0.001, 0.002, 0.003)),
         *(loop_run(0.03, 2, rms) for rms in (0.004, 0.005, 0.006)),
@@ -231,5 +231,5 @@ def test_a_settings_typical_seed_cycles_the_most_and_its_median_path_rms_is_near
     (score,) = score_cycles(runs, ["leak_rate"])
 
     assert (score["seeds"], score["runs"], score["cycling_runs"]) == (4, 12, 11)
-    assert score["median_path_rms_m"] == pytest.approx(0.0045)
+    assert score["median_curve_rms_m"] == pytest.approx(0.0045)
     assert score["typical_seed"] == 2

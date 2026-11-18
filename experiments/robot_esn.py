@@ -69,23 +69,26 @@ arrives at the last task's target and holds there (``switch_arrived``,
 and ``switch_final_distance_m``; empty for the replays, which keep to their take).
 
 A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) has no
-target. Its replay and progress replay go on without end through the take's taught
-loop, at the ESN's period (see :func:`arm_esn_ctrl.metrics.taught_loop`): from the
-take's first sample, whatever the start posture. Its pushes are turned from the
-direction from the start hand toward the curve's center, and given by their
-``onset``. Its metrics say whether each run cycles, by ``[evaluation]``'s
-``path_tolerance``, ``cycle_periods``, and ``cycle_turns`` (see
-:func:`arm_esn_ctrl.autonomous.task_cycle`): ``cycles``, ``turns``, ``path_rms_m``,
-``off_path_max_m``, ``period_s``, ``period_ratio``, and ``joining_time_s``. The
-measures of the arrival, the hold, the detour, the settling, the distance to the
-target, and the progress along the demonstrated path and the reference's lead are
-empty or NaN. After a disturbance, the hand's distance is from the taught path, its
-following gain is against where the looping replay is at the same time, and two
-measures are added: the largest joint torque (``torque_after_nm``) and the hand's
-largest distance from the taught path (``off_path_after_m``) over ``after_window``
-seconds (in ``[evaluation]``; 2 s by default) from its end. ``paths.png`` draws the
-curve, ``timeline.png`` the hand's distance from the taught path and its turns
-about the curve's center, and ``metrics.png`` is not drawn.
+target. Its replay, and its progress replay if there is one, go on without end
+through the take's taught loop, at the ESN's period (see
+:func:`arm_esn_ctrl.metrics.taught_loop`): from the take's first sample, whatever the
+start posture. Its pushes are turned from the direction from the start hand toward
+the curve's center, and given by their ``onset``. Its hand is measured by its
+distance from the task's curve, the ellipse itself: off the curve. Its metrics say
+whether each run cycles, by ``[evaluation]``'s ``curve_tolerance``,
+``cycle_periods``, and ``cycle_turns`` (see :func:`arm_esn_ctrl.autonomous.task_cycle`
+and :func:`arm_esn_ctrl.metrics.cycle_metrics`): ``cycles``, ``turns``,
+``curve_rms_m``, ``off_curve_max_m``, ``period_s``, ``period_ratio``, and
+``joining_time_s``. The measures of the arrival, the hold, the detour, the settling,
+the distance to the target, and the progress along the demonstrated path and the
+reference's lead are empty or NaN. After a disturbance, ``off_path_m`` and
+``return_time_s`` are measured from the curve, the following gain against where the
+looping replay is at the same time, and two measures are added: the largest joint
+torque (``torque_after_nm``) and the hand's largest distance from the curve
+(``off_curve_after_m``) over ``after_window`` seconds (in ``[evaluation]``; 2 s by
+default) from its end. ``paths.png`` draws the curve, ``timeline.png`` the hand's
+distance from the curve and its turns about the curve's center, and ``metrics.png``
+is not drawn.
 
 Every run is compared with the demonstrator's undisturbed reach from the same
 start posture, and the run directory receives:
@@ -140,6 +143,7 @@ from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog
 
 from arm_esn_ctrl.autonomous import (
+    CURVE_SIDES,
     Cycle,
     Reference,
     Run,
@@ -218,8 +222,6 @@ RINGING_WINDOW = 2.0
 # How much the reference follows the arm is measured from a disturbance's onset to this long after its
 # end, unless [evaluation] gives a following_window (s): the block's effort window, 0.5 s past its release.
 FOLLOWING_WINDOW = 0.5
-# A periodic task's curve is drawn as a polygon of this many sides.
-CURVE_SIDES = 360
 
 
 def main() -> None:
@@ -692,8 +694,9 @@ def arm_metrics(
 
     The demonstrator tracks no reference, so its tracking metrics are NaN.
 
-    A periodic task's run, given its ``cycle``, is measured as :func:`cycle_columns`
-    says: from its taught path after a disturbance, and whether it cycles.
+    A periodic task's run, given its ``cycle``, is measured from the task's curve:
+    its ``off_path_m`` and ``return_time_s`` are the hand's distance from the curve
+    and its return within ``tolerance`` of it, and :func:`cycle_columns` adds the rest.
     """
     q = task_joint_angles(log, period, setup.times[-1])
     hand = endpoint_positions(setup.skeleton, q)
@@ -727,8 +730,8 @@ def arm_metrics(
             gaps[n] = float(np.degrees(np.linalg.norm(log.channel("q_ref")[k] - log.channel("q")[k])))
     taught_hand = setup.demo_hands[nearest_demonstration(setup.starts[i].q, setup.demos)]
     returns: list[tuple[float, float]] = []
-    if spans:  # a periodic task's hand is measured from its taught path
-        off_path = distances_to_path(hand, taught_hand if cycle is None else cycle.path)
+    if spans:  # a periodic task's hand is measured from its curve
+        off_path = distances_to_path(hand, taught_hand if cycle is None else cycle.curve)
         returns = disturbance_returns(setup.times, off_path, spans, tolerance)
     reference_hand = None
     followed = [nan] * len(spans)
@@ -785,22 +788,22 @@ def cycle_columns(
     when each acts on the task clock), over ``cycle.after`` seconds from its end:
 
     - ``torque_after_nm``: the largest joint torque;
-    - ``off_path_after_m``: the hand's largest distance from the taught path.
+    - ``off_curve_after_m``: the hand's largest distance from the curve.
 
     Without a disturbance, these are NaN. With several, ``torque_after_nm_1``, ... (see
     :func:`per_disturbance`).
     """
     nan = float("nan")
-    torque_after, off_path_after = [nan], [nan]
+    torque_after, off_curve_after = [nan], [nan]
     if spans:
         torque = np.abs(log.channel("tau")).max(axis=1)
         torque_after = largest_after(log.times, torque, spans, cycle.after)
-        off_path_after = largest_after(setup.times, distances_to_path(hand, cycle.path), spans, cycle.after)
+        off_curve_after = largest_after(setup.times, distances_to_path(hand, cycle.curve), spans, cycle.after)
     columns: dict[str, Any] = {"settling_time_s": nan}
     columns |= {name: nan for name in per_disturbance("reference_lead", len(spans))}
     columns |= cycle_run_metrics(hand, setup, cycle)
     columns |= dict(zip(per_disturbance("torque_after_nm", len(spans)), torque_after, strict=True))
-    columns |= dict(zip(per_disturbance("off_path_after_m", len(spans)), off_path_after, strict=True))
+    columns |= dict(zip(per_disturbance("off_curve_after_m", len(spans)), off_curve_after, strict=True))
     return columns
 
 
@@ -863,12 +866,12 @@ def print_summary(rows: list[dict[str, Any]], n_starts: int, window: list[float]
 def print_cycle_summary(rows: list[dict[str, Any]], n_starts: int) -> None:
     """Print, for each arm and tracker setting of a periodic task, how many runs cycle, and two medians over its runs.
 
-    The medians are of the path RMS and of the period ratio, a run without a whole
+    The medians are of the curve RMS and of the period ratio, a run without a whole
     loop at the end left out of the latter (see :func:`arm_esn_ctrl.metrics.cycle_metrics`).
     """
     print(f"\nOf the {n_starts} start postures: the runs that cycle, and the medians over the runs")
-    print(f"{'law':<16}{'ω':<6}{'ζ':<5}{'arm':<12}{'cycle':>7}{'path RMS':>10}{'period':>8}")
-    print(f"{'':<16}{'rad/s':<6}{'':<17}{'':>7}{'(mm)':>10}{'ratio':>8}")
+    print(f"{'law':<16}{'ω':<6}{'ζ':<5}{'arm':<12}{'cycle':>7}{'curve RMS':>11}{'period':>8}")
+    print(f"{'':<16}{'rad/s':<6}{'':<17}{'':>7}{'(mm)':>11}{'ratio':>8}")
     keys = ("law", "omega", "damping", "arm")
     for key in dict.fromkeys(tuple(r[name] for name in keys) for r in rows):
         group = [r for r in rows if tuple(r[name] for name in keys) == key]
@@ -881,7 +884,7 @@ def print_cycle_summary(rows: list[dict[str, Any]], n_starts: int) -> None:
         ratio = float(np.median(ratios[np.isfinite(ratios)])) if np.isfinite(ratios).any() else float("nan")
         print(
             f"{setting:<26} {arm:<12} {sum(r['cycles'] for r in group):2d}/{n_starts:<3d}"
-            f" {1000 * np.median([r['path_rms_m'] for r in group]):9.1f} {ratio:7.3f}"
+            f" {1000 * np.median([r['curve_rms_m'] for r in group]):10.1f} {ratio:7.3f}"
         )
 
 
@@ -1119,13 +1122,13 @@ def plot_timeline(
 def plot_cycle_timeline(
     run_dir: Path, setup: Setup, settings: list[Setting], spans: list[tuple[float, float]], title: str, cycle: Cycle
 ) -> Figure:
-    """Plot a periodic task's timeline from the first start: the hand off the taught path, its turns, and the torque.
+    """Plot a periodic task's timeline from the first start: the hand off the curve, its turns, and the torque.
 
-    The hand's distance from the taught path and its turns about the curve's center,
-    counted from the run's start, are drawn at the ESN's period, the turns for the
-    arms (solid) and for their references (dashed); the taught motion's turns are drawn
-    thick and gray. The dotted line is the path tolerance; the shaded bands are when
-    the disturbances act.
+    The hand's distance from the curve and its turns about the curve's center, counted
+    from the run's start, are drawn at the ESN's period, the turns for the arms (solid)
+    and for their references (dashed); the taught motion's turns are drawn thick and
+    gray. The dotted line is the curve tolerance, which a run's curve RMS must keep
+    within; the shaded bands are when the disturbances act.
     """
     rows = by_law(settings)
     columns = len(rows[0])
@@ -1154,7 +1157,7 @@ def plot_cycle_timeline(
                 log = StateLog.load(path)
                 color, zorder = ARM_COLORS[arm], ARM_ZORDERS[arm]
                 q = task_joint_angles(log, period, duration)
-                off = distances_to_path(endpoint_positions(setup.skeleton, q), cycle.path)
+                off = distances_to_path(endpoint_positions(setup.skeleton, q), cycle.curve)
                 ax_distance.plot(
                     setup.times, 1000 * off, color=color, linewidth=1.3, label=ARM_LABELS[arm], zorder=zorder
                 )
@@ -1171,7 +1174,7 @@ def plot_cycle_timeline(
             ax_distance.set_title(setting.label, color=TEXT_COLOR, fontsize=10)
             ax_torque.set_xlabel("time (s)", color=TEXT_COLOR, fontsize=8)
             if col == 0:
-                ax_distance.set_ylabel("hand off the taught path (mm)", color=TEXT_COLOR)
+                ax_distance.set_ylabel("hand off the curve (mm)", color=TEXT_COLOR)
                 ax_turns.set_ylabel("turns about the\ncurve's center", color=TEXT_COLOR)
                 ax_torque.set_ylabel("joint torque norm (N m)", color=TEXT_COLOR)
     handles, labels = axes[0, 0].get_legend_handles_labels()

@@ -15,8 +15,8 @@ duration. :func:`hold_metrics` measures whether the hand dwells at the target
 during the hold window; it needs no reference trajectory.
 
 A periodic motion has no target: its hand goes around a curve again and again.
-:func:`cycle_metrics` measures whether a run's hand keeps to the taught path at
-about the taught pace by its end.
+:func:`cycle_metrics` measures whether a run's hand goes around the curve, close to
+it and at about the taught pace, by its end.
 """
 
 from __future__ import annotations
@@ -462,37 +462,12 @@ def taught_loop(q: NDArray[np.float64], points: NDArray[np.float64], center: Arr
     ValueError
         If the take has fewer than two whole loops.
     """
-    ends = _loop_end_samples(points, center)
+    ends = [i - 1 if fraction < 0.5 else i for i, fraction in _loop_ends(points, center)]
     if len(ends) < 2:
         msg = f"the take has {len(ends)} whole loops, fewer than the two a taught loop needs"
         raise ValueError(msg)
     first, later = ends[0], np.array(ends[1:])
     return first, int(later[np.argmin(np.linalg.norm(q[later] - q[first], axis=1))])
-
-
-def taught_path(points: NDArray[np.float64], center: ArrayLike) -> NDArray[np.float64]:
-    """Return the taught path of a periodic take: its ``points``, such as its hand, over its taught loops.
-
-    The taught loops are the whole loops after the first, which holds the start from
-    rest (see :func:`taught_period`): the path goes from the end of the first whole
-    loop around ``center`` to the end of the last, each at the sample nearest where its
-    turn is complete, as in :func:`taught_loop`.
-
-    Raises
-    ------
-    ValueError
-        If the take has fewer than two whole loops.
-    """
-    ends = _loop_end_samples(points, center)
-    if len(ends) < 2:
-        msg = f"the take has {len(ends)} whole loops, fewer than the two a taught path needs"
-        raise ValueError(msg)
-    return points[ends[0] : ends[-1] + 1]
-
-
-def _loop_end_samples(points: NDArray[np.float64], center: ArrayLike) -> list[int]:
-    """The sample nearest where each whole loop of ``points`` around ``center`` ends (see :func:`_loop_ends`)."""
-    return [i - 1 if fraction < 0.5 else i for i, fraction in _loop_ends(points, center)]
 
 
 def _loop_ends(points: NDArray[np.float64], center: ArrayLike) -> list[tuple[int, float]]:
@@ -540,54 +515,62 @@ def mean_loop(points: NDArray[np.float64], center: ArrayLike, n: int = 360) -> t
 def cycle_metrics(
     times: NDArray[np.float64],
     hand: NDArray[np.float64],
-    path: NDArray[np.float64],
+    curve: NDArray[np.float64],
     center: ArrayLike,
     period: float,
     tolerance: float,
     cycle_periods: int,
     cycle_turns: Sequence[float],
 ) -> dict[str, float | bool]:
-    """Measure whether a run of a periodic motion cycles: whether its hand keeps to the taught path at its pace.
+    """Measure whether a run of a periodic motion cycles: whether its hand goes around the curve at about its pace.
 
-    ``hand`` holds the hand positions at ``times`` (shape ``(n, 2)``), ``path`` the
-    taught path (see :func:`taught_path`), which goes around ``center``, and
-    ``period`` is the taught period (s). The window is the run's last
+    ``hand`` holds the hand positions at ``times``, evenly spaced (shape ``(n, 2)``);
+    ``curve`` is the task's curve as a closed polygon, which goes around ``center``,
+    such as :func:`arm_esn_ctrl.demonstrations.task_path` gives; and ``period`` is the
+    taught period (s). The hand is measured by its distance from the curve, wherever
+    along it the hand is and whenever: off the curve. The window is the run's last
     ``cycle_periods`` taught periods.
 
     Returns
     -------
     dict[str, float | bool]
-        - ``cycles``: over the window, the hand stays within ``tolerance`` (m) of the
-          path, and its angle about the center (see :func:`loop_phase`) grows,
-          counterclockwise, by a number of turns within ``cycle_turns``, the least
-          and the most.
+        - ``cycles``: over the window, the hand's angle about the center (see
+          :func:`loop_phase`) grows, counterclockwise, by a number of turns within
+          ``cycle_turns``, the least and the most, and the RMS of off the curve is at
+          most ``tolerance`` (m). The hand may leave the curve for a moment.
         - ``turns``: that number of turns, negative for a hand that goes clockwise.
-        - ``path_rms_m`` and ``off_path_max_m``: the RMS and the largest of the hand's
-          distance from the path over the window (m).
+        - ``curve_rms_m`` and ``off_curve_max_m``: the RMS and the largest of off the
+          curve over the window (m).
         - ``period_s``: the median time of the whole loops in the window, counted from
           its start (see :func:`loop_periods`), NaN if there is none; and
           ``period_ratio``: that over the taught period.
-        - ``joining_time_s``: the time from which the hand stays within ``tolerance``
-          of the path to the end of the run, NaN if it ends outside.
+        - ``joining_time_s``: the earliest time from which the RMS of off the curve
+          over every following window of one taught period, to the end of the run, is
+          at most ``tolerance``; NaN if the last such window, which ends with the run,
+          is above it.
     """
     nan = float("nan")
-    off = distances_to_path(hand, path)
+    off = distances_to_path(hand, curve)
     window = times > times[-1] - cycle_periods * period - 1e-9
     phase = loop_phase(hand[window], center)
     turns = float((phase[-1] - phase[0]) / (2 * np.pi))
     periods = loop_periods(times[window], hand[window], center)
     period_s = float(np.median(periods)) if len(periods) else nan
-    outside = np.flatnonzero(off > tolerance)
+    curve_rms = float(np.sqrt(np.mean(off[window] ** 2)))
+    # The RMS over each window of one taught period, from each sample whose window ends within the run.
+    width = int(np.searchsorted(times, times[0] + period + 1e-9, side="right"))
+    each = np.sqrt(np.lib.stride_tricks.sliding_window_view(off**2, width).mean(axis=1))
+    above = np.flatnonzero(each > tolerance)
     joining = nan
-    if outside.size == 0:
+    if above.size == 0:
         joining = float(times[0])
-    elif outside[-1] < len(off) - 1:
-        joining = float(times[outside[-1] + 1])
+    elif above[-1] < len(each) - 1:
+        joining = float(times[above[-1] + 1])
     return {
-        "cycles": bool(off[window].max() <= tolerance and cycle_turns[0] <= turns <= cycle_turns[1]),
+        "cycles": bool(cycle_turns[0] <= turns <= cycle_turns[1] and curve_rms <= tolerance),
         "turns": turns,
-        "path_rms_m": float(np.sqrt(np.mean(off[window] ** 2))),
-        "off_path_max_m": float(off[window].max()),
+        "curve_rms_m": curve_rms,
+        "off_curve_max_m": float(off[window].max()),
         "period_s": period_s,
         "period_ratio": period_s / period,
         "joining_time_s": joining,

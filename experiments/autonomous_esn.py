@@ -39,8 +39,8 @@ that task's start postures. The metrics then have a ``task`` column, and each ta
 has its own figures, ``autonomous_<task>.png`` and ``grid_<task>.png``.
 
 A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) has no
-target: each run's metrics say whether it cycles, by ``[evaluation]``'s
-``path_tolerance``, ``cycle_periods``, and ``cycle_turns`` (see
+target: each run's metrics say whether it cycles, measured from the task's curve, by
+``[evaluation]``'s ``curve_tolerance``, ``cycle_periods``, and ``cycle_turns`` (see
 :func:`arm_esn_ctrl.autonomous.cycle_run_metrics`), the arrival and the hold are left
 empty or NaN, the printed summary counts the runs that cycle, and the figure draws
 the task's curve.
@@ -68,6 +68,7 @@ from matplotlib.patches import Patch
 from numpy.typing import NDArray
 
 from arm_esn_ctrl.autonomous import (
+    CURVE_SIDES,
     Reference,
     Run,
     Setup,
@@ -99,7 +100,6 @@ OUTCOME_COLORS = ["#2a78d6", "#eb6834", "#52514e"]  # arrive and hold, leave the
 OUTCOMES = ["arrive and hold", "leave the goal", "never arrive"]
 _MAX_TABLE_ROWS = 40
 _MAX_RATIO_SHOWN = 1.5  # the training path ratio's color scale ends here
-_CURVE_SIDES = 360  # a periodic task's curve is drawn as a polygon of this many sides
 
 
 def main() -> None:
@@ -158,7 +158,7 @@ def main() -> None:
         suffix = f"_{names[task]}" if names else ""
         title = f"Autonomous ESN: {args.config.stem}" + (f", task {names[task]}" if names else "")
         training = [(q, endpoint_positions(setup.skeleton, q)) for q in setup.demos.values()]
-        curve = task_path(setup.task, _CURVE_SIDES)
+        curve = task_path(setup.task, CURVE_SIDES)
         plot_runs(setup.times, runs, training, setup.target, title, curve).savefig(
             run_dir / f"autonomous{suffix}.png", dpi=150
         )
@@ -229,12 +229,12 @@ def print_cycles(rows: list[dict[str, Any]], starts: list[Start]) -> None:
     if len(rows) > _MAX_TABLE_ROWS:
         print(f"{len(rows)} start postures: see metrics.csv for each")
     else:
-        print("start  origin                cycles  turns  path RMS  off the path  period  joining")
-        print("                                            (mm)      at most (mm)  ratio   time (s)")
+        print("start  origin                cycles  turns  curve RMS  off the curve  period  joining")
+        print("                                            (mm)       at most (mm)   ratio   time (s)")
         for r in rows:
             print(
                 f"{r['start']:5d}  {r['origin']:<20}  {'yes' if r['cycles'] else 'no':>6}  {r['turns']:5.2f}"
-                f"  {1000 * r['path_rms_m']:8.1f}  {1000 * r['off_path_max_m']:12.1f}  {r['period_ratio']:6.3f}"
+                f"  {1000 * r['curve_rms_m']:9.1f}  {1000 * r['off_curve_max_m']:13.1f}  {r['period_ratio']:6.3f}"
                 f"  {r['joining_time_s']:8.2f}"
             )
     for name in dict.fromkeys(s.group for s in starts):  # the groups, in the order of the table
@@ -243,7 +243,7 @@ def print_cycles(rows: list[dict[str, Any]], starts: list[Start]) -> None:
         ratio = float(np.median(ratios[np.isfinite(ratios)])) if np.isfinite(ratios).any() else float("nan")
         print(
             f"{len(group)} {name} starts: {sum(r['cycles'] for r in group)} of {len(group)} cycle,"
-            f" median path RMS {1000 * np.median([r['path_rms_m'] for r in group]):.1f} mm,"
+            f" median curve RMS {1000 * np.median([r['curve_rms_m'] for r in group]):.1f} mm,"
             f" median period ratio {ratio:.3f}"
         )
 

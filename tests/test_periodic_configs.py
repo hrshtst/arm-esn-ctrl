@@ -16,7 +16,7 @@ EXPERIMENT = REPO_ROOT / "experiments/manual_demonstration_v2_periodic"
 STAGE_1 = REPO_ROOT / "experiments/manual_demonstration_v2_many_starts"
 TAKES = REPO_ROOT / "experiments/demonstrations/ellipse_manual_v2_no_limits.toml"
 SEARCHES = ["coarse_search.toml", "scripted_coarse_search.toml"]
-CYCLE = {"path_tolerance": 0.02, "cycle_periods": 5, "cycle_turns": [4.0, 6.0]}
+CYCLE = {"curve_tolerance": 0.02, "cycle_periods": 5, "cycle_turns": [4.0, 6.0]}
 
 
 def load(path):
@@ -31,7 +31,7 @@ def test_the_coarse_searches_run_stage_1s_108_settings_with_its_esn_and_tracker(
     assert search["esn"] == stage_1["esn"]  # 800 neurons, seed 0, and the rest of stage 1's
     assert search["sweep"] == stage_1["sweep"]
     assert search["tracker"] == stage_1["tracker"]
-    assert search["ranking"] == {"by": "path_rms_m"}
+    assert search["ranking"] == {"by": "curve_rms_m"}
     # Undisturbed, for 40 s, from the eight starts on the curve, the take's own and seven more.
     assert search["evaluation"] == {
         "duration": 40.0,
@@ -91,11 +91,11 @@ def test_the_hand_esn_starts_from_report_023s_esn_1_and_runs_from_the_search_sta
     assert hand["evaluation"] == search["evaluation"]
 
 
-def test_the_hand_robot_runs_the_hand_esn_with_the_searchs_tracker_against_both_replays():
+def test_the_hand_robot_runs_the_hand_esn_with_the_searchs_tracker_against_the_replay_alone():
     robot, hand = load(EXPERIMENT / "hand_robot.toml"), load(EXPERIMENT / "hand_esn.toml")
 
     assert robot["esn"]["model"].endswith("-hand_esn/esn.toml")
     assert robot["tracker"] == load(EXPERIMENT / "coarse_search.toml")["tracker"]
-    assert robot["progress"] == load(STAGE_1 / "hand_pushes_robot.toml")["progress"]
+    assert "progress" not in robot  # no progress replay in this stage
     assert robot["evaluation"] == hand["evaluation"]
     assert "disturbance" not in robot

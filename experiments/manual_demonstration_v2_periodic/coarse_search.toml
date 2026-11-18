@@ -2,7 +2,7 @@
 # radius, the input scaling, and the ridge, one reservoir each (seed 0), trained on the
 # take of the ellipse by hand and run on the robot, undisturbed, from the eight starts on
 # the curve, for 40 s. Each setting is scored by how many of its eight runs cycle, then
-# by the median path RMS of the runs that cycle; the best is the center of the fine
+# by the median curve RMS of the runs that cycle; the best is the center of the fine
 # search. It is scripted_coarse_search.toml but for the take. Sweeps here take 15
 # workers, not 30: the machine is shared. About 10 minutes with 15 workers.
 # See README.md.
@@ -36,8 +36,8 @@ input_scaling = [0.1, 0.5, 2.0]
 ridge = [1e-4, 1e-2, 1.0]
 
 [ranking]
-# The most runs that cycle, then the smallest median path RMS of the runs that cycle.
-by = "path_rms_m"
+# The most runs that cycle, then the smallest median curve RMS of the runs that cycle.
+by = "curve_rms_m"
 
 [tracker]
 # The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
@@ -54,10 +54,11 @@ gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_fil
 
 [evaluation]
 duration = 40.0           # task (s), after the warm-up: ten taught periods
-# A run cycles if, over its last cycle_periods taught periods, the hand stays within
-# path_tolerance of the taught path, stage 1's goal radius, and its angle about the
-# curve's center grows by cycle_turns turns, five at the taught pace.
-path_tolerance = 0.02     # m
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
 cycle_periods = 5
 cycle_turns = [4.0, 6.0]  # the least and the most
 start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0

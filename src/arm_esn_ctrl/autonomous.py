@@ -26,10 +26,10 @@ NaN: no run arrives, and its own measures are those of
 :func:`arm_esn_ctrl.metrics.loop_periods` and :func:`arm_esn_ctrl.metrics.mean_loop`.
 
 A periodic motion (a ``[task]`` of type ``periodic_curve``) is taught by one take.
-:func:`task_cycle` gives what its runs are measured against, its take's taught path
-and period, and the loop its replays go around; :func:`cycle_run_metrics` measures
-whether a run cycles (see :func:`arm_esn_ctrl.metrics.cycle_metrics`), with
-``[evaluation]``'s ``path_tolerance``, ``cycle_periods``, and ``cycle_turns``.
+:func:`task_cycle` gives what its runs are measured against, the task's curve and the
+take's taught period, and the loop its replays go around; :func:`cycle_run_metrics`
+measures whether a run cycles (see :func:`arm_esn_ctrl.metrics.cycle_metrics`), with
+``[evaluation]``'s ``curve_tolerance``, ``cycle_periods``, and ``cycle_turns``.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ import numpy as np
 from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog, Task
 
-from arm_esn_ctrl.demonstrations import endpoint_positions, resample_joint_angles, simulate_reaches
+from arm_esn_ctrl.demonstrations import endpoint_positions, resample_joint_angles, simulate_reaches, task_path
 from arm_esn_ctrl.esn import ReachingEsn
 from arm_esn_ctrl.metrics import (
     arrival_index,
@@ -58,7 +58,6 @@ from arm_esn_ctrl.metrics import (
     path_distance,
     path_rmse,
     taught_loop,
-    taught_path,
     taught_period,
 )
 from arm_esn_ctrl.postures import joint_limits_deg
@@ -78,14 +77,16 @@ EVALUATION_KEYS = {
     "ringing_window",
     "following_window",
     "warmup",  # robot_esn.py: the start posture held this long, in place of the ESN's warm-up (s)
-    "path_tolerance",  # a periodic task: see task_cycle
+    "curve_tolerance",  # a periodic task: see task_cycle
     "cycle_periods",
     "cycle_turns",
     "after_window",
 }
-# How long after a disturbance's end the largest torque and the largest distance from the taught path of a
+# How long after a disturbance's end the largest torque and the largest distance from the curve of a
 # periodic task's run are measured, unless [evaluation] gives an after_window (s).
 AFTER_WINDOW = 2.0
+# A periodic task's curve is measured as a polygon of this many sides, within 0.01 mm of it.
+CURVE_SIDES = 360
 # A demonstrator's reach this close to the training path, on average, has no course of its own to
 # compare with: from a start along the demonstrated path, the ratio would divide by almost nothing (rad).
 # The same holds for a start this close to it, which has no offset to retain.
@@ -510,25 +511,25 @@ class Cycle:
     """What the runs of a periodic task are measured against, and the loop its take is replayed around."""
 
     center: NDArray[np.float64]  # the curve's center (m)
-    path: NDArray[np.float64]  # the taught path: the take's hand over its taught loops, at the ESN's period
+    curve: NDArray[np.float64]  # the task's curve, a closed polygon of CURVE_SIDES sides (m)
     period: float  # the taught period (s)
     loop: tuple[int, int]  # the taught loop's first sample and one past its last, at the ESN's period
-    tolerance: float  # a hand that cycles keeps this near the taught path (m)
+    tolerance: float  # a hand that cycles is at most this far from the curve, in RMS (m)
     periods: int  # it is measured over this many taught periods at the end of a run
     turns: tuple[float, float]  # and goes around this many turns over them, the least and the most
-    after: float  # after a disturbance, its largest torque and distance from the path are measured this long (s)
+    after: float  # after a disturbance, its largest torque and distance from the curve are measured this long (s)
 
 
 def task_cycle(setup: Setup, evaluation: dict[str, Any]) -> Cycle | None:
     """What the runs of a periodic task are measured against; None for any other task.
 
-    The task is taught by one take, sampled at the ESN's period: its taught path,
-    taught period, and taught loop (see :func:`arm_esn_ctrl.metrics.taught_path`,
-    :func:`arm_esn_ctrl.metrics.taught_period`, and
-    :func:`arm_esn_ctrl.metrics.taught_loop`) are that take's, around the center of the
-    task's curve. ``[evaluation]`` gives the rest: ``path_tolerance`` (m),
-    ``cycle_periods``, ``cycle_turns``, and ``after_window`` (s; ``AFTER_WINDOW`` by
-    default).
+    The runs are measured against the task's curve, as a polygon of ``CURVE_SIDES``
+    sides (see :func:`arm_esn_ctrl.demonstrations.task_path`), around its center. The
+    task is taught by one take, sampled at the ESN's period: the taught period and the
+    taught loop (see :func:`arm_esn_ctrl.metrics.taught_period` and
+    :func:`arm_esn_ctrl.metrics.taught_loop`) are that take's. ``[evaluation]`` gives
+    the rest: ``curve_tolerance`` (m), ``cycle_periods``, ``cycle_turns``, and
+    ``after_window`` (s; ``AFTER_WINDOW`` by default).
     """
     if setup.task.get("type") != "periodic_curve":
         return None
@@ -537,12 +538,14 @@ def task_cycle(setup: Setup, evaluation: dict[str, Any]) -> Cycle | None:
     center = np.asarray(setup.task["center"], dtype=np.float64)
     dt = float(setup.times[1] - setup.times[0])
     least, most = evaluation["cycle_turns"]
+    curve = task_path(setup.task, CURVE_SIDES)
+    assert curve is not None
     return Cycle(
         center=center,
-        path=taught_path(hand, center),
+        curve=curve,
         period=taught_period(dt * np.arange(len(hand), dtype=np.float64), hand, center),
         loop=taught_loop(q, hand, center),
-        tolerance=float(evaluation["path_tolerance"]),
+        tolerance=float(evaluation["curve_tolerance"]),
         periods=int(evaluation["cycle_periods"]),
         turns=(float(least), float(most)),
         after=float(evaluation.get("after_window", AFTER_WINDOW)),
@@ -559,5 +562,5 @@ def cycle_run_metrics(hand: NDArray[np.float64], setup: Setup, cycle: Cycle) -> 
     """
     unreached = {"arrived": "", "left_goal": "", "success": "", "hold_observed_s": float("nan")}
     return unreached | cycle_metrics(
-        setup.times, hand, cycle.path, cycle.center, cycle.period, cycle.tolerance, cycle.periods, cycle.turns
+        setup.times, hand, cycle.curve, cycle.center, cycle.period, cycle.tolerance, cycle.periods, cycle.turns
     )

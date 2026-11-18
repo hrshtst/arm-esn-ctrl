@@ -8,12 +8,12 @@ import tomllib
 
 import numpy as np
 import pytest
-from skelarm import Skeleton
+from skelarm import Skeleton, build_curve
 
-from arm_esn_ctrl.autonomous import Setup, Start, cycle_run_metrics, task_cycle
-from arm_esn_ctrl.demonstrations import endpoint_positions
+from arm_esn_ctrl.autonomous import CURVE_SIDES, Setup, Start, cycle_run_metrics, task_cycle
+from arm_esn_ctrl.demonstrations import endpoint_positions, task_path
 from arm_esn_ctrl.disturbances import make_disturbance
-from arm_esn_ctrl.metrics import taught_loop, taught_path
+from arm_esn_ctrl.metrics import distances_to_path, taught_loop
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.tracking import ReplaySource
 
@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO_ROOT / "experiments"))
 from robot_esn import progress_source, push_aim
 
 ELLIPSE = REPO_ROOT / "experiments/demonstrations/ellipse_scripted_v2_no_limits.toml"
-EVALUATION = {"duration": 40.0, "path_tolerance": 0.02, "cycle_periods": 5, "cycle_turns": [4.0, 6.0]}
+EVALUATION = {"duration": 40.0, "curve_tolerance": 0.02, "cycle_periods": 5, "cycle_turns": [4.0, 6.0]}
 
 
 def ellipse_setup(loops=3.5, pause=1.0):
@@ -58,7 +58,7 @@ def ellipse_setup(loops=3.5, pause=1.0):
     )
 
 
-def test_a_periodic_task_is_measured_against_its_takes_taught_path_period_and_loop():
+def test_a_periodic_task_is_measured_against_its_curve_with_its_takes_period_and_loop():
     setup = ellipse_setup()
     q, hand = setup.demos["demo_00"], setup.demo_hands["demo_00"]
 
@@ -66,14 +66,24 @@ def test_a_periodic_task_is_measured_against_its_takes_taught_path_period_and_lo
 
     assert cycle is not None
     assert cycle.center == pytest.approx([-0.1, 0.55])
-    assert cycle.path == pytest.approx(taught_path(hand, cycle.center))
-    assert cycle.path == pytest.approx(hand[500:1301])  # from 5 s, the end of the first loop, to 13 s
+    assert cycle.curve == pytest.approx(task_path(setup.task, CURVE_SIDES))
     assert cycle.period == pytest.approx(4.0, abs=1e-3)
     assert cycle.loop == taught_loop(q, hand, cycle.center)
     assert (cycle.tolerance, cycle.periods, cycle.turns) == (0.02, 5, (4.0, 6.0))
     assert cycle.after == 2.0  # the default after_window
     longer = task_cycle(setup, EVALUATION | {"after_window": 1.5})
     assert longer is not None and longer.after == 1.5
+
+
+def test_the_curve_is_measured_as_a_polygon_within_a_hundredth_of_a_millimetre_of_it():
+    setup = ellipse_setup()
+    cycle = task_cycle(setup, EVALUATION)
+    assert cycle is not None
+    curve = build_curve("ellipse", setup.task)
+
+    on_curve = np.array([curve(theta) for theta in np.linspace(0.0, 2 * np.pi, 36001)])
+
+    assert distances_to_path(on_curve, cycle.curve).max() < 1e-5
 
 
 def test_a_reach_has_no_cycle():
