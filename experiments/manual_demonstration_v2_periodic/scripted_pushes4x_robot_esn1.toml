@@ -9,7 +9,7 @@
 [esn]
 # A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py, relative
 # to the storage root.
-model = "results/manual_demonstration_v2_periodic/YYYYMMDD-HHMMSS-scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5/esn.toml"  # EDIT: the ESN's run
+model = "results/manual_demonstration_v2_periodic/20261118-225615-scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5/esn.toml"
 
 [tracker]
 # The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
