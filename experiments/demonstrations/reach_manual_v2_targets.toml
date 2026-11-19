@@ -14,8 +14,7 @@
 #
 # 1. Record the takes, into the storage root's data/ (what cannot be regenerated).
 #    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
-#    names; the recorder does not create the directory. --prepare needs skelarm's
-#    branch feature/recorder-prepare until the submodule's pin is advanced:
+#    names; the recorder does not create the directory:
 #
 #   mkdir -p "$STORAGE/data/reach_manual_v2_targets"
 #   uv run python third_party/skelarm/tools/trajectory_recorder.py \
