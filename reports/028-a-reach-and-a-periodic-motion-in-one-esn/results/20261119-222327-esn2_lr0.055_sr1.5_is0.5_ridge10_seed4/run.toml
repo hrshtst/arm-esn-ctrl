@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_reach_and_ellipse/esn2_lr0.055_sr1.5_is0.5_ridge10_seed4.toml"
+command = "experiments/autonomous_esn.py experiments/manual_demonstration_v2_reach_and_ellipse/esn2_lr0.055_sr1.5_is0.5_ridge10_seed4.toml"
+started = 2026-11-19 22:23:27+09:00
+host = "delbosque"
+commit = "54487dcf3c015ec0ca3f4c089f82b143fbe551b2"
+uncommitted_changes = false

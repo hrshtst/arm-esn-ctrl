@@ -1,0 +1,63 @@
+# Two-task ESN #2 (leak rate 0.055, spectral radius 1.5, input scaling 0.5, ridge 10,
+# seed 4) on the robot, undisturbed, from the periodic motion to the reach: claim 7.
+# From each of the eight starts on the curve, the run starts with the context ellipse,
+# which changes to reach at 16 s, and goes on for 24 s more, against the replay of the
+# take by hand, which keeps to the ellipse. The part after the change is measured as a
+# reach that begins at it. 8 runs of the ESN and 8 replays. About 3 minutes, one after
+# another. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_reach_and_ellipse/to_reach_robot_esn2.toml
+
+[esn]
+# esn.toml in the run directory of its training, relative to the storage root.
+model = "results/manual_demonstration_v2_reach_and_ellipse/20261119-222327-esn2_lr0.055_sr1.5_is0.5_ridge10_seed4/esn.toml"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 40.0          # task (s), after the warm-up: 16 s before the change and 24 s after it
+start_tasks = ["ellipse"]  # the runs start from the ellipse's starts alone
+# The reference's fastest joint speed and the largest joint torque are measured over
+# this long from the change (s).
+after_window = 2.0
+
+# Each task's keys: the ellipse's for the runs and for the part before the change, the
+# reach's for the part after it.
+
+[evaluation.tasks.reach]
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start, which start_tasks leaves out
+
+[evaluation.tasks.ellipse]
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
+cycle_periods = 5
+cycle_turns = [4.0, 6.0]  # the least and the most
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0
+
+[evaluation.tasks.ellipse.extra_starts]
+# The other seven starts on the curve (deg), untaught_search.toml's: the hand on the
+# ellipse at the curve's angles 45, 90, ..., 315 deg, an eighth of a loop apart.
+on_curve = [
+  [47.3, 90.8], [62.6, 83.0], [75.1, 82.6], [79.0, 92.5], [71.5, 109.8], [53.3, 122.5], [36.2, 118.7],
+]
+
+[[switch]]
+# The ESN's context changes to reach at 16 s on the task clock, which starts after the
+# warm-up: a hand that went on from where it started at eight places around the curve.
+time = 16.0
+task = "reach"

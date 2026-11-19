@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_reach_and_ellipse/coarse_search.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_reach_and_ellipse/coarse_search.toml --workers 30"
+started = 2026-11-19 19:05:37+09:00
+host = "delbosque"
+commit = "7e08011147ba297403344ed7df860da3e9a44b6e"
+uncommitted_changes = false

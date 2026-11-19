@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_reach_and_ellipse/fine_search.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_reach_and_ellipse/fine_search.toml --workers 30"
+started = 2026-11-19 19:33:14+09:00
+host = "delbosque"
+commit = "d0a9a022461879347dea55d963497b7def8302b6"
+uncommitted_changes = false

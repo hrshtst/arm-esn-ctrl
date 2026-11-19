@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_reach_and_ellipse/to_ellipse_robot_esn2.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_reach_and_ellipse/to_ellipse_robot_esn2.toml"
+started = 2026-11-19 22:33:15+09:00
+host = "delbosque"
+commit = "de4d5ade358c632443cb1810d0c1ee3f99382c8b"
+uncommitted_changes = false

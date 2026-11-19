@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_reach_and_ellipse/untaught_search.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_reach_and_ellipse/untaught_search.toml --workers 30"
+started = 2026-11-19 20:52:28+09:00
+host = "delbosque"
+commit = "ce5f9b519cea18666c813c00d0fd237aff644c99"
+uncommitted_changes = false
