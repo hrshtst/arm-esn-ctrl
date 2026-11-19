@@ -4,7 +4,7 @@
 """Videos and figures of report 026, a periodic motion from a script, for slides.
 
     uv run python presentations/periodic-motion-from-a-script/make_media.py [--workers 8] [--only FOLDER ...]
-        [--starts N ...]
+        [--starts N ...] [--all-starts-only]
 
 From the scripted take and the robot runs of report 026
 (``reports/026-a-periodic-motion-from-a-script/README.md``, Sections 2 and 3.2 to 3.6),
@@ -27,15 +27,18 @@ A run's files are its video in skelarm's player (``--export --panel``), its join
 and torques over time, and its hand path. The runs last a minute or two, so each shows a
 window of its run (the ``*_WINDOW`` constants): its video is the player's export of a copy
 of the log cut to the window. The videos of an arm's runs one after another are made from
-those videos, with the speed, the arm, and the start written in the player's side panel.
-The folder's ``README.md`` explains them, and ``media.csv`` lists every file with the logs
-it shows. The replays do not depend on the ESN: they are taken from ESN #1's runs, checked
-to equal ESN #2's.
+those videos, at each of ``SPEEDS``: at their own speed and at two, five, and ten times
+it, with the speed, the arm, and the start written in the player's side panel. The
+folder's ``README.md`` explains them, and ``media.csv`` lists every file with the logs it
+shows. The replays do not depend on the ESN: they are taken from ESN #1's runs, checked to
+equal ESN #2's.
 
 ``--workers`` sets the number of processes that render. ``--only`` renders the named
 folders alone, and ``--starts`` the runs from the named starts alone, by their index, both
-in the run folders and in the videos of all starts; the README and ``media.csv`` are always
-written in full. It overwrites its own files and deletes nothing.
+in the run folders and in the videos of all starts. ``--all-starts-only`` makes the videos
+of all starts alone, from the runs' videos already in the output folder, and stops if one
+it needs is missing. The README and ``media.csv`` are always written in full. It
+overwrites its own files and deletes nothing.
 """
 
 from __future__ import annotations
@@ -81,7 +84,7 @@ PREFIX = "scripted_"  # the scripted take's runs' configurations begin with it
 PLAYER = REPO_ROOT / "third_party" / "skelarm" / "tools" / "player.py"
 TRACKER = "pd_w20_z0.4"  # the one tracker's directory in a robot run
 FPS = 30.0
-SPEEDS = (1,)  # the speeds of the videos of an arm's runs one after another
+SPEEDS = (1, 2, 5, 10)  # the speeds of the videos of an arm's runs one after another, 1 the runs' own
 CUT = 0.05  # s: the torque axes leave out the first 50 ms after t = 0, as report 023's figures do
 
 # The windows of the runs that a run's video and figures show (s), on the task's clock: the warm-up from -1 s, the
@@ -1087,7 +1090,7 @@ its own time; the side panel's clock is the run's.
 | `3.3_untaught_starts/off_curve.png` | the hand's distance from the curve over the first {untaught_distance_s:g} s from every untaught start: the first row of the report's `scripted_off_curve.png` |
 | `3.5_pushes/1x/off_curve_esn1.png`, `off_curve_esn2.png`, and likewise in `2x` and `4x` | the hand's distance from the curve over the window from the eight starts, the ESN's arm over the replay's, the pushes shaded: a row of the report's `scripted_off_curve.png` |
 | `3.6_block/off_curve_esn1.png`, `off_curve_esn2.png` | the same with the block, the hold shaded |
-| `all_starts_esn1_1x.mp4`, `all_starts_esn2_1x.mp4`, `all_starts_replay_1x.mp4`, in `3.2`, `3.3`, each size of `3.5`, and `3.6` | each arm's runs one after another, start 0's to start 7's or untaught 00's to untaught 35's, each its own video over the window, at their own speed; the speed, the arm, and the start written in the side panel |
+| `all_starts_esn1_1x.mp4`, `all_starts_esn2_1x.mp4`, `all_starts_replay_1x.mp4`, and likewise {faster_files}, in `3.2`, `3.3`, each size of `3.5`, and `3.6` | each arm's runs one after another, start 0's to start 7's or untaught 00's to untaught 35's, each its own video over the window, {speeds}; the speed, the arm, and the start written in the side panel. A video at k times keeps every k-th frame of the runs' own videos, which are the frames the player shows at that speed. |
 
 ## The runs
 
@@ -1131,7 +1134,8 @@ From the repository, at commit `{commit}`{dirty}:
 
 It reads the take and the runs under the storage root and overwrites the files here, this
 README included; `--only` renders the named folders alone, and `--starts` the runs from
-the named starts alone. This README was written on {day}.
+the named starts alone. `--all-starts-only` makes the videos of all starts alone, from the
+runs' videos already here. This README was written on {day}.
 """  # noqa: E501, RUF001
 
 
@@ -1193,6 +1197,7 @@ def write_readme() -> None:
     ]
     links = SKELETON.links[1:]
     duration = {scenario: config(robot_run(scenario, "1"))["evaluation"]["duration"] for scenario in SCENARIOS}
+    faster = [speed for speed in SPEEDS if speed != 1]
     commit, dirty = commit_state()
     (OUT / "README.md").write_text(
         README.format(
@@ -1240,6 +1245,8 @@ def write_readme() -> None:
             untaught_distance_s=UNTAUGHT_DISTANCE[1],
             last_loops=cycle().periods,
             last_s=cycle().periods * cycle().period,
+            faster_files=", ".join(f"`_{speed}x`" for speed in faster[:-1]) + f", and `_{faster[-1]}x`",
+            speeds=f"at their own speed and at {', '.join(map(str, faster[:-1]))}, and {faster[-1]} times it",
             cut_ms=1e3 * CUT,
             fps=FPS,
             two_px=pixels(TWO_PANELS),
@@ -1307,10 +1314,24 @@ def main() -> None:
         metavar="N",
         help="render the runs from these starts alone, by their index, and the videos of all starts of them alone",
     )
+    parser.add_argument(
+        "--all-starts-only",
+        action="store_true",
+        help="make the videos of all starts alone, from the runs' videos already in the output folder",
+    )
     args = parser.parse_args()
     check_runs()
     items = media(None)
     chosen = [item for item in media(args.starts) if args.only is None or item.path.split("/")[0] in args.only]
+    if args.all_starts_only:
+        chosen = [item for item in chosen if item.reads]
+        missing = sorted({path for item in chosen for path in item.reads if not (OUT / path).is_file()})
+        if missing:
+            listed = "\n  ".join(missing[:5]) + (f"\n  and {len(missing) - 5} more" if len(missing) > 5 else "")
+            sys.exit(
+                f"--all-starts-only makes the videos of all starts from the runs' videos in {OUT}, and"
+                f" {len(missing)} of them are missing:\n  {listed}\nMake them first, without --all-starts-only."
+            )
     print(f"{len(chosen)} of {len(items)} files to make into {OUT}", flush=True)
     render(chosen, args.workers)
     write_media_csv(items)
