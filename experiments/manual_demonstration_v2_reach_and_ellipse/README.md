@@ -118,6 +118,36 @@ It is 3a's, with both tasks in the score.
 The search has no change of context during a run, no pushes, no block, and no held-out
 seeds.
 
+### The search's outcome
+
+Added after each step's run.
+
+**The center.** Of the coarse search's 108 settings (`20261119-190537-coarse_search`),
+none passes all 17 runs. The best passes 15: leak rate 0.1, spectral radius 1.5, input
+scaling 0.5, and ridge 1, with 8 of its 9 reaches holding and 7 of its 8 ellipse runs
+cycling, a median detour ratio of 1.040, and a median curve RMS of 8.55 mm. Two settings
+pass 13, and all others 10 or fewer.
+
+The reach is the easier of the two in one ESN: 552 of the 972 reach runs hold, and 23
+settings hold from all nine starts. Of the 864 ellipse runs 44 cycle, where the ellipse
+alone had 205 in 3a, and no setting cycles from all eight starts. Of the 820 ellipse
+runs that do not cycle, the hand of 574 stays within half a turn over the last five
+taught periods, that of 74 goes around backwards, that of 36 goes around too slowly,
+and that of 136 keeps the pace but is more than 20 mm RMS from the ellipse. Of the 44
+that cycle, 36 have the ridge of 1, the grid's largest.
+
+The fine search's values around the center:
+
+| Parameter | Values |
+| --- | --- |
+| leak rate | 0.055, 0.1, 0.17 |
+| spectral radius | 1.35, 1.5, 1.65 |
+| input scaling | 0.22, 0.5, 1 |
+| ridge | 10⁻¹, 1, 10 |
+
+The center's spectral radius and ridge are the coarse grid's largest, so the fine search
+goes as far above them as below.
+
 ## The claims
 
 They keep the numbers of the proposal, after 3a's claims 1 to 5. A claim holds if it

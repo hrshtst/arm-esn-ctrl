@@ -8,8 +8,8 @@
 # how many of its runs pass, then, among the settings with as many, by the worse of two
 # ranks, by the median detour ratio of its reach runs that arrive and by the median
 # curve RMS of its ellipse runs that cycle, then by the better; the best is the center
-# of the fine search. One setting took 2 minutes and 0.36 GB in one process: about 10
-# minutes with 30 workers. See README.md.
+# of the fine search. One setting took 2 minutes and 0.36 GB in one process, and the
+# search 22 minutes with 30 workers. See README.md.
 #
 #   uv run python experiments/sweep_robot_esn.py \
 #       experiments/manual_demonstration_v2_reach_and_ellipse/coarse_search.toml --workers 30
