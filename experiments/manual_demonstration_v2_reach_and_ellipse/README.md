@@ -5,7 +5,8 @@ One ESN does two tasks on the two-link arm with no joint limits: stage 1's reach
 ESN's input names the task, as stage 2's context names a target, and changing the context
 during a run changes the task. [PLAN.md](../../PLAN.md) gives the study's stages; the
 reach alone is report 023's, three targets by context report 025's, and the periodic
-motion alone reports 026's and 027's.
+motion alone reports 026's and 027's. The results of this experiment are
+[report 028](../../reports/028-a-reach-and-a-periodic-motion-in-one-esn/README.md).
 
 **Status.** The rule and the claims below were proposed on 2026-11-18 in
 [stage 3a's README](../manual_demonstration_v2_periodic/README.md), before any run of 3a.
@@ -254,7 +255,8 @@ starts.
 
 **Two rest postures.** Stage 1's takes 03 and 04 go around the base clockwise and rest
 at the target with joint 1 at −246°, a whole turn below the others' 114°. The ellipse
-is taught with joint 1 from 34° to 79°. A reach that ends at −246° is then asked to go
+is taught with joint 1 from 33° to 78° (corrected on 2026-11-19 after the runs: this
+said 34° to 79°). A reach that ends at −246° is then asked to go
 to a curve it was taught a whole turn away. What the hand does there is reported with
 claim 8.
 
@@ -309,13 +311,13 @@ Added on 2026-11-19 after the claims' runs (`20261119-223315-*`, all eight from 
 | 9: cycles before the last change and arrives and holds after it, in all 8 runs | 8 | 8 | **holds** |
 
 Claim 6 fails, by its reach. In each of the ten reaches that do not hold, the hand
-enters the 20 mm around the target, leaves it by 21 to 50 mm within the 2 s, and comes
-back to stay: every one of the 90 reaches ends within 13 mm of the target. The replays
+enters the 20 mm around the target, leaves it within the 2 s, goes out to 21 to 50 mm
+from the target, and comes back to stay: every one of the 90 reaches ends within 13 mm of the target. The replays
 hold from all 45 starts, as report 023's ESNs did.
 
 **The two rest postures** (claim 8). From takes 03 and 04, both ESNs rest at the target
-with joint 1 at −246° when the context changes. Joint 1 then turns the whole way back
-to where the ellipse was taught, 34° to 79°, and the hand cycles as from the other
+with joint 1 at −246° when the context changes. Joint 1 then turns nearly a whole turn
+back to where the ellipse was taught, 33° to 78°, and the hand cycles as from the other
 seven. It joins the curve 7.6 s after the change for ESN #1 and 9.9 s for ESN #2,
 where the other seven take 7.9 s and 9.4 s. In the 2 s after the change the
 reference's fastest joint speed is 726 deg/s for ESN #1 and 154 deg/s for ESN #2,

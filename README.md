@@ -270,6 +270,7 @@ that run them are shared:
 | [manual_demonstration_v2_many_starts_push_search](experiments/manual_demonstration_v2_many_starts_push_search/README.md) | the many-starts search again with the pushed runs in the score: each setting scored by how many of its runs pass, undisturbed and under report 007's pushes, then by how directly the hand goes, and report 023's seven claims tested again with the ESNs it chooses (Stages 1 and 2) | [024](reports/024-many-starts-with-pushes-in-the-score/README.md) |
 | [manual_demonstration_v2_targets](experiments/manual_demonstration_v2_targets/README.md) | three targets reached by one ESN of 800 neurons on v2's arm with no joint limits, the target named by a context in its input and taught by nine takes to each: searched as the many-starts stage with each context, then tested from unseen starts and with the context changed during a run (Stages 1 and 2) | [025](reports/025-three-targets-by-context/README.md) |
 | [manual_demonstration_v2_periodic](experiments/manual_demonstration_v2_periodic/README.md) | a periodic motion on v2's arm with no joint limits: the hand goes around an ellipse without end, taught by one take made by a script and by one recorded by hand; ESNs of 800 neurons searched by how many runs still cycle and how closely the hand draws the ellipse, then tested from starts on and off the curve, under report 007's pushes, and with the tip held (Stage 3 of the multi-task study) | [026](reports/026-a-periodic-motion-from-a-script/README.md), [027](reports/027-a-periodic-motion-by-hand/README.md) |
+| [manual_demonstration_v2_reach_and_ellipse](experiments/manual_demonstration_v2_reach_and_ellipse/README.md) | the reach and the periodic motion in one ESN of 800 neurons on v2's arm with no joint limits, the task named by a context in its input: searched by how many runs pass with each context, the reach holding and the ellipse cycling, then tested with each context from untaught starts and with the context changed during a run, to the reach, to the ellipse, and back and forth (Stage 3 of the multi-task study) | [028](reports/028-a-reach-and-a-periodic-motion-in-one-esn/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -533,6 +534,7 @@ The reports so far:
   after eight of nine pushes when the next push or change comes.
 - [026 A periodic motion from a script: the ESN keeps drawing the ellipse and rejoins it after pushes, but after a block its hand leaves the curve farther than the replay's](reports/026-a-periodic-motion-from-a-script/README.md)
 - [027 A periodic motion taught by hand: the ESN draws a smoother ellipse than its take and waits while it is held, but a push sends its hand far off the curve](reports/027-a-periodic-motion-by-hand/README.md)
+- [028 A reach and a periodic motion in one ESN: a change of context changes the task in every run, but ten of the 90 reaches do not hold at the target, and few reservoirs do both tasks](reports/028-a-reach-and-a-periodic-motion-in-one-esn/README.md)
 
 Each report has five parts:
 
