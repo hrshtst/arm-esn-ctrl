@@ -194,7 +194,10 @@ They differ in the spectral radius alone and share the seed, so the two are near
 one ESN. Seen in the search's runs, before the claims' runs: from the untaught starts
 every one of the 20 settings sends the reference to the curve at once, with a fastest
 joint speed near 6,000 deg/s and a largest torque of 270 to 340 N m in the median, and
-the hand is on the curve within a second. Claim 2 compares these with the replay's.
+the hand is on the curve within a second in the median; a setting's slowest run
+joins after 1.2 to 9.1 s, and the one run that does not cycle never joins (the last
+clause corrected on 2026-11-19: it read "within a second" for every run). Claim 2
+compares these with the replay's.
 
 ### The search on the take by hand
 
@@ -218,8 +221,11 @@ that is used has no such sample.
 16 cycle from all eight starts and 64 from none, where the scripted take's had 65 and
 24. All 16 have the ridge of 1, the grid's largest: of the 288 runs at each ridge,
 186 cycle at 1, 17 at 10⁻², and 2 at 10⁻⁴. Of the 659 runs that do not cycle, the hand
-of 432 does not go around at all, that of 142 keeps the pace but is more than 20 mm
-RMS from the ellipse, and that of 13 goes around too fast. The smallest median curve
+of 334 stays within half a turn over the last five taught periods, that of 98 goes
+around backwards by half a turn or more, that of 72 goes around too slowly, that of
+142 keeps the pace but is more than 20 mm RMS from the ellipse, and that of 13 goes
+around too fast (corrected on 2026-11-19, before the fine search's outcome: the first
+count put the 98 with those that stay and left the 72 out). The smallest median curve
 RMS among the 16, 5.67 mm, is that of leak rate 0.03, spectral radius 0.9, input
 scaling 0.5, and ridge 1. The fine search's values around it:
 
