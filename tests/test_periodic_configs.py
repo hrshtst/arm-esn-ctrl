@@ -147,10 +147,18 @@ def test_each_fine_search_takes_the_center_and_the_values_halfway_to_its_coarse_
 
 
 ESN_NAMES = ["leak_rate", "spectral_radius", "input_scaling", "ridge"]
+# Each take's scoring with the untaught starts, with its fine search and that search's two best settings (runs
+# 20261119-100337-fine_search and 20261118-194306-scripted_fine_search).
+UNTAUGHT_SEARCHES = {
+    "untaught_search.toml": ("fine_search.toml", [(0.055, 0.9, 0.5, 1.0), (0.055, 1.05, 0.5, 10.0)]),
+    "scripted_untaught_search.toml": ("scripted_fine_search.toml", [(0.017, 1.35, 4.0, 1e-3), (0.017, 1.5, 4.0, 1e-3)]),
+}
 
 
-def test_the_scripted_untaught_search_is_the_scripted_fine_search_but_for_its_settings_seeds_and_untaught_starts():
-    again, fine = load(EXPERIMENT / "scripted_untaught_search.toml"), load(EXPERIMENT / "scripted_fine_search.toml")
+@pytest.mark.parametrize("search", UNTAUGHT_SEARCHES)
+def test_each_untaught_search_is_its_fine_search_but_for_its_settings_seeds_and_untaught_starts(search):
+    fine_name, _ = UNTAUGHT_SEARCHES[search]
+    again, fine = load(EXPERIMENT / search), load(EXPERIMENT / fine_name)
 
     settings, sweep, fine_sweep = again.pop("settings"), again.pop("sweep"), fine.pop("sweep")
     assert len(settings) == 20
@@ -161,20 +169,24 @@ def test_the_scripted_untaught_search_is_the_scripted_fine_search_but_for_its_se
     assert again == fine  # the same take, ESN, tracker, runs, and score
 
 
-def test_the_scripted_untaught_searchs_settings_are_distinct_and_on_the_fine_searchs_grid():
-    again, fine = load(EXPERIMENT / "scripted_untaught_search.toml"), load(EXPERIMENT / "scripted_fine_search.toml")
+@pytest.mark.parametrize("search", UNTAUGHT_SEARCHES)
+def test_each_untaught_searchs_settings_are_distinct_and_on_its_fine_searchs_grid(search):
+    fine_name, two_best = UNTAUGHT_SEARCHES[search]
+    again, fine = load(EXPERIMENT / search), load(EXPERIMENT / fine_name)
 
     settings = [tuple(setting[name] for name in ESN_NAMES) for setting in again["settings"]]
     assert len(set(settings)) == len(settings) == 20
     for setting in again["settings"]:
         assert list(setting) == ESN_NAMES
         assert all(setting[name] in fine["sweep"][name] for name in ESN_NAMES)
-    assert settings[:2] == [(0.017, 1.35, 4.0, 1e-3), (0.017, 1.5, 4.0, 1e-3)]  # the fine search's two best
+    assert settings[:2] == two_best  # the fine search's two best
 
 
-def test_the_scripted_untaught_search_starts_on_the_fine_searchs_curve_and_from_stage_1s_untaught_starts():
-    starts = load(EXPERIMENT / "scripted_untaught_search.toml")["evaluation"]["extra_starts"]
-    fine = load(EXPERIMENT / "scripted_fine_search.toml")["evaluation"]["extra_starts"]
+@pytest.mark.parametrize("search", UNTAUGHT_SEARCHES)
+def test_each_untaught_search_starts_on_its_fine_searchs_curve_and_from_stage_1s_untaught_starts(search):
+    fine_name, _ = UNTAUGHT_SEARCHES[search]
+    starts = load(EXPERIMENT / search)["evaluation"]["extra_starts"]
+    fine = load(EXPERIMENT / fine_name)["evaluation"]["extra_starts"]
 
     assert starts["on_curve"] == fine["on_curve"]
     assert starts["untaught"] == load(EXPERIMENT / "hand_esn.toml")["evaluation"]["extra_starts"]["untaught"]

@@ -240,6 +240,15 @@ The center's spectral radius is the coarse grid's smallest and its ridge the lar
 so the fine search goes as far below the one and above the other as it goes toward
 the grid's inside.
 
+**The fine search** (`20261119-100337-fine_search`). Of its 81 settings, 31 cycle in
+all 40 runs, where the scripted take's had 69: 15 of the 27 with the ridge of 1, 15 of
+those with 10, and one of those with 10⁻¹; 2 of the 27 with leak rate 0.017, 15 with
+0.03, and 14 with 0.055. The 20 settings with the best scores, median curve RMS 4.34
+to 6.76 mm, go to the scoring with the untaught starts: twelve with leak rate 0.055,
+seven with 0.03, and one with 0.017; nine with the ridge of 1 and eleven with 10. The
+best, at 4.34 mm, is the center but for its leak rate of 0.055, the fine grid's
+largest. The rule does not move the grid, so the search goes on from these 20.
+
 ## The analysis (3a)
 
 The chosen ESNs are tested on the robot against the replay. No size is fixed in
@@ -446,5 +455,6 @@ the machine is shared.
 | `scripted_block_robot_esn{1,2}.toml` | claim 5: each with the tip held from 10 s to 13 s, for 60 s from the eight starts on the curve |
 | `coarse_search.toml` | the same on the take by hand; its `run` names the take's import |
 | `fine_search.toml` | the fine search on the take by hand: 81 settings around its coarse search's best, seeds 1 to 5, alike |
+| `untaught_search.toml` | the scoring with the untaught starts on the take by hand: its fine search's 20 best settings, seeds 1 to 5, each on the robot for 40 s from the eight starts on the curve and the 36 untaught ones (about 80 minutes with 15 workers) |
 | `hand_esn.toml` | an ESN to tune by hand, trained on the take by hand and run on its own from the eight starts on the curve and the 36 untaught ones; it prints the apps' commands |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay (88 runs) |
