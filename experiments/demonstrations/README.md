@@ -71,6 +71,12 @@ the curve, 4 s a loop, ten loops. Their headers give the commands. The import ch
 that the hand goes around the curve's center at least `[recording]` `min_loops`
 whole times, counterclockwise, and measures its loops instead of a reach.
 
+The hand take is recorded without the tip trail, which slows the recorder's sampling
+of a long take. The recorder now and then writes two samples a fraction of a
+millisecond apart, and the filter would make a jump of them: the import leaves a
+sample that follows another within `[recording]` `min_interval` (1 ms) out of the hand
+take's filtered copy.
+
 ## Runs
 
 Under `results/demonstrations/` in the storage:

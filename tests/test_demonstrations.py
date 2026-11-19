@@ -5,10 +5,11 @@
 
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
-from skelarm import Skeleton, StateLog
+from skelarm import Skeleton, StateLog, smooth
 
 from arm_esn_ctrl.demonstrations import (
     check_take,
@@ -161,7 +162,7 @@ def test_a_take_must_be_recorded_with_the_same_arm():
     assert any("arm" in problem for problem in problems)
 
 
-SMOOTHING = {"kind": "butterworth", "cutoff_hz": 8.0, "order": 4}
+SMOOTHING: dict[str, Any] = {"kind": "butterworth", "cutoff_hz": 8.0, "order": 4}
 
 
 def task_table():
@@ -174,6 +175,17 @@ def test_smoothing_keeps_the_times_and_a_still_posture():
     smoothed = smooth_take(take, Skeleton.from_toml(CONFIG), task_table(), SMOOTHING)
     np.testing.assert_array_equal(smoothed.times, take.times)
     np.testing.assert_allclose(smoothed.channel("q"), take.channel("q"), atol=1e-12)
+
+
+def test_smoothing_by_default_filters_every_sample_at_the_takes_mean_interval_and_keeps_its_times():
+    """What smoothing did before it could leave out samples that follow another closely."""
+    take = taught_take(reach=3.0, step_deg=0.3)
+    times, q = take.times, take.channel("q")
+
+    smoothed = smooth_take(take, Skeleton.from_toml(CONFIG), task_table(), SMOOTHING)
+
+    np.testing.assert_array_equal(smoothed.times, times)
+    np.testing.assert_array_equal(smoothed.channel("q"), smooth(q, float(np.mean(np.diff(times))), **SMOOTHING))
 
 
 def test_smoothing_removes_the_pixel_steps_and_keeps_a_demonstration():

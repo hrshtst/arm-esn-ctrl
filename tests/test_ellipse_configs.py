@@ -68,6 +68,15 @@ def test_the_scripted_take_is_not_filtered_for_it_has_no_pixel_steps():
     assert load(SCRIPTED)["recording"]["filter"] == {"kind": "none"}
 
 
+def test_only_the_hand_take_leaves_a_sample_within_a_millisecond_of_another_out_of_its_filtered_copy():
+    reaches = sorted((REPO_ROOT / "experiments/demonstrations").glob("reach_*.toml"))
+
+    assert load(MANUAL)["recording"]["min_interval"] == 0.001
+    assert reaches
+    for path in [SCRIPTED, *reaches]:
+        assert "min_interval" not in load(path).get("recording", {}), path.name
+
+
 def test_the_start_posture_puts_the_hand_on_the_curve_at_angle_0_with_joint_2_positive():
     config = load(MANUAL)
     skeleton = Skeleton.from_toml(MANUAL)

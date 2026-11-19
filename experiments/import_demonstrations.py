@@ -32,7 +32,11 @@ as any others:
 - ``demo_00_filtered.sklog.npz``: the take smoothed by the filter of
   ``[recording.filter]`` (see :func:`arm_esn_ctrl.demonstrations.smooth_take`),
   which removes the steps of the cursor's whole screen pixels; the same checks
-  apply to it;
+  apply to it. The recorder now and then writes two samples a fraction of a
+  millisecond apart, which the filter would turn into a jump: where
+  ``[recording]`` sets ``min_interval``, a sample that follows the one before it
+  by less than that many seconds is left out of the filtered copy, and kept in
+  the copy as recorded;
 
 and their measurements:
 
@@ -133,7 +137,16 @@ def main() -> None:
         recorded = StateLog.load(take)
         for name, log in (
             (f"demo_{i:02d}", recorded),
-            (f"demo_{i:02d}_filtered", smooth_take(recorded, skeleton, config["task"], recording["filter"])),
+            (
+                f"demo_{i:02d}_filtered",
+                smooth_take(
+                    recorded,
+                    skeleton,
+                    config["task"],
+                    recording["filter"],
+                    min_interval=recording.get("min_interval", 0.0),
+                ),
+            ),
         ):
             demos[name], start_of[name], take_of[name] = log, start_deg, take
     problems = {

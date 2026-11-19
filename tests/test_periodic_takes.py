@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from skelarm import Skeleton, StateLog, build_curve
 
-from arm_esn_ctrl.demonstrations import check_take, endpoint_positions
+from arm_esn_ctrl.demonstrations import check_take, endpoint_positions, joint_trajectory_log, smooth_take
 from arm_esn_ctrl.metrics import loop_phase
 from arm_esn_ctrl.storage import REPO_ROOT
 
@@ -101,6 +101,43 @@ def test_a_take_that_ends_while_the_hand_goes_around_is_a_demonstration():
     assert check(ellipse_take(8.3)) == []  # ended near the top of the ellipse, where the hand is fastest
 
 
+def doubled(take, at):
+    """The take with its sample at ``at`` seconds written again 0.3 ms later, as the recorder now and then does.
+
+    Returns the take, one sample longer, and the index of the sample written again.
+    """
+    times, q = take.times, take.channel("q")
+    k = int(np.searchsorted(times, at))
+    times, q = np.insert(times, k + 1, times[k] + 0.0003), np.insert(q, k + 1, q[k], axis=0)
+    return joint_trajectory_log(Skeleton.from_toml(MANUAL), times, q, load(MANUAL)["task"], producer="test"), k
+
+
+def tip_speeds(log):
+    """The hand's speed between each two samples of a log (m/s)."""
+    hand = endpoint_positions(Skeleton.from_toml(MANUAL), log.channel("q"))
+    return np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(log.times)
+
+
+def test_a_sample_written_again_within_a_millisecond_is_left_out_of_the_filtered_copy_not_made_a_jump():
+    config = load(MANUAL)
+    recording = config["recording"]
+    take = ellipse_take(8.5)
+    twice, k = doubled(take, at=10.78)  # while the hand goes around
+
+    def filtered(log, **options):
+        return smooth_take(log, Skeleton.from_toml(MANUAL), config["task"], recording["filter"], **options)
+
+    # Taken as evenly spaced, the filtered copy moves a whole sample's step in 0.3 ms.
+    assert tip_speeds(filtered(twice))[k] > recording["max_tip_speed"]
+    left_out = filtered(twice, min_interval=recording["min_interval"])
+    assert len(left_out.times) == len(twice.times) - 1
+    assert tip_speeds(left_out).max() < recording["max_tip_speed"]
+    # Without the sample written again, the take is filtered as if it had never been.
+    without = filtered(take)
+    np.testing.assert_array_equal(left_out.times, without.times)
+    np.testing.assert_allclose(left_out.channel("q"), without.channel("q"), rtol=0.0, atol=1e-12)
+
+
 def test_the_scripted_take_puts_the_hand_on_the_curve_ten_times_around_from_the_start_posture(tmp_path, monkeypatch):
     monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
     monkeypatch.setattr(sys, "argv", ["make_periodic_take.py", str(SCRIPTED)])
@@ -174,6 +211,20 @@ def test_a_periodic_take_is_imported_with_its_loops_and_its_taught_loop(tmp_path
     assert float(recorded["curve_max_m"]) < 1e-5  # on the curve, as the polygon it is measured against
     assert float(recorded["loop_spread_m"]) < 1e-3
     assert float(recorded["taught_loop_mismatch_deg"]) < 0.5
+
+
+def test_a_hand_take_with_a_sample_written_again_is_imported_whole_and_filtered_without_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["import_demonstrations.py", str(MANUAL)])
+    twice, _ = doubled(ellipse_take(8.5), at=10.78)
+    save_take(tmp_path, twice)
+
+    import_demonstrations.main()
+
+    (run,) = (tmp_path / "results/demonstrations").iterdir()
+    recorded, filtered = (StateLog.load(run / f"{name}.sklog.npz") for name in ("demo_00", "demo_00_filtered"))
+    assert len(recorded.times) == len(twice.times)
+    assert len(filtered.times) == len(twice.times) - 1
 
 
 def test_a_periodic_take_of_too_few_loops_is_not_imported(tmp_path, monkeypatch, capsys):

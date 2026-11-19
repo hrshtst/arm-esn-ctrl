@@ -22,11 +22,14 @@
 #   mkdir -p "$STORAGE/data/ellipse_manual_v2_no_limits"
 #   uv run python third_party/skelarm/tools/trajectory_recorder.py \
 #       experiments/demonstrations/ellipse_manual_v2_no_limits.toml --mode ik --sample-rate 100 \
-#       --duration 0 --show-tip-trail --pose=35.8,104.1 \
+#       --duration 0 --pose=35.8,104.1 \
 #       --output "$STORAGE/data/ellipse_manual_v2_no_limits/take_00.sklog.npz"
 #
 #    Maximize the window: its pixels are the steps the tip moves in. The gray ellipse
-#    is the [task] curve, and the tip starts on it, at its right end. Space starts
+#    is the [task] curve, and the tip starts on it, at its right end. The tip trail
+#    is left off, because the recorder redraws the whole trail at every sample, which
+#    slows the sampling of a long take (a take of 60 s fell from 100 Hz to about
+#    55 Hz after its first 15 s); the gray ellipse is the guide. Space starts
 #    the take; let a second pass before the tip moves, so that the filtered copy
 #    still begins at the start posture (see [recording]). Grab the tip within the
 #    dashed circle around it and take it around the gray ellipse counterclockwise,
@@ -62,6 +65,12 @@ min_loops = 8        # the hand goes around the ellipse's center at least this m
 # one still going around when S is pressed has one near its median.
 end_window = 0.5       # s
 end_speed_ratio = 0.5
+# The recorder now and then writes two samples a fraction of a millisecond apart,
+# about once in 10 to 20 s. The filter takes the samples as evenly spaced, so the
+# filtered copy would move a whole sample's step between the two, which the import
+# would read as a jump. A sample that follows another within min_interval is left
+# out of the filtered copy; the copy as recorded keeps it.
+min_interval = 0.001   # s
 
 # The filter of the filtered copy, as reach_manual_v2_no_limits.toml's: a first-order
 # low-pass at 2 Hz, run forward and backward.

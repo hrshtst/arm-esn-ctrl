@@ -189,7 +189,9 @@ def joint_trajectory_log(
     return log
 
 
-def smooth_take(log: StateLog, skeleton: Skeleton, task: dict[str, Any], smoothing: dict[str, Any]) -> StateLog:
+def smooth_take(
+    log: StateLog, skeleton: Skeleton, task: dict[str, Any], smoothing: dict[str, Any], *, min_interval: float = 0.0
+) -> StateLog:
     """Return a take with its joint angles smoothed, at the take's own sample times.
 
     The recorder moves the tip with the cursor, in whole screen pixels of a few
@@ -200,9 +202,17 @@ def smooth_take(log: StateLog, skeleton: Skeleton, task: dict[str, Any], smoothi
     it is smoothed as if sampled at its mean interval, as skelarm's
     trajectory-tracking tasks do. ``task`` is the skelarm ``[task]`` table the player
     draws.
+
+    The recorder now and then writes two samples a fraction of a millisecond apart.
+    Taken as evenly spaced, the filtered angles would move a whole sample's step
+    between the two, in that fraction of a millisecond: a jump the hand never made.
+    A sample that follows the one before it by less than ``min_interval`` (s) is
+    therefore left out, and the rest are smoothed at their own mean interval and
+    kept at their own times. With the default, 0, every sample is kept.
     """
-    times = log.times
-    q = log.channel("q").reshape(len(times), -1)
+    keep = np.r_[True, np.diff(log.times) >= min_interval]
+    times = log.times[keep]
+    q = log.channel("q").reshape(len(log.times), -1)[keep]
     smoothed = smooth(q, float(np.mean(np.diff(times))), **smoothing)
     return joint_trajectory_log(skeleton, times, smoothed, task, producer=f"{log.producer}, smoothed: {smoothing}")
 
