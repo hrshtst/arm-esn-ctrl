@@ -179,6 +179,43 @@ none, and the fourth has two of each. The first two settings are the only ones w
 five seeds all cycle from at least six starts, and they lose reaches instead: their
 seeds hold five to eight of the nine.
 
+**The scoring with the untaught starts** (`20261119-205228-untaught_search`, 84
+minutes). No setting passes all 445 runs, and none of the 100 ESNs all of its 89. The
+best:
+
+| Leak rate | Spectral radius | Input scaling | Ridge | Runs that pass, of 445 | Reaches that hold, of 225 | Ellipse runs that cycle, of 220 | Median detour ratio | Median curve RMS (mm) | Typical seed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.17 | 1.65 | 0.22 | 10 | 343 | 167 | 176 | 1.221 | 12.93 | 4 |
+| 0.055 | 1.5 | 0.5 | 10 | 312 | 197 | 115 | 1.131 | 8.36 | 4 |
+| 0.1 | 1.65 | 0.22 | 10 | 311 | 135 | 176 | 1.227 | 10.20 | 5 |
+| 0.055 | 1.65 | 0.5 | 10 | 301 | 157 | 144 | 1.183 | 8.95 | 5 |
+| 0.055 | 1.5 | 1 | 10 | 291 | 208 | 83 | 1.115 | 13.36 | 3 |
+
+No two of the first ten settings pass as many runs, so the ranks decide nothing among
+them. Over all 20 settings, 3,791 of the 4,500 reach runs hold (781 of 900 from the
+takes' starts, 3,010 of 3,600 from the untaught) and 1,381 of the 4,400 ellipse runs
+cycle (364 of 800 from the starts on the curve, 1,017 of 3,600 from the untaught). Five
+ESNs hold every reach and seven cycle from every start; none does both.
+
+**The chosen ESNs:**
+
+| | Leak rate | Spectral radius | Input scaling | Ridge | Seed | Its runs that pass, of 89 | Reach, of 9 takes' and 36 untaught starts | Ellipse, of 8 starts on the curve and 36 untaught |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| two-task ESN #1 | 0.17 | 1.65 | 0.22 | 10 | 4 | 86 | 8 and 34 | 8 and 36 |
+| two-task ESN #2 | 0.055 | 1.5 | 0.5 | 10 | 4 | 81 | 8 and 30 | 8 and 35 |
+
+Each is its setting's seed with the most runs that pass, which no other seed of the
+setting equals. In every reach either fails but one, the hand arrives, leaves the
+20 mm around the target within the 2 s, and ends within 5 mm of the target; in the
+one, ESN #1's from an untaught start, it arrives at 22.7 s, too late for the 2 s to be
+seen in 24 s. ESN #2's one ellipse run that does not cycle keeps the pace 45 mm RMS
+from the ellipse. The seeds of a setting differ here too: of ESN #1's setting, seed 3
+cycles from one of the 36 untaught starts, and of ESN #2's, seed 2 from none.
+
+The ESN with the fewest failing runs is neither: leak rate 0.055, spectral radius 1.5,
+input scaling 1, ridge 10, seed 3 fails two of its 89, and its setting is fifth. The
+rule chooses by the setting, so it is not one of the two.
+
 ## The claims
 
 They keep the numbers of the proposal, after 3a's claims 1 to 5. A claim holds if it
@@ -226,8 +263,29 @@ has given it.
 | Claims | What runs |
 | --- | --- |
 | the search | the coarse search, the fine search, and the scoring with the untaught starts, on both tasks (`sweep_robot_esn.py`) |
-| 6 | each two-task ESN with one context for the whole run: `reach` from the nine reach takes' starts and stage 1's 36 unseen ones for 24 s, `ellipse` from the eight starts on the curve and the 36 untaught ones for 60 s (`robot_esn.py`) |
-| 7, 8, 9 | each two-task ESN with the changes of context above (`robot_esn.py`, `[[switch]]`) |
+| the chosen ESNs | each trained once and kept: `esn1_lr0.17_sr1.65_is0.22_ridge10_seed4.toml`, `esn2_lr0.055_sr1.5_is0.5_ridge10_seed4.toml` (`autonomous_esn.py`) |
+| 6 | each two-task ESN with one context for the whole run: `reach` from the nine reach takes' starts and stage 1's 36 unseen ones for 24 s, `ellipse` from the eight starts on the curve and the 36 untaught ones for 60 s (`robot_esn.py`): `robot_esn1.toml`, `robot_esn2.toml` |
+| 7 | each two-task ESN with the change of context above (`robot_esn.py`, `[[switch]]`): `to_reach_robot_esn1.toml`, `to_reach_robot_esn2.toml` |
+| 8 | the same: `to_ellipse_robot_esn1.toml`, `to_ellipse_robot_esn2.toml` |
+| 9 | the same, with three changes: `back_and_forth_robot_esn1.toml`, `back_and_forth_robot_esn2.toml` |
+
+**How the claims' runs are counted** (added on 2026-11-19 after the search and a
+rehearsal of these configurations with another ESN in a scratch directory, before any
+of the claims' runs). The counts are of the ESN's rows of each run's `metrics.csv`:
+
+- Claim 6: a reach holds if `success` is true and `hold_observed_s` is 2 s, as the
+  search counts it; an ellipse run cycles by `cycles`.
+- Claim 7: after the change, `switch_success` is true and `switch_hold_observed_s` is
+  2 s; the time from the change to the arrival is `switch_arrival_time_s`.
+- Claim 8: `switch_cycles`, over the run's last five taught periods; the joining time
+  from the change is `switch_joining_time_s`.
+- Claim 9: `cycles_before_switch_3`, over the five taught periods before the change at
+  76 s, and after it `switch_success` with `switch_hold_observed_s` of 2 s.
+
+In a run with a change, the columns without `switch` measure the whole run as one of
+the task it starts with, and are not used. Nor is the count of runs that cycle before
+the change at 16 s: 16 s is shorter than the five taught periods a cycling run is
+measured over.
 
 Sweeps here take 30 workers. In 3a's sweeps a worker took up to 9 GB for moments, in
 one measure of a run whose arm runs away; that measure now takes its points in pieces
