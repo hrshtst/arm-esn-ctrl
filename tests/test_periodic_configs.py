@@ -47,7 +47,7 @@ def test_the_two_coarse_searches_differ_only_in_the_take():
     by_hand, scripted = (load(EXPERIMENT / name) for name in SEARCHES)
 
     assert by_hand.pop("demonstrations") == {
-        "run": "results/demonstrations/YYYYMMDD-HHMMSS-ellipse_manual_v2_no_limits",  # until the take is recorded
+        "run": "results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits",
         "train": ["demo_00_filtered.sklog.npz"],
     }
     assert scripted.pop("demonstrations") == {

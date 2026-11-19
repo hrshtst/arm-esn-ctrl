@@ -11,7 +11,7 @@
 # filtered at 2 Hz. For the scripted take instead: the run of
 # ellipse_scripted_v2_no_limits.toml (scripted_coarse_search.toml's) and its take as
 # made, demo_00.sklog.npz.
-run = "results/demonstrations/YYYYMMDD-HHMMSS-ellipse_manual_v2_no_limits"  # EDIT: the import's run
+run = "results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits"
 train = ["demo_00_filtered.sklog.npz"]
 
 [esn]

@@ -18,10 +18,13 @@ The maintainer then changed them, the same day and before any search or claim wa
 run ([what was changed](#what-the-maintainer-changed)), and confirmed 3a's as they
 stand here. 3b's are a proposal: the maintainer confirms them before 3b starts.
 The scripted take is made and imported
-(`results/demonstrations/20261118-171132-ellipse_scripted_v2_no_limits`). Two takes by
-hand were refused by the import, their samples uneven while sweeps loaded the machine,
-and the take is recorded again. On the scripted take the search and the claims' runs are done
-([the outcomes](#the-outcomes-for-the-scripted-take)).
+(`results/demonstrations/20261118-171132-ellipse_scripted_v2_no_limits`), and on it the
+search and the claims' runs are done
+([the outcomes](#the-outcomes-for-the-scripted-take)). The take by hand was recorded
+and imported on 2026-11-19
+(`results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits`,
+[the take](#the-search-on-the-take-by-hand)), after earlier takes were refused by the
+import, and its search follows.
 
 **Checks of the runners.** Before the search, the runners were tried in a scratch
 directory, on the scripted take and on a made-up take in place of the hand's, with
@@ -192,6 +195,24 @@ one ESN. Seen in the search's runs, before the claims' runs: from the untaught s
 every one of the 20 settings sends the reference to the curve at once, with a fastest
 joint speed near 6,000 deg/s and a largest torque of 270 to 340 N m in the median, and
 the hand is on the curve within a second. Claim 2 compares these with the replay's.
+
+### The search on the take by hand
+
+**The take** (`20261119-093746-ellipse_manual_v2_no_limits`, recorded on 2026-11-19).
+The hand goes around ten whole times in 52.9 s, sampled at 100 Hz. Its taught period
+is 5.12 s (the taught loops take 4.3 to 5.4 s), slower than the 4 s aimed at and than
+the scripted take's. The take as recorded is 9.3 mm RMS from the ellipse and 23.5 mm
+at most; its copy filtered at 2 Hz, which the ESNs are trained on, 10.3 mm RMS and
+21.9 mm at most. The hand passes about 10 mm inside the ellipse around its left end
+on every loop.
+
+The takes recorded before it were not used. The import refused them for a jump of
+the filtered copy that the hand never made: the recorder now and then writes two
+samples a fraction of a millisecond apart, which the filter took as evenly spaced.
+The import now leaves such a sample out of the filtered copy (75ad88b). The
+recorder's tip trail also slowed the sampling of those takes after their first 15 to
+25 s, to about 55 Hz in the longest, so the take is recorded without it. The take
+that is used has no such sample.
 
 ## The analysis (3a)
 

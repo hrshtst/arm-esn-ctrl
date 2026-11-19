@@ -14,7 +14,7 @@
 # The run directory of experiments/import_demonstrations.py for
 # ellipse_manual_v2_no_limits.toml, relative to the storage root, and its take
 # filtered at 2 Hz.
-run = "results/demonstrations/YYYYMMDD-HHMMSS-ellipse_manual_v2_no_limits"  # EDIT: the import's run
+run = "results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits"
 train = ["demo_00_filtered.sklog.npz"]
 
 [esn]
