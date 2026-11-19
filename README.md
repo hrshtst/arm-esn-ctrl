@@ -268,6 +268,7 @@ that run them are shared:
 | [manual_demonstration_four_dof_consistent_search](experiments/manual_demonstration_four_dof_consistent_search/README.md) | the consistent search on skelarm's four-link arm: the grid and its extension below the lowest input scaling, the rule, a second rule that asks the reference to follow the arm, and the chosen ESNs against both replays in every scenario |
 | [manual_demonstration_v2_many_starts](experiments/manual_demonstration_v2_many_starts/README.md) | one target reached from many start postures on v2's arm with no joint limits, taught by one take from each of nine: ESNs of 800 neurons searched by how many starts the hand arrives and holds from and how directly, then checked from unseen starts, under pushes, and against fewer takes (Stages 1 and 2) | [023](reports/023-one-target-from-many-starts/README.md) |
 | [manual_demonstration_v2_many_starts_push_search](experiments/manual_demonstration_v2_many_starts_push_search/README.md) | the many-starts search again with the pushed runs in the score: each setting scored by how many of its runs pass, undisturbed and under report 007's pushes, then by how directly the hand goes, and report 023's seven claims tested again with the ESNs it chooses (Stages 1 and 2) | [024](reports/024-many-starts-with-pushes-in-the-score/README.md) |
+| [manual_demonstration_v2_periodic](experiments/manual_demonstration_v2_periodic/README.md) | a periodic motion on v2's arm with no joint limits: the hand goes around an ellipse without end, taught by one take made by a script and by one recorded by hand; ESNs of 800 neurons searched by how many runs still cycle and how closely the hand draws the ellipse, then tested from starts on and off the curve, under report 007's pushes, and with the tip held (Stage 3 of the multi-task study) | [026](reports/026-a-periodic-motion-from-a-script/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -510,6 +511,7 @@ The reports so far:
   held-out seeds.
 - [023 One target from many starts: nine takes start where the arm is and go directly, but a push sends the hand far away](reports/023-one-target-from-many-starts/README.md)
 - [024 Many starts with the pushes in the score: slower reservoirs come back from report 007's pushes in time, and start less gently](reports/024-many-starts-with-pushes-in-the-score/README.md)
+- [026 A periodic motion from a script: the ESN keeps drawing the ellipse and rejoins it after pushes, but after a block its hand leaves the curve farther than the replay's](reports/026-a-periodic-motion-from-a-script/README.md)
   (Stages 1 and 2): one target reached from many start postures on the two-link arm with
   no joint limits, taught by nine takes, with ESNs chosen by undisturbed runs only.
   Undisturbed, the two chosen arrive and hold from every taught and unseen start, and
