@@ -24,7 +24,8 @@ search and the claims' runs are done
 and imported on 2026-11-19
 (`results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits`,
 [the take](#the-search-on-the-take-by-hand)), after earlier takes were refused by the
-import, and its search follows.
+import, and on it too the search and the claims' runs are done
+([the outcomes](#the-outcomes-for-the-take-by-hand)).
 
 **Checks of the runners.** Before the search, the runners were tried in a scratch
 directory, on the scripted take and on a made-up take in place of the hand's, with
@@ -355,8 +356,8 @@ text above is the changed one.
 
 ### The outcomes for the scripted take
 
-Added on 2026-11-19, after the runs of the scripted take's ESNs (commit 210ffce). The
-take by hand is not recorded yet, so its outcomes are still to come.
+Added on 2026-11-19, after the runs of the scripted take's ESNs (commit 210ffce),
+when the take by hand was not recorded yet. Its outcomes follow below.
 
 | Claim | ESN #1 | ESN #2 | The replay | Outcome |
 | --- | --- | --- | --- | --- |
@@ -390,6 +391,47 @@ Beside the claims:
   2.9 s). The replay ends with no delay.
 - **The replay's eight runs are one run** from 10 s on: it begins at the take's start
   wherever the arm is, so the block meets it at the same place in every run.
+
+### The outcomes for the take by hand
+
+Added on 2026-11-19, after the runs of the take by hand's ESNs (commits a1b1d0b and
+30dd596, which differ in no file a run reads).
+
+| Claim | ESN #1 | ESN #2 | The replay | Outcome |
+| --- | --- | --- | --- | --- |
+| 1, cycles at the end of 120 s from the eight starts on the curve | 8 of 8 | 8 of 8 | 8 of 8 | holds |
+| 2, from the seven other starts on the curve: fastest reference speed, largest torque (medians) | 225 deg/s, 5.3 N m | 204 deg/s, 5.1 N m | 2,680 deg/s, 140.3 N m | holds |
+| 2, from the 36 untaught starts | 2,040 deg/s, 107 N m | 1,905 deg/s, 100 N m | 9,000 deg/s, 471 N m | holds |
+| 3, cycles at the end of 60 s from the 36 untaught starts | 36 of 36 | 36 of 36 | 36 of 36 | holds |
+| 4, cycles at the end of 80 s under the pushes, at 1, 2, and 4 times | 8, 8, 8 of 8 | 8, 8, 8 of 8 | 8, 8, 8 of 8 | holds |
+| 5, cycles at the end of 60 s with the block | 8 of 8 | 8 of 8 | 8 of 8 | holds |
+| 5, in the 2 s after the release: largest torque (median) | 1.6 N m | 1.3 N m | 48.8 N m | holds |
+| 5, in the 2 s after the release: largest off the curve (median) | 24 mm | 15 mm | 107 mm | holds |
+
+Claims 1 to 5 hold for the take by hand.
+
+Beside the claims:
+
+- **The curve and the pace.** Undisturbed, the ESNs' curve RMS is 5.1 and 5.7 mm and
+  the replay's 11.0 mm: the ESNs draw the ellipse closer than the take they learned.
+  Their period is 0.984 and 0.985 of the taught 5.12 s; the replay's, through the
+  six loops it repeats, 0.987.
+- **The start.** From the seven other starts on the curve the ESNs' reference is the
+  slower from all seven, and from the 36 untaught starts from all 36; the torque is
+  the smaller from all but one untaught start of ESN #1. From an untaught start the
+  reference still moves at about 2,000 deg/s in the median, where the take's own start
+  asks for 32 deg/s and 0.2 N m. The ESNs join the curve in 1.5 and 1.6 s in the
+  median (5.1 and 3.6 s at most), the replay in 0.2 s.
+- **The pushes** send the ESNs' hands farther than the replay's: 149 to 221 mm off
+  the curve in the median at report 007's forces, against 28 to 61 mm, and up to
+  726 mm at four times them. The ESNs are back within 20 mm for good in 5.4 and 6.0 s
+  at most after any push, at every size. The replay's return time measures the take,
+  not the push: the take itself goes up to 22 mm off the curve, so the replay is
+  "back for good" only after its last such loop before the next push.
+- **The delay** is taken within a loop of 5.12 s, between −1.3 s and 3.8 s. After the
+  pushes ESN #1 ends 1.5 to 1.6 s behind its undisturbed run in the median (1.1 s
+  ahead to 3.7 s behind), and ESN #2 2.2 to 2.6 s behind (1.5 to 3.8 s). After the
+  block of 3 s they end 3.2 s behind (3.0 to 3.7 s): the whole hold.
 
 ## The reach and the periodic motion in one ESN (3b)
 
