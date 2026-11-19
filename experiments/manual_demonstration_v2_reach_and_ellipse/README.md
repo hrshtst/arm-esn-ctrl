@@ -1,0 +1,172 @@
+# The reach and the periodic motion in one ESN, v2 (stage 3b of the multi-task study)
+
+One ESN does two tasks on the two-link arm with no joint limits: stage 1's reach to
+(−0.6, 0.4) m and stage 3a's periodic motion around the ellipse. A context added to the
+ESN's input names the task, as stage 2's context names a target, and changing the context
+during a run changes the task. [PLAN.md](../../PLAN.md) gives the study's stages; the
+reach alone is report 023's, three targets by context report 025's, and the periodic
+motion alone reports 026's and 027's.
+
+**Status.** The rule and the claims below were proposed on 2026-11-18 in
+[stage 3a's README](../manual_demonstration_v2_periodic/README.md), before any run of 3a.
+On 2026-11-19, after 3a's reports and before any run of 3b, the maintainer confirmed four
+points: the reach has one target, stage 1's, and not stage 2's three; the ellipse is
+taught by the take by hand alone; 3b has no pushes and no block; and claim 9's second
+stretch on the ellipse lasts 40 s. The maintainer then had 3b started on this text. What
+was changed from the proposal is dated where it stands. No run of 3b had been made when
+this file was committed.
+
+## The robot, the tasks, and the takes
+
+**The robot** is stage 1's: v2's arm with no joint limits
+([`reach_manual_v2_no_limits.toml`](../demonstrations/reach_manual_v2_no_limits.toml)).
+
+| Task | Context | Takes | From |
+| --- | --- | --- | --- |
+| the reach to (−0.6, 0.4) m, within 20 mm | `reach` | stage 1's nine takes by hand, one from each of nine start postures, filtered at 2 Hz (`results/demonstrations/20261117-164658-reach_manual_v2_no_limits`) | report 023 |
+| the periodic motion around the ellipse centered at (−0.1, 0.55) m, 0.20 m by 0.12 m | `ellipse` | the one take by hand, ten loops, filtered at 2 Hz (`results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits`); its taught period is 5.12 s | report 027 |
+
+No take is new. The scripted take of the ellipse is not used. The nearest the ellipse
+comes to the reach's target is 0.33 m.
+
+**The ESN** is trained on all ten takes. Its input holds, after the two joint angles, one
+value per task: 1 for the task being done and 0 for the other. The context is fed in as
+in stage 2 (report 025): divided by the input scaling, so that its input weights have the
+scale 1 whatever the input scaling is (`context_scaling = 1.0`,
+`context_times_input_scaling = false`; proposed on 2026-11-19 after report 025, and not
+searched). The rest is stage 1's: 800 neurons, sparsity 0.05, a bias, a warm-up of 1 s on
+the held start posture with the run's first context, 10 ms. The joint angles are
+normalized by the range all ten takes cover.
+
+**The tracker** is stage 1's: report 017's joint PD (ω = 20 rad/s, damping ratio 0.4,
+given the reference's velocity, its torque computed every 10 ms), its gains set where the
+take of reports 005 to 020 ends.
+
+## The start postures
+
+| Starts | What they are | Used with |
+| --- | --- | --- |
+| the nine reach takes' | where each take of the reach starts | `reach` |
+| eight on the curve | the hand on the ellipse at its angles 0°, 45°, …, 315°; the first is the ellipse take's start | `ellipse` |
+| 36 untaught | stage 1's untaught starts, hands spread evenly over the workspace. The search's last step scores from them with each context | both |
+| 36 unseen | stage 1's unseen starts, the untaught rings turned 15° back. No search or scoring runs from them | `reach`, in claim 6 |
+
+## The runs and their measures
+
+A run is given a context from its warm-up on. Its measures are its task's:
+
+- **With `reach`:** stage 1's. A run **holds** if the hand arrives within 20 mm of the
+  target and stays within it for the 2 s after. Its detour ratio is the length of the
+  hand's path until it arrives over the straight distance from its start.
+- **With `ellipse`:** stage 3a's, taken from the ellipse itself. A run **cycles** if,
+  over its last five taught periods (25.6 s), the hand's angle about the curve's center
+  grows by four to six turns and the curve RMS is at most 20 mm.
+- **A run passes** if it holds, with `reach`, or cycles, with `ellipse`.
+- **How a run starts,** as in stage 1: the reference's fastest joint speed and the
+  largest joint torque.
+
+**When the context changes during a run,** the part after the change is measured as a
+run of the new task that begins at the change: after a change to `reach`, whether the
+hand arrives and holds, and the time from the change to its arrival; after a change to
+`ellipse`, whether the hand cycles at the end of the run, and the joining time counted
+from the change. Reported with them, without a claim: the reference's fastest joint
+speed and the largest joint torque in the 2 s after each change.
+
+**The replays** keep to their take and their task, so the claims about a change of
+context are counts of the ESN's runs alone.
+
+## The search
+
+The search chooses two ESNs by how reliably they do both tasks, and then by how well.
+It is 3a's, with both tasks in the score.
+
+1. **The runs.** Each ESN runs on the robot, undisturbed, with the context `reach` from
+   each of the nine reach takes' starts for 24 s, and with the context `ellipse` from
+   each of the eight starts on the curve for 40 s: 17 runs.
+2. **A setting's score** is how many of its runs pass, the most first. Settings with as
+   many are ranked twice among themselves: by the median detour ratio of their reach
+   runs that arrive, and by the median curve RMS of their ellipse runs that cycle, each
+   the smallest first, a setting with no such run last. The worse of a setting's two
+   ranks decides, the smaller first, so that neither task's measure is weighed against
+   the other's in its own unit. Settings still alike are ordered by the better of
+   their two ranks (this last sentence added on 2026-11-19, before any run, to make
+   the order complete).
+3. **The coarse search:** stage 1's 108 settings with one reservoir each (seed 0):
+
+   | Parameter | Values |
+   | --- | --- |
+   | leak rate | 0.01, 0.03, 0.1, 0.3 |
+   | spectral radius | 0.9, 1.2, 1.5 |
+   | input scaling | 0.1, 0.5, 2 |
+   | ridge | 10⁻⁴, 10⁻², 1 |
+
+4. **The center** is the coarse setting with the best score.
+5. **The fine search:** 81 settings around the center, with five reservoirs each (seeds
+   1 to 5), laid out as in stage 1 and 3a: each parameter takes the center's value and
+   the one halfway to its coarse neighbor on each side, in ratio for the leak rate, the
+   input scaling, and the ridge, and in difference for the spectral radius; beyond an
+   edge of the coarse grid, as far as on the other side. A setting's runs are the 85 of
+   its five seeds.
+6. **Scoring again with the untaught starts.** The 20 fine settings with the best
+   scores, each with its five reservoirs again, run from the starts of step 1 and from
+   the 36 untaught ones with each context: 89 runs an ESN, 445 a setting, scored as in
+   step 2.
+7. **The chosen ESNs,** two-task ESN #1 and ESN #2, are the typical seeds of the two
+   settings with the best scores in step 6: of a setting's seeds with the most runs
+   that pass, the one whose median curve RMS is nearest the setting's.
+
+The search has no change of context during a run, no pushes, no block, and no held-out
+seeds.
+
+## The claims
+
+They keep the numbers of the proposal, after 3a's claims 1 to 5. A claim holds if it
+holds for two-task ESN #1 and for two-task ESN #2.
+
+6. **Each task by its context.** With the context `reach`, from the nine reach takes'
+   starts and stage 1's 36 unseen starts, the hand arrives and holds from as many
+   starts as it did for report 023's ESN #1 and ESN #2, which is all 45. With the context
+   `ellipse`, from the eight starts on the curve and the 36 untaught starts, in runs of
+   60 s, the hand cycles at the end from at least as many starts as for the fewer of
+   3a's ESN #1 and ESN #2 of the take by hand, which is all 44.
+7. **From the periodic motion to the reach.** The run starts with the context
+   `ellipse` from each of the eight starts on the curve, and the context changes to
+   `reach` at 16 s, which meets a hand that went on from where it started at eight
+   places around the curve. The hand arrives at the target and holds, in all eight runs
+   of 40 s.
+8. **From the reach to the periodic motion.** The run starts with the context `reach`
+   from each of the nine reach takes' starts, and the context changes to `ellipse` at
+   20 s, after every reach of stage 1 has arrived and held. The hand cycles at the end
+   of the run, in all nine runs of 60 s.
+9. **Back and forth.** From each of the eight starts on the curve, the context goes
+   from `ellipse` to `reach` at 16 s, back to `ellipse` at 36 s, and to `reach` again
+   at 76 s. The hand cycles over the five taught periods before the last change, and
+   arrives and holds after it, in all eight runs of 100 s. (Changed on 2026-11-19,
+   before any run: the second stretch on the ellipse was 30 s, to 66 s, in runs of
+   90 s. It was written for 4 s a loop. The take by hand's five taught periods are
+   25.6 s, and in 3a its ESNs took up to 5.1 s to join the curve.)
+
+Reported beside the claims, without a claim: each task's measures with its context
+alone, set beside those of the ESNs that do one task (report 023's and report 027's);
+and after each change of context, the time to arrive or to join and how the reference
+starts.
+
+**Two rest postures.** Stage 1's takes 03 and 04 go around the base clockwise and rest
+at the target with joint 1 at −246°, a whole turn below the others' 114°. The ellipse
+is taught with joint 1 from 34° to 79°. A reach that ends at −246° is then asked to go
+to a curve it was taught a whole turn away. What the hand does there is reported with
+claim 8.
+
+## The runs
+
+The configurations are written before their runs, each chosen ESN's when the search
+has given it.
+
+| Claims | What runs |
+| --- | --- |
+| the search | the coarse search, the fine search, and the scoring with the untaught starts, on both tasks (`sweep_robot_esn.py`) |
+| 6 | each two-task ESN with one context for the whole run: `reach` from the nine reach takes' starts and stage 1's 36 unseen ones for 24 s, `ellipse` from the eight starts on the curve and the 36 untaught ones for 60 s (`robot_esn.py`) |
+| 7, 8, 9 | each two-task ESN with the changes of context above (`robot_esn.py`, `[[switch]]`) |
+
+Sweeps here take as many workers as the machine's memory allows: a worker of a sweep
+with a periodic task took up to 2.4 GB for moments in 3a's sweeps.
