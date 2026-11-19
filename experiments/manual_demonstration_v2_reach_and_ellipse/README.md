@@ -171,7 +171,7 @@ the hand of 1,317 stays within half a turn over the last five taught periods, th
 1,076 keeps the pace but is more than 20 mm RMS from the ellipse, that of 241 goes
 around too slowly, that of 45 backwards, and that of 16 too fast.
 
-The reservoir decides as much as the setting. Of the 405 ESNs, 184 hold all nine
+The reservoir decides as much as the setting. Of the 405 ESNs, 181 hold all nine
 reaches and 29 cycle from all eight starts; 12 do both, 11 of them with the ridge of 10,
 and 11 more fail one run. A setting's five seeds seldom agree on the ellipse: the fifth
 setting above has two seeds that cycle from all eight starts and three that cycle from
