@@ -711,7 +711,8 @@ def all_takes_video(speed: int, *, out: Path) -> None:
     """The nine takes one after another at ``speed`` times, with the speed and the take written in the side panel."""
     big = ImageFont.truetype(findfont(FontProperties(family="DejaVu Sans", weight="bold")), 120)
     small = ImageFont.truetype(findfont(FontProperties(family="DejaVu Sans", weight="bold")), 60)
-    writer: Any = imageio.get_writer(out, fps=FPS, codec="libx264", quality=10, macro_block_size=16)
+    # Quality 10 would be lossless H.264, a profile (High 4:4:4 Predictive) that PowerPoint shows as black.
+    writer: Any = imageio.get_writer(out, fps=FPS, codec="libx264", quality=9.5, macro_block_size=16)
     with tempfile.TemporaryDirectory() as tmp, writer:
         for index in range(N_TAKES):
             part = Path(tmp) / f"take_{index:02d}.mp4"
