@@ -15,7 +15,7 @@ from arm_esn_ctrl.tracking import TrackerConfig, tracking_gains
 
 # The runners import each other as modules of their own directory, as they run.
 sys.path.insert(0, str(REPO_ROOT / "experiments"))
-from robot_esn import progress_source, switch_schedule, tracker_settings, warmup_steps
+from robot_esn import progress_source, start_tasks, switch_schedule, tracker_settings, warmup_steps
 
 CONFIG = REPO_ROOT / "experiments/demonstrations/reach_tvs.toml"
 
@@ -119,3 +119,15 @@ def test_switches_name_the_tasks_of_an_esn_of_several_in_the_order_of_their_time
         switch_schedule([{"time": 6.0, "task": "far"}, {"time": 3.0, "task": "near"}], names)
     with pytest.raises(ValueError, match="this ESN has one"):
         switch_schedule([{"time": 6.0, "task": "far"}], ())
+
+
+def test_the_runs_start_with_the_tasks_start_tasks_lists_or_with_every_task():
+    names = ("reach", "ellipse")
+
+    assert start_tasks({"duration": 40.0}, names) == [0, 1]
+    assert start_tasks({"start_tasks": ["ellipse"]}, names) == [1]
+    assert start_tasks({"start_tasks": ["ellipse", "reach"]}, names) == [0, 1]  # in the ESN's order
+    assert start_tasks({}, ()) == [0]  # an ESN of one task
+    for listed, tasks in ((["elsewhere"], names), ([], names), (["reach"], ())):
+        with pytest.raises(ValueError, match="start_tasks lists some of the ESN's tasks"):
+            start_tasks({"start_tasks": listed}, tasks)

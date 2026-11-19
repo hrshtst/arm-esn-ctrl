@@ -10,7 +10,16 @@ import pytest
 import tomli_w
 from skelarm import Skeleton, StateLog
 
-from arm_esn_ctrl.autonomous import EVALUATION_KEYS, Run, Setup, Start, load_setup, run_metrics, start_postures
+from arm_esn_ctrl.autonomous import (
+    EVALUATION_KEYS,
+    Run,
+    Setup,
+    Start,
+    load_setup,
+    run_metrics,
+    start_postures,
+    task_evaluations,
+)
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.metrics import path_distance
 from arm_esn_ctrl.storage import REPO_ROOT
@@ -269,3 +278,44 @@ def test_demonstrations_without_a_controller_have_no_demonstrator(tmp_path, monk
     assert setup.q_refs is None and setup.hand_refs is None and setup.demonstrator_logs == []
     assert len(setup.starts) == 2
     assert setup.demo_hands["demo_00"] == pytest.approx(endpoint_positions(skeleton, setup.demos["demo_00"]))
+
+
+def test_each_tasks_evaluation_takes_its_own_keys_in_place_of_the_common_ones():
+    evaluation = {
+        "duration": 24.0,
+        "hold": 2.0,
+        "start_offsets_deg": [[0.0, 0.0]],
+        "extra_starts": {"untaught": [[27.0, 60.0]]},
+        "tasks": {"ellipse": {"duration": 40.0, "extra_starts": {"on_curve": [[47.3, 90.8]]}}},
+    }
+
+    reach, ellipse = task_evaluations(evaluation, ("reach", "ellipse"))
+
+    # A task without a table of its own takes [evaluation] as it is, without the tasks' tables.
+    assert reach == {key: value for key, value in evaluation.items() if key != "tasks"}
+    # A task's own extra_starts replace the common ones as a whole.
+    assert ellipse == {
+        "duration": 40.0,
+        "hold": 2.0,
+        "start_offsets_deg": [[0.0, 0.0]],
+        "extra_starts": {"on_curve": [[47.3, 90.8]]},
+    }
+    assert "tasks" in evaluation  # left as it was
+
+
+def test_a_single_task_takes_the_evaluation_as_it_is_and_unknown_tasks_are_refused():
+    evaluation = {"duration": 24.0, "hold": 2.0, "start_offsets_deg": [[0.0, 0.0]]}
+
+    assert task_evaluations(evaluation, ()) == [evaluation]
+    with pytest.raises(ValueError, match="tasks the demonstrations do not: elsewhere"):
+        task_evaluations(evaluation | {"tasks": {"elsewhere": {"duration": 1.0}}}, ("reach", "ellipse"))
+    with pytest.raises(ValueError, match="do not: reach"):
+        task_evaluations(evaluation | {"tasks": {"reach": {"duration": 1.0}}}, ())
+
+
+def test_a_tasks_own_keys_are_checked_as_the_evaluations():
+    evaluation = {"duration": 1.0, "tasks": {"near": {"start_offsets_deg": [[0.0, 0.0]], "durations": 2.0}}}
+    (near,) = task_evaluations(evaluation, ("near",))
+
+    with pytest.raises(ValueError, match="unknown keys in \\[evaluation\\]: durations"):
+        start_postures(near, {"demo_00": np.radians([[18.2, 119.9]])})

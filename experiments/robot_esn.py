@@ -60,13 +60,18 @@ own demonstrations do, so that ESNs trained on other takes are tracked alike.
 An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) runs each task from that
 task's start postures with that task's context, against the replays of that task's
 demonstrations; the run directory then has a directory per task, named by it, with
-the runs and figures below, and ``metrics.csv`` has a ``task`` column. ``[[switch]]``
-tables change the ESN's task during every run: each gives a ``time`` on the task
-clock and the ``task``'s name. The runs' logs record the context at every step
-(``context``), and the metrics then say whether, after the last change, the hand
-arrives at the last task's target and holds there (``switch_arrived``,
-``switch_arrival_time_s`` from the change, ``switch_left_goal``, ``switch_success``,
-and ``switch_final_distance_m``; empty for the replays, which keep to their take).
+the runs and figures below, and ``metrics.csv`` has a ``task`` column. Each task's
+runs follow its own evaluation: ``[evaluation.tasks.<task>]`` tables give a task keys
+of its own in place of ``[evaluation]``'s, such as its ``duration``, its
+``start_offsets_deg``, and its ``extra_starts`` (see
+:func:`arm_esn_ctrl.autonomous.task_evaluations`). ``[evaluation]``'s ``start_tasks``,
+a list of the tasks' names, runs only the start postures of those tasks; every task's
+without it. ``[[switch]]`` tables change the ESN's task during every run: each gives a
+``time`` on the task clock and the ``task``'s name. The runs' logs record the context
+at every step (``context``), and the metrics then measure the part of the run after
+the last change as a run of the last task that begins at the change, and each change
+on its own (see :func:`switch_metrics`; empty for the replays, which keep to their
+take). The figures over time mark each change with a vertical line and name its new task.
 
 A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) has no
 target. Its replay, and its progress replay if there is one, go on without end
@@ -143,6 +148,7 @@ from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog
 
 from arm_esn_ctrl.autonomous import (
+    AFTER_WINDOW,
     CURVE_SIDES,
     Cycle,
     Reference,
@@ -154,6 +160,7 @@ from arm_esn_ctrl.autonomous import (
     rms_degrees,
     run_metrics,
     task_cycle,
+    task_evaluations,
     task_names,
 )
 from arm_esn_ctrl.demonstrations import endpoint_positions, simulate_disturbed_reach, task_path
@@ -168,6 +175,8 @@ from arm_esn_ctrl.disturbances import (
 from arm_esn_ctrl.drawing import OffsetMap, draw_postures, spread_along_path
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import (
+    arrival_index,
+    cycle_metrics,
     distances_to_path,
     disturbance_following,
     disturbance_returns,
@@ -211,6 +220,18 @@ TEXT_COLOR = "#52514e"
 GRID_COLOR = "#e4e3de"
 SURFACE_COLOR = "#fcfcfb"
 DISTURBANCE_COLOR = "#f0efec"
+CHANGE_COLOR = "#8a6fc4"  # a change of the ESN's task
+# What switch_metrics measures of the part of a run after the last change of its task: a reach's, a periodic task's.
+SWITCH_REACH = (
+    "arrived",
+    "arrival_time_s",
+    "left_goal",
+    "hold_error_m",
+    "hold_observed_s",
+    "success",
+    "final_distance_m",
+)
+SWITCH_CYCLE = ("cycles", "turns", "curve_rms_m", "joining_time_s")
 # How near the taught hand path the hand must come back after a disturbance, unless
 # [evaluation] gives a return_tolerance (m).
 RETURN_TOLERANCE = 0.005
@@ -240,13 +261,20 @@ def main() -> None:
     # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
     evaluation = recorded_evaluation(config["evaluation"], disturbance)
     setups = load_setups({"demonstrations": demonstrations, "esn": {"dt": esn.config.dt}, "evaluation": evaluation})
+    evaluations = task_evaluations(evaluation, names)
+    # What each periodic task's runs, and the part of a run after a change to it, are measured against.
+    cycles = [task_cycle(setup, each) for setup, each in zip(setups, evaluations, strict=True)]
     check_recorded_arm(disturbance, setups[0].skeleton)
     keep_recorded_logs(disturbance, run_dir)
     switches = switch_schedule(config.get("switch", []), names)
+    started = start_tasks(evaluation, names)
     n_demos = sum(len(setup.demos) for setup in setups)
     tasks = f" of {len(names)} tasks ({', '.join(names)})" if names else ""
     print(f"ESN {config['esn']['model']}, trained on {n_demos} demonstrations{tasks}")
-    print(f"Disturbance: {disturbance or 'none'}; {sum(len(setup.starts) for setup in setups)} start postures")
+    n_starts = sum(len(setups[task].starts) for task in started)
+    print(f"Disturbance: {disturbance or 'none'}; {n_starts} start postures")
+    if len(started) < len(setups):
+        print(f"Only the start postures of {', '.join(names[task] for task in started)} are run")
     if switches:
         print("The ESN's task changes: " + ", ".join(f"to {names[task]} at {time:g} s" for time, task in switches))
     if not config["tracker"].get("reference_velocity", True):
@@ -258,8 +286,9 @@ def main() -> None:
     end_posture = gains_posture(config["tracker"], every_demo, esn.config.dt)
 
     rows: list[dict[str, Any]] = []
-    for task, (table, setup) in enumerate(zip(demonstration_tables(demonstrations), setups, strict=True)):
-        with (resolve_run_path(table["run"]) / "config.toml").open("rb") as f:
+    tables = demonstration_tables(demonstrations)
+    for task in started:
+        with (resolve_run_path(tables[task]["run"]) / "config.toml").open("rb") as f:
             demo_config = tomllib.load(f)
         task_dir = run_dir
         schedule = None
@@ -268,21 +297,52 @@ def main() -> None:
             task_dir = run_dir / names[task]
             task_dir.mkdir()
             schedule = [(0.0, task), *switches]
-        final = setups[switches[-1][1]] if switches else None
         task_rows = run_task(
-            config, evaluation, args.config.stem, task_dir, esn, setup, demo_config, end_posture, schedule, final
+            config,
+            evaluations[task],
+            args.config.stem,
+            task_dir,
+            esn,
+            setups[task],
+            demo_config,
+            end_posture,
+            schedule,
+            (setups, cycles),
         )
         rows += [({"task": names[task]} if names else {}) | row for row in task_rows]
 
     with (run_dir / "metrics.csv").open("w", newline="") as out:
-        writer = csv.DictWriter(out, fieldnames=list(rows[0]))
+        # Every row's columns, in the order they first come: a reach's runs lack a periodic task's measures.
+        writer = csv.DictWriter(out, fieldnames=list(dict.fromkeys(key for row in rows for key in row)))
         writer.writeheader()
         writer.writerows(rows)
     print(f"\nWrote the results to {run_dir}")
     first = (
-        (run_dir / names[0] if names else run_dir) / tracker_settings(config["tracker"])[0].name / "esn_00.sklog.npz"
+        (run_dir / names[started[0]] if names else run_dir)
+        / tracker_settings(config["tracker"])[0].name
+        / "esn_00.sklog.npz"
     )
     print(f"Replay with:\n  uv run python third_party/skelarm/tools/player.py {first}")
+
+
+def start_tasks(evaluation: dict[str, Any], names: tuple[str, ...]) -> list[int]:
+    """The tasks whose start postures are run, as indices: ``[evaluation]``'s ``start_tasks``, or every task.
+
+    A single task, without ``names``, is the one task 0.
+
+    Raises
+    ------
+    ValueError
+        If ``start_tasks`` names a task the ESN does not have, or none, or is given for
+        an ESN of one task.
+    """
+    if "start_tasks" not in evaluation:
+        return list(range(max(len(names), 1)))
+    listed = evaluation["start_tasks"]
+    if not listed or any(name not in names for name in listed):
+        msg = f"[evaluation] start_tasks lists some of the ESN's tasks, {', '.join(names) or 'none for one task'}"
+        raise ValueError(msg)
+    return [task for task, name in enumerate(names) if name in listed]
 
 
 def switch_schedule(tables: list[dict[str, Any]], names: tuple[str, ...]) -> list[tuple[float, int]]:
@@ -309,24 +369,115 @@ def switch_schedule(tables: list[dict[str, Any]], names: tuple[str, ...]) -> lis
     return schedule
 
 
-def switch_metrics(log: StateLog | None, setup: Setup, time: float, period: float) -> dict[str, Any]:
-    """Whether the hand arrives at ``setup``'s target and holds there after the task changed to it at ``time``.
+def switch_metrics(
+    log: StateLog | None,
+    times: NDArray[np.float64],
+    schedule: list[tuple[float, int]],
+    tasks: tuple[list[Setup], list[Cycle | None]],
+    period: float,
+    after: float,
+) -> dict[str, Any]:
+    """How a run whose task changes does each task it changes to, each part measured as a run that begins at its change.
 
-    The hold metrics (see :func:`arm_esn_ctrl.metrics.hold_metrics`) of the run's
-    part from ``time`` on, the arrival's time counted from it, as ``switch_arrived``,
-    ``switch_arrival_time_s``, ``switch_left_goal``, ``switch_hold_error_m``,
-    ``switch_hold_observed_s``, and ``switch_success``, and the hand's distance to
-    that target at the run's end, ``switch_final_distance_m``. Without a ``log``, as
-    for a replay, which keeps to its take, every one is empty.
+    ``times`` are the run's, every ``period`` from 0 to its end; ``schedule`` gives its
+    task, its first from 0 and then each change, as a time on the task clock and an
+    index into ``tasks``: every task's setup, and its cycle if it is periodic (see
+    :func:`arm_esn_ctrl.autonomous.task_cycle`).
+
+    The part after the last change is measured as a run of the last task:
+
+    - a reach: whether the hand arrives at its target and holds there, the hold
+      metrics of that part (see :func:`arm_esn_ctrl.metrics.hold_metrics`) with the
+      arrival's time counted from the change, as ``switch_arrived``,
+      ``switch_arrival_time_s``, ``switch_left_goal``, ``switch_hold_error_m``,
+      ``switch_hold_observed_s``, and ``switch_success``, and the hand's distance to
+      the target at the run's end, ``switch_final_distance_m``;
+    - a periodic task: whether the hand cycles at the end of the run, by
+      :func:`arm_esn_ctrl.metrics.cycle_metrics`' rule over the run's last
+      ``cycle.periods`` taught periods (``switch_cycles``), the turns and the curve RMS
+      it is decided by (``switch_turns``, ``switch_curve_rms_m``), and the joining time
+      counted from the change (``switch_joining_time_s``).
+
+    Then, for each change k, from 1:
+
+    - ``cycles_before_switch_k``: for a change that leaves a periodic task, whether the
+      hand cycles, by the same rule, over the ``cycle.periods`` taught periods that end
+      at the change, or from the run's start if it changes sooner; empty where the task
+      left is a reach;
+    - ``switch_peak_reference_speed_dps_k`` and ``switch_peak_torque_nm_k``: the
+      reference's fastest joint speed (see :func:`reference_speed`) and the largest
+      joint torque over the ``after`` seconds from the change;
+    - for a change to a reach, ``switch_arrival_time_s_k``: the time from the change
+      until the hand arrives at the reach's target, NaN if it does not before the next
+      change or the run's end; for a change to a periodic task,
+      ``switch_joining_time_s_k``: the joining time counted from the change, over the
+      part until the next change or the run's end, NaN if the hand has not joined the
+      curve by then.
+
+    Without a ``log``, as for a replay, which keeps to its take, every one is empty.
+
+    The run's own measures (:func:`arm_metrics`) are still its first task's, over the
+    whole run. Those of how it starts (``first_step_m``, ``onset_delay_s``), and a
+    reach's arrival, hold, and detour if the hold ends before the first change, keep
+    their meaning; those over the whole run or at its end (the final distance, the
+    settling time, the path RMSEs and distances, the peaks of the reference's speed, the
+    hand's speed, and the torque, the effort, and a periodic task's cycle measures over
+    the run's last periods) mix the tasks, and only the tracking error keeps its own.
     """
-    keys = ["arrived", "arrival_time_s", "left_goal", "hold_error_m", "hold_observed_s", "success", "final_distance_m"]
+    setups, cycles = tasks
+    changes = schedule[1:]
+    last_time, last = changes[-1]
+    keys = SWITCH_REACH if cycles[last] is None else SWITCH_CYCLE
+    names = [f"switch_{key}" for key in keys]
+    for k, (_, task) in enumerate(changes, start=1):
+        names += [f"cycles_before_switch_{k}", f"switch_peak_reference_speed_dps_{k}", f"switch_peak_torque_nm_{k}"]
+        names.append(f"switch_arrival_time_s_{k}" if cycles[task] is None else f"switch_joining_time_s_{k}")
     if log is None:
-        return {f"switch_{key}": "" for key in keys}
-    hand = endpoint_positions(setup.skeleton, task_joint_angles(log, period, setup.times[-1]))
-    after = setup.times >= time - 1e-9
-    held = hold_metrics(setup.times[after] - time, hand[after], setup.target, setup.radius, setup.hold)
-    held["final_distance_m"] = float(np.linalg.norm(hand[-1] - setup.target))
-    return {f"switch_{key}": held[key] for key in keys}
+        return dict.fromkeys(names, "")
+
+    nan = float("nan")
+    hand = endpoint_positions(setups[last].skeleton, task_joint_angles(log, period, float(times[-1])))
+
+    def cycled(part: NDArray[np.bool_], cycle: Cycle, start: float = 0.0) -> dict[str, Any]:
+        """The cycle measures of the run's ``part``, its times counted from ``start``."""
+        return cycle_metrics(
+            times[part] - start,
+            hand[part],
+            cycle.curve,
+            cycle.center,
+            cycle.period,
+            cycle.tolerance,
+            cycle.periods,
+            cycle.turns,
+        )
+
+    measured: dict[str, Any] = {}
+    after_last = times >= last_time - 1e-9
+    last_cycle = cycles[last]
+    if last_cycle is None:
+        setup = setups[last]
+        held = hold_metrics(times[after_last] - last_time, hand[after_last], setup.target, setup.radius, setup.hold)
+        held["final_distance_m"] = float(np.linalg.norm(hand[-1] - setup.target))
+    else:
+        held = cycled(after_last, last_cycle, last_time)
+    measured |= {f"switch_{key}": held[key] for key in keys}
+    ends = [time for time, _ in changes[1:]] + [float(times[-1])]
+    tau = np.abs(log.channel("tau"))
+    q_ref = log.channel("q_ref")
+    for k, ((time, task), end) in enumerate(zip(changes, ends, strict=True), start=1):
+        left = cycles[schedule[k - 1][1]]
+        measured[f"cycles_before_switch_{k}"] = "" if left is None else cycled(times <= time + 1e-9, left)["cycles"]
+        window = (log.times > time - 1e-9) & (log.times < time + after + 1e-9)
+        measured[f"switch_peak_reference_speed_dps_{k}"] = reference_speed(log.times[window], q_ref[window])
+        measured[f"switch_peak_torque_nm_{k}"] = float(tau[window].max())
+        stretch = (times >= time - 1e-9) & (times <= end + 1e-9)
+        cycle = cycles[task]
+        if cycle is None:
+            arrival = arrival_index(hand[stretch], setups[task].target, setups[task].radius)
+            measured[f"switch_arrival_time_s_{k}"] = nan if arrival is None else float(times[stretch][arrival] - time)
+        else:
+            measured[f"switch_joining_time_s_{k}"] = cycled(stretch, cycle, time)["joining_time_s"]
+    return {name: measured[name] for name in names}
 
 
 def run_task(
@@ -339,14 +490,15 @@ def run_task(
     demo_config: dict[str, Any],
     end_posture: NDArray[np.float64],
     schedule: list[tuple[float, int]] | None,
-    final: Setup | None,
+    tasks: tuple[list[Setup], list[Cycle | None]],
 ) -> list[dict[str, Any]]:
     """Run every arm from one task's start postures with every tracker setting, and draw that task's figures.
 
-    ``run_dir`` receives the runs and the figures; ``schedule`` gives an ESN of
-    several tasks its context, this task's from the warm-up on and then each change;
-    ``final`` is the setup of the task of the last change, if any. Returns the
-    metrics of every run.
+    ``evaluation`` is this task's; ``run_dir`` receives the runs and the figures;
+    ``schedule`` gives an ESN of several tasks its context, this task's from the
+    warm-up on and then each change, as indices into ``tasks``: every task's setup, and
+    its cycle if it is periodic, which the measures of the changes need (see
+    :func:`switch_metrics`). Returns the metrics of every run.
     """
     disturbance = config.get("disturbance")
     window = evaluation.get("effort_window", [0.0, evaluation["duration"]])
@@ -357,6 +509,7 @@ def run_task(
     cycle = task_cycle(setup, evaluation)
     if cycle is not None:
         print_taught_loop(setup, cycle, period)
+    after = evaluation.get("after_window", AFTER_WINDOW)  # after a change of the ESN's task (s)
 
     def disturbance_of(i: int) -> Any:
         """The disturbance's tables for a run from start posture ``i``, its pushes placed along the taught motion."""
@@ -370,7 +523,14 @@ def run_task(
         return make_disturbance(disturbance_of(i), start_hand, aim, dt=demo_config["simulator"]["dt"])
 
     spans = [disturbance_spans(disturbance_of(i)) for i in range(len(setup.starts))]
-    switched = schedule is not None and len(schedule) > 1 and final is not None
+    changes = [] if schedule is None else schedule[1:]
+
+    def switch_columns(log: StateLog | None) -> dict[str, Any]:
+        """The measures of the changes of the ESN's task, if it changes; empty without a ``log``."""
+        if schedule is None or not changes:
+            return {}
+        return switch_metrics(log, setup.times, schedule, tasks, period, after)
+
     rows = []
     for i, start in enumerate(setup.starts):
         if not setup.demonstrator_logs:  # a demonstration taught by hand: no demonstrator to run
@@ -383,7 +543,7 @@ def run_task(
             {"law": "", "omega": "", "damping": "", "arm": "demonstrator", "start": i, "origin": start.origin}
             | {"replayed": ""}
             | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following, cycle)
-            | (switch_metrics(None, setup, 0.0, period) if switched else {})
+            | switch_columns(None)
         )
 
     progress = config.get("progress")
@@ -453,15 +613,16 @@ def run_task(
                     | {"origin": start.origin}
                     | {"replayed": replayed if arm in ("replay", "progress") else ""}
                     | arm_metrics(log, i, setup, period, window, spans[i], tolerance, ringing, following, cycle)
+                    | switch_columns(log if arm == "esn" else None)
                 )
-                if switched and schedule is not None and final is not None:
-                    rows[-1] |= switch_metrics(log if arm == "esn" else None, final, schedule[-1][0], period)
         print(f"Ran {setting.label} (kp = {np.round(gains[0], 2).tolist()}, kd = {np.round(gains[1], 2).tolist()})")
 
     if cycle is None:
         print_summary(rows, len(setup.starts), window, setup.reference)
     else:
         print_cycle_summary(rows, len(setup.starts))
+    if changes:
+        print_switch_summary(rows, changes, esn.contexts)
 
     title = f"ESN on the robot: {name}"
     # Given gains have no natural frequency or damping ratio to plot against, and a periodic task's runs neither
@@ -472,24 +633,72 @@ def run_task(
             run_dir / "metrics.png", dpi=150
         )
     plot_paths(run_dir, setup, settings, title).savefig(run_dir / "paths.png", dpi=150)
+    changed = [(time, esn.contexts[task]) for time, task in changes]  # marked on the figures over time
     if cycle is None:
-        plot_timeline(run_dir, setup, settings, spans[0], title).savefig(run_dir / "timeline.png", dpi=150)
+        timeline = plot_timeline(run_dir, setup, settings, spans[0], title)
     else:
-        plot_cycle_timeline(run_dir, setup, settings, spans[0], title, cycle).savefig(run_dir / "timeline.png", dpi=150)
-    plot_joints(run_dir, setup, settings, spans[0], title).savefig(run_dir / "joints.png", dpi=150)
-    plot_torques(run_dir, setup, settings, spans[0], title).savefig(run_dir / "torques.png", dpi=150)
+        timeline = plot_cycle_timeline(run_dir, setup, settings, spans[0], title, cycle)
+    mark_changes(timeline, changed).savefig(run_dir / "timeline.png", dpi=150)
+    mark_changes(plot_joints(run_dir, setup, settings, spans[0], title), changed).savefig(
+        run_dir / "joints.png", dpi=150
+    )
+    mark_changes(plot_torques(run_dir, setup, settings, spans[0], title), changed).savefig(
+        run_dir / "torques.png", dpi=150
+    )
     for offset in config.get("plots", {}).get("offsets_deg", []):
         index = offset_start(setup, offset)
         name = "offset_" + "_".join(f"{value:+g}" for value in offset)
-        plot_joints(run_dir, setup, settings, spans[index], title, index).savefig(
+        mark_changes(plot_joints(run_dir, setup, settings, spans[index], title, index), changed).savefig(
             run_dir / f"joints_{name}.png", dpi=150
         )
-        plot_torques(run_dir, setup, settings, spans[index], title, index).savefig(
+        mark_changes(plot_torques(run_dir, setup, settings, spans[index], title, index), changed).savefig(
             run_dir / f"torques_{name}.png", dpi=150
         )
     if "start_grid" in evaluation:
         plot_grid(rows, setup, settings, title).savefig(run_dir / "grid.png", dpi=150)
     return rows
+
+
+def mark_changes(fig: Figure, changes: list[tuple[float, str]]) -> Figure:
+    """Mark each change of the ESN's task on every panel of a figure over time, and name its new task on the first.
+
+    ``changes`` gives each change's time on the task clock and its task's name.
+    """
+    for ax in fig.axes:
+        for time, _ in changes:
+            ax.axvline(time, color=CHANGE_COLOR, linewidth=1.0, linestyle="-.", zorder=1.0)
+    for time, task in changes:
+        fig.axes[0].annotate(
+            f" to {task}", (time, 1.0), xycoords=("data", "axes fraction"), va="top", color=CHANGE_COLOR, fontsize=8
+        )
+    return fig
+
+
+def print_switch_summary(rows: list[dict[str, Any]], changes: list[tuple[float, int]], names: tuple[str, ...]) -> None:
+    """Print, of the ESN's runs, how many do the task of the last change, and how many cycle before each change.
+
+    After the last change, to a reach, the runs that arrive and hold, with the median
+    arrival time from the change; to a periodic task, the runs that cycle at the end,
+    with the median joining time from the change. Before each change that leaves a
+    periodic task, the runs that cycle (see :func:`switch_metrics`).
+    """
+    runs = [r for r in rows if r["arm"] == "esn"]
+    time, task = changes[-1]
+    if "switch_success" in runs[0]:
+        count, measure, key = sum(r["switch_success"] for r in runs), "arrive and hold", "switch_arrival_time_s"
+    else:
+        count, measure, key = sum(r["switch_cycles"] for r in runs), "cycle at the end", "switch_joining_time_s"
+    values = np.array([r[key] for r in runs], dtype=np.float64)
+    median = float(np.median(values[np.isfinite(values)])) if np.isfinite(values).any() else float("nan")
+    when = "arrival" if key == "switch_arrival_time_s" else "joining time"
+    print(
+        f"\nAfter the change to {names[task]} at {time:g} s: {count} of {len(runs)} ESN runs {measure},"
+        f" median {when} {median:.2f} s after the change"
+    )
+    for k, (time, _) in enumerate(changes, start=1):
+        before = [r[f"cycles_before_switch_{k}"] for r in runs]
+        if "" not in before:
+            print(f"Before the change at {time:g} s: {sum(before)} of {len(runs)} ESN runs cycle")
 
 
 def progress_source(
@@ -717,12 +926,11 @@ def arm_metrics(
         settling_time = float(setup.times[0])
     elif outside[-1] < len(distance) - 1:
         settling_time = float(setup.times[outside[-1] + 1])
-    reference_speed = nan
+    peak_reference_speed = nan
     leads = [nan] * len(spans)
     gaps = [nan] * len(spans)
     if tracked:
-        q_ref = log.channel("q_ref")[task]
-        reference_speed = float(np.degrees(np.abs(np.diff(q_ref, axis=0)).max() / np.diff(times[task]).min()))
+        peak_reference_speed = reference_speed(times[task], log.channel("q_ref")[task])
         for n, (_, end) in enumerate(spans):
             k = int(np.argmin(np.abs(times - end)))
             ahead = progress(log.channel("q_ref")[k : k + 1], setup.starts[i].q, setup)
@@ -761,7 +969,7 @@ def arm_metrics(
     return run_metrics(run, setup) | {
         "tracking_error_deg": rms_degrees(log.channel("error")[task]) if tracked else nan,
         "reference_path_rmse_m": reference_path_rmse,
-        "peak_reference_speed_dps": reference_speed,
+        "peak_reference_speed_dps": peak_reference_speed,
         "peak_hand_speed_mps": float(hand_speed(setup.times, hand).max()),
         "settling_time_s": settling_time,
         "final_distance_m": float(distance[-1]),
@@ -774,6 +982,15 @@ def arm_metrics(
         **disturbance_metrics,
         **periodic,
     }
+
+
+def reference_speed(times: NDArray[np.float64], q_ref: NDArray[np.float64]) -> float:
+    """The reference's fastest joint speed (deg/s): its largest step in a joint over the shortest step in ``times``.
+
+    ``q_ref`` holds the reference's joint angles at ``times``, a log's every simulation
+    step. A jump of the reference shows as a jump of a few degrees in one step.
+    """
+    return float(np.degrees(np.abs(np.diff(q_ref, axis=0)).max() / np.diff(times).min()))
 
 
 def cycle_columns(

@@ -14,7 +14,7 @@ from skelarm import Skeleton, StateLog
 
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.storage import REPO_ROOT
-from arm_esn_ctrl.sweeps import score_settings
+from arm_esn_ctrl.sweeps import score_settings, score_tasks
 from arm_esn_ctrl.tracking import tracking_gains
 
 # The runners import each other as modules of their own directory, as they run.
@@ -159,11 +159,82 @@ def test_a_single_task_sweep_has_no_task_column_and_no_scores_of_each_task(stora
     assert list(score) == ["leak_rate", "runs", "holding_runs", "median_detour_ratio"]
 
 
-def test_a_sweep_of_several_tasks_with_a_periodic_one_is_refused(storage):
+def test_a_periodic_task_alone_is_swept_against_its_cycle(storage):
     add_periodic_task(storage, "loop")
-    evaluation = EVALUATION | CYCLE
 
-    with pytest.raises(ValueError, match=r"^a periodic task is swept alone"):
-        sweep_context(sweep_config("near", "loop") | {"evaluation": evaluation})
-    # Alone, the same task is swept.
-    assert sweep_context(sweep_config("loop") | {"evaluation": evaluation}).cycle is not None
+    context = sweep_context(sweep_config("loop") | {"evaluation": EVALUATION | CYCLE})
+
+    (cycle,) = context.cycles
+    assert cycle is not None
+    assert cycle.center == pytest.approx(LOOP["center"])
+
+
+# A reach and a periodic task in one sweep, each with its own runs: the reach from its take's start for 2.5 s, the
+# periodic task from its take's start and from the hand on its curve a quarter of a loop on, for 3 s.
+MIXED_EVALUATION: dict[str, Any] = {
+    "tasks": {
+        "near": EVALUATION,
+        "loop": {
+            "duration": 3.0,
+            **CYCLE,
+            "start_offsets_deg": [[0.0, 0.0]],
+            "extra_starts": {"on_curve": [[52.784, 86.331]]},  # the hand at (0, 1.32) m
+        },
+    }
+}
+
+
+def test_a_sweep_of_a_reach_and_a_periodic_task_runs_each_by_its_own_evaluation(storage):
+    add_periodic_task(storage, "loop")
+
+    context = sweep_context(sweep_config("near", "loop") | {"evaluation": MIXED_EVALUATION})
+
+    near, loop = context.setups
+    assert (near.times[-1], loop.times[-1]) == (2.5, 3.0)
+    assert [start.origin for start in near.starts] == ["demo_00"]
+    assert [start.origin for start in loop.starts] == ["demo_00", "on_curve 0"]
+    assert near.hold == 0.5
+    assert context.cycles[0] is None
+    assert context.cycles[1] is not None
+
+
+def test_a_reachs_run_fails_if_it_does_not_hold_and_a_periodic_tasks_if_it_does_not_cycle(storage):
+    add_periodic_task(storage, "loop")
+    context = sweep_context(sweep_config("near", "loop") | {"evaluation": MIXED_EVALUATION})
+
+    row, runs = sweep_combination(context, {"leak_rate": 0.05})
+
+    assert [run["task"] for run in runs] == ["near", "loop", "loop"]
+    reach, *loops = runs
+    assert "cycles" not in reach
+    assert reach["failed"] == (not reach["success"] or reach["hold_observed_s"] < 0.5 - 1e-9)
+    assert [run["failed"] for run in loops] == [not run["cycles"] for run in loops]
+    assert row["runs"] == 3
+    assert row["failures"] == sum(run["failed"] for run in runs)
+    # The runs that cycle are the periodic task's; the arrival and the final distance are the reach's alone.
+    assert row["cycling_runs"] == sum(run["cycles"] for run in loops)
+    np.testing.assert_equal(row["latest_arrival_s"], reach["arrival_time_s"])
+    assert row["worst_final_distance_m"] == reach["final_distance_m"]
+
+
+def test_a_mixed_sweep_scores_its_settings_by_the_runs_that_pass_and_each_tasks_measure(storage):
+    add_periodic_task(storage, "loop")
+    context = sweep_context(sweep_config("near", "loop") | {"evaluation": MIXED_EVALUATION})
+    _, runs = sweep_combination(context, {"leak_rate": 0.05})
+
+    (score,) = score_tasks([{"leak_rate": 0.05} | run for run in runs], ["leak_rate"])
+
+    assert list(score) == [
+        "leak_rate",
+        "runs",
+        "passing_runs",
+        "passing_runs_near",
+        "passing_runs_loop",
+        "median_detour_ratio",
+        "median_curve_rms_m",
+        "detour_ratio_rank",
+        "curve_rms_rank",
+    ]
+    assert score["passing_runs"] == sum(not run["failed"] for run in runs)
+    assert score["passing_runs_loop"] == sum(not run["failed"] for run in runs if run["task"] == "loop")
+    assert (score["detour_ratio_rank"], score["curve_rms_rank"]) == (1, 1)  # the one setting

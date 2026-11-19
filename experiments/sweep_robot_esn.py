@@ -78,16 +78,21 @@ demonstrations of all the tasks, each with its task's context (see
 :mod:`arm_esn_ctrl.esn`; ``context_scaling`` is swept as any other
 hyperparameter). As in ``robot_esn.py``, it then runs each task from that task's
 start postures with that task's context from the warm-up on, and the runs are
-measured against that task's target and takes. ``[evaluation]`` and the
-disturbances apply to every task alike, a push placed by its ``way`` along that
-task's taught motion each run starts from. Joint PD's gains are the same for
-every task: set where the take of ``gains_from`` ends, or else at the mean of
-where the takes of all the tasks end. A combination's failed runs, its scores,
+measured against that task's target and takes. ``[evaluation]``, but for a task's
+own keys (below), and the disturbances apply to every task alike, a push placed by
+its ``way`` along that task's taught motion each run starts from. Joint PD's gains
+are the same for every task: set where the take of ``gains_from`` ends, or else at
+the mean of where the takes of all the tasks end. A combination's failed runs, its scores,
 and their summaries are over the runs of all its tasks, and its columns of each
 tracker setting are from the first task's first start posture. ``runs.csv`` then
 has a ``task`` column, the task's name, and ``scores.csv`` a column of each
 task's holding runs, ``holding_runs_<task>``, which shows a setting that fails
 one target.
+
+``[evaluation.tasks.<task>]`` tables give a task keys of its own in place of
+``[evaluation]``'s, such as its ``duration``, its ``start_offsets_deg``, and its
+``extra_starts`` (see :func:`arm_esn_ctrl.autonomous.task_evaluations`): each task's
+runs then last as long, and start from where, its own evaluation says.
 
 A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) is
 measured as in ``robot_esn.py``, from its curve: a run fails if it does not cycle (see
@@ -98,9 +103,17 @@ how many of their runs cycle, the most first, then by the median curve RMS of th
 runs, the smallest first (see :func:`arm_esn_ctrl.sweeps.score_cycles`), into
 ``scores.csv`` as above.
 
-A periodic task is swept alone, in a single ``[demonstrations]`` table: how a sweep
-would score it among other tasks is not defined yet, so a configuration of several
-tasks of which one is periodic is refused (see :func:`sweep_context`).
+A periodic task may be swept with reaches, each a ``[[demonstrations]]`` table. A
+reach's run then fails if it does not arrive and hold, and a periodic task's if it
+does not cycle; ``runs.csv`` has a row for every run, a periodic task's cycle measures
+empty in a reach's rows, and ``sweep.csv`` gives the latest arrival, the largest
+final distance, and the median detour ratio over the reaches' runs alone, and the runs
+that cycle and their median curve RMS over the periodic tasks' runs. With a
+``[ranking]`` table of ``by = "worse_rank"``, the settings are scored by how many of
+their runs pass, then by the worse of two ranks among the settings with as many, by
+the median detour ratio of the reaches' runs that arrive and by the median curve RMS
+of the periodic tasks' runs that cycle, then by the better (see
+:func:`arm_esn_ctrl.sweeps.score_tasks`), into ``scores.csv`` as above.
 
 With ``--workers``, the combinations are spread over that many processes, each
 computing with one thread; their results are the same as in one process.
@@ -143,6 +156,7 @@ from arm_esn_ctrl.autonomous import (
     demonstration_tables,
     load_setups,
     task_cycle,
+    task_evaluations,
     task_names,
     training_set,
 )
@@ -158,7 +172,7 @@ from arm_esn_ctrl.disturbances import (
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.metrics import distances_to_path
 from arm_esn_ctrl.storage import resolve_run_path, start_run
-from arm_esn_ctrl.sweeps import score_cycles, score_settings, summarize_seeds, sweep_combinations
+from arm_esn_ctrl.sweeps import score_cycles, score_settings, score_tasks, summarize_seeds, sweep_combinations
 from arm_esn_ctrl.tracking import (
     EsnSource,
     TrackerConfig,
@@ -209,26 +223,23 @@ PER_SETTING = {
 class Context:
     """What every combination's runs need, loaded once per process.
 
-    The setups, the simulators, the disturbances, and their spans are each task's, in
-    the order of the tasks: one for a single ``[demonstrations]`` table.
+    The setups, the evaluations, the cycles, the simulators, the disturbances, and their
+    spans are each task's, in the order of the tasks: one for a single
+    ``[demonstrations]`` table.
     """
 
     config: dict[str, Any]
     names: tuple[str, ...]  # the tasks' names; none for a single [demonstrations] table
     setups: list[Setup]
+    evaluations: list[dict[str, Any]]  # each task's [evaluation] (see task_evaluations)
+    cycles: list[Cycle | None]  # what a periodic task's runs are measured against; none for a reach
     simulators: list[dict[str, Any]]
     settings: list[Setting]
     trackers: dict[str, tuple[TrackerConfig, tuple[NDArray[np.float64], NDArray[np.float64]]]]
-    duration: float
-    window: list[float]
     spans: list[tuple[float, float]]  # when each disturbance acts in the runs from the first task's first start posture
-    tolerance: float
-    ringing: tuple[float, float]
-    following: float
     # Each task's disturbance of each start posture, its pushes placed along the taught motion, and when each acts.
     disturbances: list[list[Any]]
     start_spans: list[list[list[tuple[float, float]]]]
-    cycle: Cycle | None = None  # what a periodic task's runs are measured against, the sweep's only task
 
 
 _context: Context | None = None  # this process's, set by init_worker
@@ -247,8 +258,9 @@ def main() -> None:
     listed: list[dict[str, Any]] | None = config.get("settings")
     swept = [*(listed[0] if listed else {}), *sweep]  # the hyperparameters that differ between combinations
     ranking = config.get("ranking", {}).get("by")
-    if ranking not in (None, "detour_ratio", "curve_rms_m"):
-        msg = f'[ranking] by must be "detour_ratio" or "curve_rms_m", not {ranking!r}'
+    scorers = {"detour_ratio": score_settings, "curve_rms_m": score_cycles, "worse_rank": score_tasks}
+    if ranking is not None and ranking not in scorers:
+        msg = f'[ranking] by must be "detour_ratio", "curve_rms_m", or "worse_rank", not {ranking!r}'
         raise ValueError(msg)
     context = sweep_context(config)
     disturbance = config.get("disturbance")
@@ -256,11 +268,20 @@ def main() -> None:
     keep_recorded_logs(disturbance, run_dir)
     settings, spans = context.settings, context.spans
     tasks = f" of {len(context.names)} tasks ({', '.join(context.names)})" if context.names else ""
+    durations = [float(evaluation["duration"]) for evaluation in context.evaluations]
+    lasting = f"{durations[0]:g} s runs"
+    if len(set(durations)) > 1:
+        lasting = "runs of " + ", ".join(f"{d:g} s ({name})" for d, name in zip(durations, context.names, strict=True))
     print(
         f"{sum(len(setup.starts) for setup in context.setups)} start postures{tasks}, {len(settings)} tracker settings"
-        f" ({', '.join(setting.label for setting in settings)}), {context.duration:g} s runs"
+        f" ({', '.join(setting.label for setting in settings)}), {lasting}"
     )
     print(f"Disturbance: {disturbance or 'none'}")
+    periodic = [cycle is not None for cycle in context.cycles]
+    # A combination's runs of the periodic tasks.
+    loops = len(settings) * sum(
+        len(setup.starts) for setup, cyclic in zip(context.setups, periodic, strict=True) if cyclic
+    )
 
     combinations = sweep_combinations(sweep, listed)
     rows, run_rows = [], []
@@ -282,15 +303,21 @@ def main() -> None:
         values = ", ".join(f"{name}={value:g}" for name, value in combination.items())
         arrivals = ", ".join(f"{row[f'{setting.name}_arrival_time_s']:.2f} s" for setting in settings)
         returns = f"; {row['unreturned']} not back, latest return {row['latest_return_s']:.2f} s" if spans else ""
-        if context.cycle is not None:  # a periodic task's runs cycle or not
+        if all(periodic):  # a periodic task's runs cycle or not
             print(
                 f"[{k + 1:3d}/{len(combinations)}] {values}: {row['cycling_runs']} of {row['runs']} runs cycle;"
                 f" median curve RMS {1000 * row['median_curve_rms_m']:6.2f} mm{returns}",
                 flush=True,
             )
             continue
+        cycling = ""
+        if any(periodic):  # and the reaches' arrive or not
+            cycling = (
+                f"; {row['cycling_runs']} of the {loops} periodic runs cycle,"
+                f" median curve RMS {1000 * row['median_curve_rms_m']:6.2f} mm"
+            )
         print(
-            f"[{k + 1:3d}/{len(combinations)}] {values}: {row['failures']} of {row['runs']} runs fail;"
+            f"[{k + 1:3d}/{len(combinations)}] {values}: {row['failures']} of {row['runs']} runs fail{cycling};"
             f" worst path RMSE {1000 * row['worst_path_rmse_m']:6.1f} mm; arrival {arrivals}{returns}",
             flush=True,
         )
@@ -302,17 +329,19 @@ def main() -> None:
     if "seed" in sweep:
         tables["seeds.csv"] = summarize_seeds(rows, names)
     if ranking:
-        score = score_cycles if ranking == "curve_rms_m" else score_settings
-        tables["scores.csv"] = score(run_rows, names)
+        tables["scores.csv"] = scorers[ranking](run_rows, names)
     for name, table in tables.items():
         with (run_dir / name).open("w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(table[0]))
+            # Every row's columns, in the order they first come: a reach's run lacks a periodic task's measures.
+            writer = csv.DictWriter(f, fieldnames=list(dict.fromkeys(key for row in table for key in row)))
             writer.writeheader()
             writer.writerows(table)
-    if context.cycle is None:  # a periodic task's runs neither arrive nor hold
+    if not any(periodic):  # a periodic task's runs neither arrive nor hold
         print_ranking(rows, swept, settings)
     if ranking == "curve_rms_m":
         print_cycle_scores(tables["scores.csv"], names)
+    elif ranking == "worse_rank":
+        print_task_scores(tables["scores.csv"], names)
     elif ranking:
         print_scores(tables["scores.csv"], names)
     if len(sweep) in MAPPED and not listed:
@@ -324,7 +353,7 @@ def main() -> None:
         title = f"ESN sweep on the robot: {args.config.stem}"
         plot_sweep(rows, sweep, maps, title, tops).savefig(run_dir / "sweep.png", dpi=150)
     if "seed" in sweep:
-        if context.cycle is None:
+        if not any(periodic):
             print_seed_ranking(tables["seeds.csv"], names)
         if len(names) in MAPPED and not listed:
             seeds = len(sweep["seed"])
@@ -341,26 +370,17 @@ def main() -> None:
 
 
 def sweep_context(config: dict[str, Any]) -> Context:
-    """What every combination's runs need, from the sweep's configuration.
-
-    A periodic task must be the sweep's only task: with several tasks, one of them
-    periodic, this raises a ``ValueError``.
-    """
+    """What every combination's runs need, from the sweep's configuration."""
     disturbance = config.get("disturbance")
     # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
     evaluation = recorded_evaluation(config["evaluation"], disturbance)
-    # One setup per task, each with its own target, start postures, and takes.
+    # One setup per task, each with its own target, start postures, and takes, and its own evaluation.
     setups = load_setups(
         {"demonstrations": config["demonstrations"], "esn": {"dt": config["esn"]["dt"]}, "evaluation": evaluation}
     )
+    evaluations = task_evaluations(evaluation, task_names(config["demonstrations"]))
     # What a periodic task's runs are measured against; none for a reach.
-    cycles = [task_cycle(setup, evaluation) for setup in setups]
-    if len(setups) > 1 and any(cycle is not None for cycle in cycles):
-        msg = (
-            "a periodic task is swept alone, in a single [demonstrations] table: how a sweep scores it"
-            " among other tasks is not defined yet"
-        )
-        raise ValueError(msg)
+    cycles = [task_cycle(setup, each) for setup, each in zip(setups, evaluations, strict=True)]
     simulators = []
     for table in demonstration_tables(config["demonstrations"]):
         with (resolve_run_path(table["run"]) / "config.toml").open("rb") as f:
@@ -395,23 +415,18 @@ def sweep_context(config: dict[str, Any]) -> Context:
             mass_matrix=tracker.get("mass_matrix", False),
         )
         trackers[setting.name] = (tracker_config, setting.gains(tracker_config, setups[0].skeleton, end_posture))
-    duration = float(evaluation["duration"])
     return Context(
         config,
         task_names(config["demonstrations"]),
         setups,
+        evaluations,
+        cycles,
         simulators,
         settings,
         trackers,
-        duration,
-        evaluation.get("effort_window", [0.0, duration]),
         start_spans[0][0],
-        evaluation.get("return_tolerance", RETURN_TOLERANCE),
-        ringing_settings(evaluation),
-        evaluation.get("following_window", FOLLOWING_WINDOW),
         disturbances,
         start_spans,
-        cycles[0],
     )
 
 
@@ -440,17 +455,25 @@ def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[di
     esn.fit(trajectories, contexts, context.names or None)
     runs = [run for task in range(len(context.setups)) for run in task_runs(context, esn, task)]
     summary = summarize(runs, context.settings, len(context.spans))
-    return combination | summary | ({} if context.cycle is None else summarize_cycles(runs)), runs
+    periodic = any(cycle is not None for cycle in context.cycles)
+    return combination | summary | (summarize_cycles(runs) if periodic else {}), runs
 
 
 def task_runs(context: Context, esn: ReachingEsn, task: int) -> list[dict[str, Any]]:
     """Run the trained ESN from every start posture of the task ``task`` with every tracker setting.
 
     An ESN of several tasks is given that task's context from the warm-up on, and
-    its runs are measured against that task's target and takes; each run then has
-    the task's name as its ``task``. Returns the runs' metrics, one dict a run.
+    its runs last as long as that task's evaluation says and are measured against
+    that task's target and takes, or its curve; each run then has the task's name as
+    its ``task``. Returns the runs' metrics, one dict a run.
     """
     setup, simulator, settings = context.setups[task], context.simulators[task], context.settings
+    evaluation, cycle = context.evaluations[task], context.cycles[task]
+    duration = float(evaluation["duration"])
+    window = evaluation.get("effort_window", [0.0, duration])
+    tolerance = evaluation.get("return_tolerance", RETURN_TOLERANCE)
+    ringing = ringing_settings(evaluation)
+    following = evaluation.get("following_window", FOLLOWING_WINDOW)
     schedule = [(0.0, task)] if context.names else None
     runs = []
     for setting in settings:
@@ -463,14 +486,14 @@ def task_runs(context: Context, esn: ReachingEsn, task: int) -> list[dict[str, A
                 gains,
                 period=esn.config.dt,
                 warmup_steps=esn.config.warmup_steps,
-                duration=context.duration,
+                duration=duration,
                 dt=simulator["dt"],
                 enforce_limits=simulator.get("enforce_limits", True),
                 stops=simulator.get("stops", "projected"),
                 external_force=make_disturbance(
                     context.disturbances[task][i],
                     endpoint_positions(setup.skeleton, start.q[np.newaxis])[0],
-                    push_aim(setup, context.cycle),
+                    push_aim(setup, cycle),
                     dt=simulator["dt"],
                 ),
             )
@@ -479,16 +502,16 @@ def task_runs(context: Context, esn: ReachingEsn, task: int) -> list[dict[str, A
                 i,
                 setup,
                 esn.config.dt,
-                context.window,
+                window,
                 context.start_spans[task][i],
-                context.tolerance,
-                context.ringing,
-                context.following,
-                context.cycle,
+                tolerance,
+                ringing,
+                following,
+                cycle,
             )
-            hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, context.duration))
+            hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, duration))
             failed = not metrics["success"] or metrics["hold_observed_s"] < setup.hold - 1e-9
-            if context.cycle is not None:  # a periodic task's run fails if it does not cycle
+            if cycle is not None:  # a periodic task's run fails if it does not cycle
                 failed = not metrics["cycles"]
             runs.append(
                 ({"task": context.names[task]} if context.names else {})
@@ -515,22 +538,27 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances:
     The path RMSE is the worst and the mean over its runs, and the detour ratio's
     median is over its runs that arrive (NaN if none does). With several tasks, its
     runs are those of all of them, and each setting's first run is the first task's.
+    The latest arrival, the largest final distance, and the median detour ratio are
+    over the runs of reaches alone: a periodic task's runs, those with ``cycles``,
+    have no target (NaN if every run is a periodic task's).
 
     With ``disturbances`` (how many), also its runs not back on the path after one,
     the latest return, and the farthest from the path, and each setting's first run
     under each disturbance.
     """
+    nan = float("nan")
     path_rmse = [run["taught_path_rmse_m"] for run in runs]
-    arrivals = [run["arrival_time_s"] for run in runs]
-    ratios = [run["detour_ratio"] for run in runs]  # NaN for a run that never arrives
+    reaches = [run for run in runs if "cycles" not in run]
+    arrivals = [run["arrival_time_s"] for run in reaches]
+    ratios = [run["detour_ratio"] for run in reaches]  # NaN for a run that never arrives
     summary: dict[str, Any] = {
         "runs": len(runs),
         "failures": sum(run["failed"] for run in runs),
         "worst_path_rmse_m": float(np.max(path_rmse)),
         "mean_path_rmse_m": float(np.mean(path_rmse)),
-        "latest_arrival_s": float(np.max(arrivals)) if np.all(np.isfinite(arrivals)) else float("nan"),
-        "worst_final_distance_m": float(np.max([run["final_distance_m"] for run in runs])),
-        "median_detour_ratio": float(np.nanmedian(ratios)) if np.any(np.isfinite(ratios)) else float("nan"),
+        "latest_arrival_s": float(np.max(arrivals)) if reaches and np.all(np.isfinite(arrivals)) else nan,
+        "worst_final_distance_m": float(np.max([run["final_distance_m"] for run in reaches])) if reaches else nan,
+        "median_detour_ratio": float(np.nanmedian(ratios)) if np.any(np.isfinite(ratios)) else nan,
     }
     columns = dict(PER_SETTING)
     if disturbances:
@@ -551,8 +579,11 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances:
 
 
 def summarize_cycles(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    """A periodic task's combination: its runs that cycle, and their median curve RMS (NaN if none does)."""
-    cycling = [run["curve_rms_m"] for run in runs if run["cycles"]]
+    """A combination with a periodic task: its runs that cycle, and their median curve RMS (NaN if none does).
+
+    The runs of a periodic task are those with ``cycles``; a reach's are left out.
+    """
+    cycling = [run["curve_rms_m"] for run in runs if run.get("cycles")]
     return {
         "cycling_runs": len(cycling),
         "median_curve_rms_m": float(np.median(cycling)) if cycling else float("nan"),
@@ -601,6 +632,26 @@ def print_cycle_scores(scores: list[dict[str, Any]], names: list[str], count: in
         print(
             f"  {values}: {score['cycling_runs']} of {score['runs']} cycle,"
             f" median curve RMS {1000 * score['median_curve_rms_m']:.2f} mm{seed}"
+        )
+
+
+def print_task_scores(scores: list[dict[str, Any]], names: list[str], count: int = 10) -> None:
+    """Print the settings with the most runs that pass, then the worse and the better of their two ranks."""
+    print(
+        "\nThe most runs that pass, then, among settings with as many, the worse and then the better of two ranks:"
+        " by the median detour ratio of the reaches' runs that arrive and by the median curve RMS of the periodic"
+        " runs that cycle"
+    )
+    for score in scores[:count]:
+        values = ", ".join(f"{name}={score[name]:g}" for name in names)
+        tasks = ", ".join(
+            f"{key.removeprefix('passing_runs_')} {score[key]}" for key in score if key.startswith("passing_runs_")
+        )
+        seed = f"; typical seed {score['typical_seed']}" if "typical_seed" in score else ""
+        print(
+            f"  {values}: {score['passing_runs']} of {score['runs']} pass ({tasks}),"
+            f" median detour ratio {score['median_detour_ratio']:.4f} (rank {score['detour_ratio_rank']}),"
+            f" median curve RMS {1000 * score['median_curve_rms_m']:.2f} mm (rank {score['curve_rms_rank']}){seed}"
         )
 
 

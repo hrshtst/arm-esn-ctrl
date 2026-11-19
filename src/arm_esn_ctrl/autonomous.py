@@ -19,7 +19,8 @@ An ESN of several tasks (see :mod:`arm_esn_ctrl.esn`) is trained on the
 demonstrations of each: the configuration then has one ``[[demonstrations]]`` table
 per task, each naming a demonstration run, its ``train`` files, and the task's name
 as its ``context``. :func:`load_setups` loads one setup per task, each as that of a
-single task, with its own target; :func:`training_set` gathers their demonstrations
+single task, with its own target and its own ``[evaluation]`` (see
+:func:`task_evaluations`); :func:`training_set` gathers their demonstrations
 and each one's task for :meth:`arm_esn_ctrl.esn.ReachingEsn.fit`. A task without a
 target, such as a periodic motion, has a setup whose target, goal radius, and hold are
 NaN: no run arrives, and its own measures are those of
@@ -81,6 +82,8 @@ EVALUATION_KEYS = {
     "cycle_periods",
     "cycle_turns",
     "after_window",
+    "tasks",  # of several tasks: each task's own keys, [evaluation.tasks.<name>] (see task_evaluations)
+    "start_tasks",  # robot_esn.py, of several tasks: the tasks whose start postures are run
 }
 # How long after a disturbance's end the largest torque and the largest distance from the curve of a
 # periodic task's run are measured, unless [evaluation] gives an after_window (s).
@@ -209,9 +212,39 @@ def task_names(demonstrations: dict[str, Any] | list[dict[str, Any]]) -> tuple[s
     return tuple(table["context"] for table in demonstration_tables(demonstrations))
 
 
+def task_evaluations(evaluation: dict[str, Any], names: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Each task's ``[evaluation]``, in the order of ``names``: one for a single task, which has no ``names``.
+
+    A table ``[evaluation.tasks.<name>]`` gives a task keys of its own, which replace
+    ``[evaluation]``'s for that task, such as its ``duration``, its
+    ``start_offsets_deg``, and its ``extra_starts``; the task takes the others from
+    ``[evaluation]``. A task without such a table takes ``[evaluation]`` as it is.
+
+    Raises
+    ------
+    ValueError
+        If ``[evaluation.tasks]`` names a task that is not one of ``names``.
+    """
+    tasks = evaluation.get("tasks", {})
+    unknown = sorted(set(tasks) - set(names))
+    if unknown:
+        msg = f"[evaluation.tasks] names tasks the demonstrations do not: {', '.join(unknown)}"
+        raise ValueError(msg)
+    common = {key: value for key, value in evaluation.items() if key != "tasks"}
+    return [common | tasks.get(name, {}) for name in names] if names else [common]
+
+
 def load_setups(config: dict[str, Any]) -> list[Setup]:
-    """One setup per task (see :func:`load_setup`): one for a single ``[demonstrations]`` table."""
-    return [load_setup(config | {"demonstrations": table}) for table in demonstration_tables(config["demonstrations"])]
+    """One setup per task (see :func:`load_setup`), each with its task's evaluation (see :func:`task_evaluations`).
+
+    One for a single ``[demonstrations]`` table.
+    """
+    tables = demonstration_tables(config["demonstrations"])
+    evaluations = task_evaluations(config["evaluation"], task_names(config["demonstrations"]))
+    return [
+        load_setup(config | {"demonstrations": table, "evaluation": evaluation})
+        for table, evaluation in zip(tables, evaluations, strict=True)
+    ]
 
 
 def training_set(setups: list[Setup], names: tuple[str, ...]) -> tuple[list[NDArray[np.float64]], list[int] | None]:

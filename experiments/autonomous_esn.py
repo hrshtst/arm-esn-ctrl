@@ -36,7 +36,12 @@ An ESN of several tasks is trained on the demonstrations of each, named by one
 ``[[demonstrations]]`` table per task with the task's name as its ``context`` (see
 :mod:`arm_esn_ctrl.autonomous`), and given each task's context for the runs from
 that task's start postures. The metrics then have a ``task`` column, and each task
-has its own figures, ``autonomous_<task>.png`` and ``grid_<task>.png``.
+has its own figures, ``autonomous_<task>.png`` and ``grid_<task>.png``. Each task's
+runs follow its own evaluation: ``[evaluation.tasks.<task>]`` tables give a task keys
+of its own in place of ``[evaluation]``'s, such as its ``duration`` and its start
+postures (see :func:`arm_esn_ctrl.autonomous.task_evaluations`). A reach and a
+periodic task may be trained together: the metrics then leave a periodic task's
+measures empty in a reach's rows.
 
 A periodic task (a ``[task]`` of type ``periodic_curve``, taught by one take) has no
 target: each run's metrics say whether it cycles, measured from the task's curve, by
@@ -80,6 +85,7 @@ from arm_esn_ctrl.autonomous import (
     run_autonomously,
     run_metrics,
     task_cycle,
+    task_evaluations,
     task_names,
     training_set,
 )
@@ -128,12 +134,13 @@ def main() -> None:
 
     # Run autonomously from each start posture and compare with the demonstrator's reach from it, if any.
     rows: list[dict[str, Any]] = []
-    for task, setup in enumerate(setups):
+    evaluations = task_evaluations(config["evaluation"], names)
+    for task, (setup, evaluation) in enumerate(zip(setups, evaluations, strict=True)):
         if names:
             esn.set_context(task)
             print(f"\nTask {names[task]}")
         runs = run_autonomously(esn, setup)
-        cycle = task_cycle(setup, config["evaluation"])
+        cycle = task_cycle(setup, evaluation)
         task_rows: list[dict[str, Any]] = []
         for run in runs:
             i = len(rows) + len(task_rows)
@@ -162,11 +169,12 @@ def main() -> None:
         plot_runs(setup.times, runs, training, setup.target, title, curve).savefig(
             run_dir / f"autonomous{suffix}.png", dpi=150
         )
-        if "start_grid" in config["evaluation"]:
+        if "start_grid" in evaluation:
             plot_grid(task_rows, setup, title).savefig(run_dir / f"grid{suffix}.png", dpi=150)
 
     with (run_dir / "metrics.csv").open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        # Every row's columns, in the order they first come: a reach's runs lack a periodic task's measures.
+        writer = csv.DictWriter(f, fieldnames=list(dict.fromkeys(key for row in rows for key in row)))
         writer.writeheader()
         writer.writerows(rows)
     print(f"\nWrote the results to {run_dir}")

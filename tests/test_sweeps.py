@@ -8,7 +8,14 @@ import math
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.sweeps import score_cycles, score_settings, summarize_seeds, sweep_combinations
+from arm_esn_ctrl.sweeps import (
+    competition_ranks,
+    score_cycles,
+    score_settings,
+    score_tasks,
+    summarize_seeds,
+    sweep_combinations,
+)
 
 
 def row(scaling, radius, seed, rmse, *, failures=0, arrival=10.0, final=0.001):
@@ -270,3 +277,135 @@ def test_a_settings_typical_seed_cycles_the_most_and_its_median_curve_rms_is_nea
     assert (score["seeds"], score["runs"], score["cycling_runs"]) == (4, 12, 11)
     assert score["median_curve_rms_m"] == pytest.approx(0.0045)
     assert score["typical_seed"] == 2
+
+
+def reach_run(leak, seed, ratio, *, failed=False):
+    """A run of the reach: no cycles, its detour ratio NaN if it never arrives."""
+    return {"leak_rate": leak, "seed": seed, "task": "reach", "failed": failed, "detour_ratio": ratio}
+
+
+def ellipse_run(leak, seed, rms, *, cycles=True):
+    """A run of the periodic task, which passes if it cycles."""
+    return {
+        "leak_rate": leak,
+        "seed": seed,
+        "task": "ellipse",
+        "failed": not cycles,
+        "detour_ratio": math.nan,
+        "cycles": cycles,
+        "curve_rms_m": rms,
+    }
+
+
+def test_equal_values_share_the_best_of_their_places_and_every_nan_shares_the_last():
+    assert competition_ranks([1.1, 1.0, 1.1, math.nan, 1.2, math.nan]) == [2, 1, 2, 5, 4, 5]
+    assert competition_ranks([math.nan, math.nan]) == [1, 1]
+
+
+def test_settings_are_scored_by_their_runs_that_pass_then_by_the_worse_of_two_ranks_then_by_the_better():
+    runs = [
+        # The best median detour ratio and the third curve RMS: ranks 1 and 3.
+        reach_run(0.01, 0, 1.05),
+        ellipse_run(0.01, 0, 0.006),
+        # The second of both: ranks 2 and 2, so the worse rank, 2, puts it first.
+        reach_run(0.03, 0, 1.10),
+        ellipse_run(0.03, 0, 0.005),
+        # The third detour ratio and the best curve RMS: ranks 3 and 1, as the first setting, which comes before.
+        reach_run(0.1, 0, 1.20),
+        ellipse_run(0.1, 0, 0.004),
+        # One run that does not pass: after every setting whose runs all pass, whatever its measures.
+        reach_run(0.3, 0, 1.01),
+        ellipse_run(0.3, 0, 0.001, cycles=False),
+    ]
+
+    scores = score_tasks(runs, ["leak_rate"])
+
+    assert [score["leak_rate"] for score in scores] == [0.03, 0.01, 0.1, 0.3]
+    assert [score["passing_runs"] for score in scores] == [2, 2, 2, 1]
+    assert [(score["detour_ratio_rank"], score["curve_rms_rank"]) for score in scores] == [
+        (2, 2),
+        (1, 3),
+        (3, 1),
+        (1, 1),  # ranked among the settings with one run that passes: itself alone
+    ]
+    assert [score["median_detour_ratio"] for score in scores] == pytest.approx([1.10, 1.05, 1.20, 1.01])
+    # The run that does not cycle does not count, close to the curve as it is.
+    assert math.isnan(scores[-1]["median_curve_rms_m"])
+
+
+def test_settings_with_equal_medians_share_a_rank_and_are_then_ordered_by_the_other():
+    runs = [
+        reach_run(0.01, 0, 1.10),
+        ellipse_run(0.01, 0, 0.006),
+        reach_run(0.03, 0, 1.10),
+        ellipse_run(0.03, 0, 0.004),
+        reach_run(0.1, 0, 1.30),
+        ellipse_run(0.1, 0, 0.005),
+    ]
+
+    scores = score_tasks(runs, ["leak_rate"])
+
+    # The first two share the first rank of the detour ratio; the third is third, not second.
+    assert [(score["leak_rate"], score["detour_ratio_rank"], score["curve_rms_rank"]) for score in scores] == [
+        (0.03, 1, 1),
+        (0.01, 1, 3),
+        (0.1, 3, 2),  # worse rank 3, as the second's, and better rank 2, worse than its 1
+    ]
+
+
+def test_a_setting_without_a_reach_run_that_arrives_or_an_ellipse_run_that_cycles_is_last_in_that_rank():
+    runs = [
+        # No reach run arrives: no detour ratio, last in its rank, however well the ellipse's runs cycle.
+        reach_run(0.01, 0, math.nan, failed=True),
+        reach_run(0.01, 0, math.nan, failed=True),
+        ellipse_run(0.01, 0, 0.002),
+        ellipse_run(0.01, 0, 0.002),
+        # One reach run arrives and leaves the goal: its detour ratio counts, and it does not pass.
+        reach_run(0.03, 0, 1.2, failed=True),
+        reach_run(0.03, 0, 1.3),
+        ellipse_run(0.03, 0, 0.003),
+        ellipse_run(0.03, 0, 0.001, cycles=False),  # close to the curve, at the wrong pace: it does not count
+        # No ellipse run cycles: no curve RMS, last in its rank, however directly the reaches arrive.
+        reach_run(0.1, 0, 1.1),
+        reach_run(0.1, 0, 1.0),
+        ellipse_run(0.1, 0, 0.001, cycles=False),
+        ellipse_run(0.1, 0, 0.001, cycles=False),
+    ]
+
+    scores = score_tasks(runs, ["leak_rate"])
+
+    assert [score["passing_runs"] for score in scores] == [2, 2, 2]
+    # The second setting is second in both ranks; the others are first in one and last in the other, in the
+    # sweep's order.
+    assert [score["leak_rate"] for score in scores] == [0.03, 0.01, 0.1]
+    assert [(score["detour_ratio_rank"], score["curve_rms_rank"]) for score in scores] == [(2, 2), (3, 1), (1, 3)]
+    assert scores[0]["median_detour_ratio"] == pytest.approx(1.25)
+    assert scores[0]["median_curve_rms_m"] == pytest.approx(0.003)
+    assert math.isnan(scores[1]["median_detour_ratio"])
+    assert math.isnan(scores[2]["median_curve_rms_m"])
+    assert [(score["passing_runs_reach"], score["passing_runs_ellipse"]) for score in scores] == [
+        (1, 1),
+        (0, 2),
+        (2, 0),
+    ]
+
+
+def test_a_settings_typical_seed_passes_the_most_and_its_median_curve_rms_is_nearest_the_settings():
+    runs = [
+        *(ellipse_run(0.03, 1, rms) for rms in (0.001, 0.002, 0.003)),
+        reach_run(0.03, 1, 1.0),
+        *(ellipse_run(0.03, 2, rms) for rms in (0.004, 0.005, 0.006)),
+        reach_run(0.03, 2, 1.5),  # its detour ratio does not choose the typical seed
+        *(ellipse_run(0.03, 3, rms) for rms in (0.010, 0.011, 0.012)),
+        reach_run(0.03, 3, 1.1),
+        # The seed nearest the median does not count: its reach does not hold.
+        *(ellipse_run(0.03, 4, 0.0045) for _ in range(3)),
+        reach_run(0.03, 4, 1.1, failed=True),
+    ]
+
+    (score,) = score_tasks(runs, ["leak_rate"])
+
+    assert (score["seeds"], score["runs"], score["passing_runs"]) == (4, 16, 15)
+    assert score["median_curve_rms_m"] == pytest.approx(0.0045)
+    assert score["typical_seed"] == 2
+    assert list(score)[-2:] == ["seeds", "typical_seed"]

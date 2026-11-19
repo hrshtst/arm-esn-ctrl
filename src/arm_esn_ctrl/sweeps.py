@@ -207,6 +207,96 @@ def score_cycles(runs: list[dict[str, Any]], names: list[str]) -> list[dict[str,
     return sorted(scores, key=lambda score: (-score["cycling_runs"], _nan_last(score["median_curve_rms_m"])))
 
 
+def score_tasks(runs: list[dict[str, Any]], names: list[str]) -> list[dict[str, Any]]:
+    """Score each setting of a sweep of reaches and periodic tasks by how many of its runs pass, then by two ranks.
+
+    ``runs`` are the rows of a sweep's ``runs.csv``: each holds its swept values, its
+    task (``task``), and whether it failed (``failed``): a reach's run passes if it
+    arrives and holds, a periodic task's if it cycles. A run of a periodic task holds
+    whether it cycles (``cycles``) and its curve RMS (``curve_rms_m``; see
+    :func:`arm_esn_ctrl.metrics.cycle_metrics`); a reach's has no ``cycles`` and holds
+    its detour ratio (``detour_ratio``, NaN for a run that never arrives; see
+    :func:`arm_esn_ctrl.metrics.directness`). A setting is a combination of the values
+    of ``names``, the swept keys other than ``seed``; its runs are those of all its
+    tasks and seeds.
+
+    The settings with the most runs that pass come first. Settings with as many are
+    ranked twice among themselves: by the median detour ratio of their reach runs that
+    arrive, and by the median curve RMS of their periodic runs that cycle, each the
+    smallest first, and a setting with no such run last (see :func:`competition_ranks`:
+    equal values share the best of their places, and the next value takes its own
+    place, as 1, 2, 2, 4). The worse of a setting's two ranks decides, the smaller
+    first, so that neither task's measure is weighed against the other's in its own
+    unit; then the better of the two; settings alike in both keep the sweep's order.
+
+    Returns one row per setting, the best first: its values, then ``runs`` (how
+    many), ``passing_runs`` (those that pass), ``passing_runs_<task>`` (each task's
+    runs that pass, in the order of the tasks' first runs), ``median_detour_ratio``
+    and ``median_curve_rms_m`` (NaN if no run arrives, or none cycles), and their ranks,
+    ``detour_ratio_rank`` and ``curve_rms_rank``.
+
+    With ``seed`` in the runs, each row also holds ``seeds`` (how many) and
+    ``typical_seed``: of the setting's seeds with the most runs that pass, the one
+    whose own median curve RMS, over its runs that cycle, is nearest the setting's
+    (the first, if none of them cycles).
+    """
+
+    def median_rms(group: list[dict[str, Any]]) -> float:
+        return _finite_median([run["curve_rms_m"] for run in group if run.get("cycles")])
+
+    settings: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for run in runs:
+        settings.setdefault(tuple(run[name] for name in names), []).append(run)
+    tasks = list(dict.fromkeys(run["task"] for run in runs if "task" in run))
+    scores, typical = [], []
+    for values, group in settings.items():
+        median = median_rms(group)
+        scores.append(
+            dict(zip(names, values, strict=True))
+            | {"runs": len(group), "passing_runs": sum(not run["failed"] for run in group)}
+            | {f"passing_runs_{task}": sum(not run["failed"] for run in group if run["task"] == task) for task in tasks}
+            | {
+                "median_detour_ratio": _finite_median([run["detour_ratio"] for run in group if "cycles" not in run]),
+                "median_curve_rms_m": median,
+            }
+        )
+        if "seed" in group[0]:
+            seeds: dict[Any, list[dict[str, Any]]] = {}
+            for run in group:
+                seeds.setdefault(run["seed"], []).append(run)
+            passing = {seed: sum(not run["failed"] for run in each) for seed, each in seeds.items()}
+            gaps = {
+                seed: abs(median_rms(each) - median)
+                for seed, each in seeds.items()
+                if passing[seed] == max(passing.values())
+            }
+            typical.append({"seeds": len(seeds), "typical_seed": min(gaps, key=lambda seed: _nan_last(gaps[seed]))})
+        else:
+            typical.append({})
+    for passing in {score["passing_runs"] for score in scores}:  # the settings with as many runs that pass
+        peers = [score for score in scores if score["passing_runs"] == passing]
+        for measure, rank in (("median_detour_ratio", "detour_ratio_rank"), ("median_curve_rms_m", "curve_rms_rank")):
+            for peer, value in zip(peers, competition_ranks([peer[measure] for peer in peers]), strict=True):
+                peer[rank] = value
+    rows = [score | seed for score, seed in zip(scores, typical, strict=True)]
+
+    def order(row: dict[str, Any]) -> tuple[int, int, int]:
+        ranks = (row["detour_ratio_rank"], row["curve_rms_rank"])
+        return -row["passing_runs"], max(ranks), min(ranks)
+
+    return sorted(rows, key=order)
+
+
+def competition_ranks(values: list[float]) -> list[int]:
+    """The rank of each of ``values``, the smallest first and a NaN last: 1 and one more for each smaller value.
+
+    Equal values share a rank, the best of their places, and the next value takes its
+    own place, as 1, 2, 2, 4 (competition ranking); every NaN shares the last.
+    """
+    keys = [_nan_last(value) for value in values]
+    return [1 + sum(other < key for other in keys) for key in keys]
+
+
 def _nan_last(value: float) -> float:
     """``value``, or infinity for a NaN, so that it sorts last."""
     return value if np.isfinite(value) else float("inf")
