@@ -268,6 +268,7 @@ that run them are shared:
 | [manual_demonstration_four_dof_consistent_search](experiments/manual_demonstration_four_dof_consistent_search/README.md) | the consistent search on skelarm's four-link arm: the grid and its extension below the lowest input scaling, the rule, a second rule that asks the reference to follow the arm, and the chosen ESNs against both replays in every scenario |
 | [manual_demonstration_v2_many_starts](experiments/manual_demonstration_v2_many_starts/README.md) | one target reached from many start postures on v2's arm with no joint limits, taught by one take from each of nine: ESNs of 800 neurons searched by how many starts the hand arrives and holds from and how directly, then checked from unseen starts, under pushes, and against fewer takes (Stages 1 and 2) | [023](reports/023-one-target-from-many-starts/README.md) |
 | [manual_demonstration_v2_many_starts_push_search](experiments/manual_demonstration_v2_many_starts_push_search/README.md) | the many-starts search again with the pushed runs in the score: each setting scored by how many of its runs pass, undisturbed and under report 007's pushes, then by how directly the hand goes, and report 023's seven claims tested again with the ESNs it chooses (Stages 1 and 2) | [024](reports/024-many-starts-with-pushes-in-the-score/README.md) |
+| [manual_demonstration_v2_targets](experiments/manual_demonstration_v2_targets/README.md) | three targets reached by one ESN of 800 neurons on v2's arm with no joint limits, the target named by a context in its input and taught by nine takes to each: searched as the many-starts stage with each context, then tested from unseen starts and with the context changed during a run (Stages 1 and 2) | [025](reports/025-three-targets-by-context/README.md) |
 
 Every parameter that affects a result is in a TOML configuration file, and every
 run records its configuration, the command, and the commit that produced it, so
@@ -519,6 +520,16 @@ The reports so far:
   and the return takes as long as a new reach. One take is already enough to arrive, so
   the claims that more takes arrive more often fail; more takes cut the jump and the
   detour.
+- [025 Three targets by context: one ESN reaches the target its context names and changes target during a run, but one of the two misses from four unseen starts](reports/025-three-targets-by-context/README.md)
+  (Stages 1 and 2): three targets on the two-link arm with no joint limits, named by a
+  context in the ESN's input, taught by nine takes to each. From the takes' starts both
+  chosen ESNs arrive and hold at the target the context names, and a change of context
+  during a run, at rest or on the way, takes the hand to the new target in every run.
+  From 36 unseen starts one ESN holds everywhere and the other misses four runs, three of
+  them ending beside another target. Their references begin at the arm from starts near
+  a take's, and jump from starts far from every take's. In one run of each ESN pushed by
+  hand in the robot app while the target changes, the hand is nearer the named target
+  after eight of nine pushes when the next push or change comes.
 
 Each report has five parts:
 

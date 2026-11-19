@@ -1,0 +1,101 @@
+# Reaches to three targets taught by hand, A, B, and C, on the v2 arm with no joint
+# limits: the takes of the multi-task study's stage 2, where an ESN reaches the
+# target that its context names. The robot, its [initial] posture, the [simulator],
+# and the recording's checks and filter are reach_manual_v2_no_limits.toml's; the
+# [task] has three targets instead of one, A that of stage 1.
+#
+# There are no start postures fixed in advance: in the recorder, the maintainer poses
+# the arm where each take starts and chooses the take's target, and records as many
+# takes as he likes, one after another. Each take starts where the arm was posed, its
+# own first sample, and records which target was active. Posing can leave a joint a
+# whole turn away, as it left joint 2 in takes 004 to 027, so the import moves each
+# take by whole turns to start within -180 to 180 deg in every joint
+# ([recording] start_within_a_turn).
+#
+# 1. Record the takes, into the storage root's data/ (what cannot be regenerated).
+#    STORAGE is the storage root that storage.toml (or ARM_ESN_CTRL_STORAGE_ROOT)
+#    names; the recorder does not create the directory. --prepare needs skelarm's
+#    branch feature/recorder-prepare until the submodule's pin is advanced:
+#
+#   mkdir -p "$STORAGE/data/reach_manual_v2_targets"
+#   uv run python third_party/skelarm/tools/trajectory_recorder.py \
+#       experiments/demonstrations/reach_manual_v2_targets.toml --mode ik --sample-rate 100 \
+#       --duration 0 --show-tip-trail --show-past-trails --prepare --multi-take \
+#       --output "$STORAGE/data/reach_manual_v2_targets/take.sklog.npz"
+#
+#    Maximize the window: its pixels are the steps the tip moves in. E enters the
+#    preparation phase, in which the tip is dragged to pose the start, and the number
+#    keys 1 to 3 choose the target A, B, or C; E again leaves it. Space starts the
+#    take. Move the tip to the chosen target at a natural pace, let go, and keep still
+#    for at least 3 s. Shift+S saves the take, as take_001.sklog.npz,
+#    take_002.sklog.npz, ..., and readies the next; R discards an attempt before
+#    saving it.
+#
+# 2. Import them into one demonstration run per target that has takes
+#    (reach_manual_v2_targets_a, _b, _c), which moves every take within a turn, then
+#    checks and measures it against its own target, as recorded (demo_00, demo_01,
+#    ...) and filtered (demo_00_filtered, ...). None is imported unless all pass:
+#    remove or record again the takes that fail. The import prints each run's
+#    directory, which an ESN's [[demonstrations]] tables name, one per target:
+#
+#   uv run python experiments/import_demonstrations.py experiments/demonstrations/reach_manual_v2_targets.toml
+
+[recording]
+# The takes taught by hand, relative to the storage root: every file that matches
+# this pattern, in the order of their names. They are imported untrimmed: the
+# human's pause before moving stays in.
+takes = "data/reach_manual_v2_targets/take_*.sklog.npz"
+# Move each take by whole turns of each joint, the same over the take, so that it
+# starts within -180 to 180 deg in every joint. The arm has no joint limits, so a
+# whole turn is the same posture and the hand path is the take's; but posing the arm
+# in the recorder can leave a joint a whole turn away, and the ESN reads joint
+# angles, to which takes of one motion a turn apart would be different data.
+start_within_a_turn = true
+# What the import checks of each take (experiments/import_demonstrations.py), as
+# reach_manual_v2_no_limits.toml's. A take begins where the arm was posed, so there
+# is no start posture to check.
+hold = 2.0                  # after arriving within the target tolerance, the hand stays this long (s)
+max_tip_speed = 3.0         # m/s: a faster step between two samples is a jump, not a reach
+
+# The filter of the filtered copies, as reach_manual_v2.toml's: a first-order low-pass
+# at 2 Hz, run forward and backward.
+[recording.filter]
+kind = "lowpass"
+cutoff_hz = 2.0
+
+[initial]
+q = [13.0, 71.0]  # where the recorder starts (deg)
+
+# reach_manual_v2.toml's two-link planar arm, with no joint limits: ten turns each
+# way, which nothing comes near.
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 0.5
+mass = 0.5
+inertia = 0.0125
+com = [0.25, 0.0]
+limits = [-3600.0, 3600.0]
+
+[[skeleton.link]]
+length = 0.4
+mass = 0.4
+inertia = 0.0064
+com = [0.2, 0.0]
+limits = [-3600.0, 3600.0]
+
+[task]
+type = "multi_target_reaching"
+active = 0  # the target the recorder starts with; each take records its own
+# The hand goals (m), each with its label, its color in the recorder, and its radius
+# (m). A is stage 1's target.
+targets = [
+  { pos = [-0.6, 0.4], label = "A", color = "purple", tolerance = 0.02 },
+  { pos = [0.0, 0.7], label = "B", color = "teal", tolerance = 0.02 },
+  { pos = [0.45, 0.2], label = "C", color = "orange", tolerance = 0.02 },
+]
+duration = 4.0  # skelarm's run length for this task (s); the recorder does not use it
+
+[simulator]
+dt = 0.002  # the robot's control and integration step (s)

@@ -1,0 +1,115 @@
+# The takes of target C of reach_manual_v2_targets.toml, as a configuration of
+# that target alone, written by experiments/import_demonstrations.py: [demonstrations]
+# start_q lists where each take of [recording] takes begins (deg), once moved by
+# whole turns to within -180 to 180 deg ([recording] start_within_a_turn).
+
+[recording]
+takes = [
+    "data/reach_manual_v2_targets/take_015.sklog.npz",
+    "data/reach_manual_v2_targets/take_016.sklog.npz",
+    "data/reach_manual_v2_targets/take_017.sklog.npz",
+    "data/reach_manual_v2_targets/take_018.sklog.npz",
+    "data/reach_manual_v2_targets/take_019.sklog.npz",
+    "data/reach_manual_v2_targets/take_020.sklog.npz",
+    "data/reach_manual_v2_targets/take_021.sklog.npz",
+    "data/reach_manual_v2_targets/take_026.sklog.npz",
+    "data/reach_manual_v2_targets/take_027.sklog.npz",
+]
+start_within_a_turn = true
+hold = 2.0
+max_tip_speed = 3.0
+
+[recording.filter]
+kind = "lowpass"
+cutoff_hz = 2.0
+
+[initial]
+q = [
+    13.0,
+    71.0,
+]
+
+[skeleton]
+base_length = 0.0
+
+[[skeleton.link]]
+length = 0.5
+mass = 0.5
+inertia = 0.0125
+com = [
+    0.25,
+    0.0,
+]
+limits = [
+    -3600.0,
+    3600.0,
+]
+
+[[skeleton.link]]
+length = 0.4
+mass = 0.4
+inertia = 0.0064
+com = [
+    0.2,
+    0.0,
+]
+limits = [
+    -3600.0,
+    3600.0,
+]
+
+[task]
+type = "reaching"
+duration = 4.0
+
+[task.target]
+pos = [
+    0.45,
+    0.2,
+]
+label = "C"
+color = "orange"
+tolerance = 0.02
+
+[simulator]
+dt = 0.002
+
+[demonstrations]
+start_q = [
+    [
+        153.83006100254022,
+        98.8362137353287,
+    ],
+    [
+        147.2845293140415,
+        136.04485453302198,
+    ],
+    [
+        -65.16887464681355,
+        133.8738572094565,
+    ],
+    [
+        -13.561100431136172,
+        65.28095936173284,
+    ],
+    [
+        16.072178148205957,
+        61.14029616576406,
+    ],
+    [
+        34.2427629484566,
+        59.730463609867975,
+    ],
+    [
+        76.07999854320687,
+        57.234793709681796,
+    ],
+    [
+        113.71570535198283,
+        74.99936379640262,
+    ],
+    [
+        55.85300932606531,
+        78.35758371403885,
+    ],
+]

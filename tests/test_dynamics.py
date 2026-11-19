@@ -296,6 +296,39 @@ def test_the_map_takes_the_esns_current_context_by_default(task_esn):
     assert not np.allclose(ClosedLoop.from_esn(task_esn).bias, ClosedLoop.from_esn(task_esn, "there").bias)
 
 
+def two_task_esn(demo, **config):
+    """An ESN of the two tasks of ``task_esn``, with ``config`` changed."""
+    trained = ReachingEsn(dataclasses.replace(ESN_CONFIG, **config))
+    trained.fit([demo, demo[::-1].copy()], contexts=[0, 1], names=["there", "back"])
+    return trained
+
+
+@pytest.mark.parametrize("task", ["there", "back"])
+def test_with_the_context_divided_by_the_input_scaling_the_map_is_still_the_esns_doing_that_task(demo, task):
+    divided = two_task_esn(demo, input_scaling=0.5, context_times_input_scaling=False)
+    start = demo[0] if task == "there" else demo[-1]
+    divided.set_context(task)
+    q, states = run_states(divided, start, 80)
+
+    loop = ClosedLoop.from_esn(divided, task)
+
+    np.testing.assert_allclose(q, divided.generate(start, 80), atol=1e-12)
+    np.testing.assert_allclose(loop.advance(states[:-1]), states[1:], atol=1e-12)
+    np.testing.assert_allclose(loop.posture(states[:-1]), q[1:], atol=1e-12)
+
+
+def test_divided_by_the_input_scaling_a_held_context_adds_the_same_bias_at_any_input_scaling(demo):
+    def bias(**config):
+        return ClosedLoop.from_esn(two_task_esn(demo, **config), "back").bias
+
+    low, high = bias(input_scaling=0.5), bias(input_scaling=1.0)
+    divided_low = bias(input_scaling=0.5, context_times_input_scaling=False)
+    divided_high = bias(input_scaling=1.0, context_times_input_scaling=False)
+
+    np.testing.assert_allclose(divided_low, divided_high, atol=1e-12)
+    assert not np.allclose(low, high)
+
+
 def test_an_esn_without_contexts_has_no_context_to_hold(esn):
     with pytest.raises(ValueError, match="without contexts"):
         ClosedLoop.from_esn(esn, 0)

@@ -1,0 +1,6 @@
+config = "experiments/demonstrations/reach_manual_v2_targets.toml"
+command = "experiments/import_demonstrations.py experiments/demonstrations/reach_manual_v2_targets.toml"
+started = 2026-11-18 17:59:17+09:00
+host = "delbosque"
+commit = "eb07dc9a359cab6165da81631ae1a2bb62599ce0"
+uncommitted_changes = false

@@ -72,6 +72,23 @@ goal, whatever the take's path. The run directory then also receives
 ``scores.csv``: one row per setting, the best first, with its typical seed when
 the seed is swept; and ``sweep.csv`` gives each combination's median detour ratio.
 
+With ``[[demonstrations]]`` tables in place of ``[demonstrations]``, one per task
+as in ``autonomous_esn.py``, every combination's ESN is trained on the
+demonstrations of all the tasks, each with its task's context (see
+:mod:`arm_esn_ctrl.esn`; ``context_scaling`` is swept as any other
+hyperparameter). As in ``robot_esn.py``, it then runs each task from that task's
+start postures with that task's context from the warm-up on, and the runs are
+measured against that task's target and takes. ``[evaluation]`` and the
+disturbances apply to every task alike, a push placed by its ``way`` along that
+task's taught motion each run starts from. Joint PD's gains are the same for
+every task: set where the take of ``gains_from`` ends, or else at the mean of
+where the takes of all the tasks end. A combination's failed runs, its scores,
+and their summaries are over the runs of all its tasks, and its columns of each
+tracker setting are from the first task's first start posture. ``runs.csv`` then
+has a ``task`` column, the task's name, and ``scores.csv`` a column of each
+task's holding runs, ``holding_runs_<task>``, which shows a setting that fails
+one target.
+
 With ``--workers``, the combinations are spread over that many processes, each
 computing with one thread; their results are the same as in one process.
 
@@ -106,7 +123,7 @@ from robot_esn import (
 )
 from sweep_esn import plot_sweep
 
-from arm_esn_ctrl.autonomous import Setup, load_setup
+from arm_esn_ctrl.autonomous import Setup, demonstration_tables, load_setups, task_names, training_set
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.disturbances import (
     check_recorded_arm,
@@ -168,22 +185,27 @@ PER_SETTING = {
 
 @dataclass(frozen=True)
 class Context:
-    """What every combination's runs need, loaded once per process."""
+    """What every combination's runs need, loaded once per process.
+
+    The setups, the simulators, the disturbances, and their spans are each task's, in
+    the order of the tasks: one for a single ``[demonstrations]`` table.
+    """
 
     config: dict[str, Any]
-    setup: Setup
-    simulator: dict[str, Any]
+    names: tuple[str, ...]  # the tasks' names; none for a single [demonstrations] table
+    setups: list[Setup]
+    simulators: list[dict[str, Any]]
     settings: list[Setting]
     trackers: dict[str, tuple[TrackerConfig, tuple[NDArray[np.float64], NDArray[np.float64]]]]
     duration: float
     window: list[float]
-    spans: list[tuple[float, float]]  # when each disturbance acts in the runs from the first start posture
+    spans: list[tuple[float, float]]  # when each disturbance acts in the runs from the first task's first start posture
     tolerance: float
     ringing: tuple[float, float]
     following: float
-    # Each start posture's disturbance, its pushes placed along the taught motion, and when each acts.
-    disturbances: list[Any]
-    start_spans: list[list[tuple[float, float]]]
+    # Each task's disturbance of each start posture, its pushes placed along the taught motion, and when each acts.
+    disturbances: list[list[Any]]
+    start_spans: list[list[list[tuple[float, float]]]]
 
 
 _context: Context | None = None  # this process's, set by init_worker
@@ -207,11 +229,12 @@ def main() -> None:
         raise ValueError(msg)
     context = sweep_context(config)
     disturbance = config.get("disturbance")
-    check_recorded_arm(disturbance, context.setup.skeleton)
+    check_recorded_arm(disturbance, context.setups[0].skeleton)
     keep_recorded_logs(disturbance, run_dir)
     settings, spans = context.settings, context.spans
+    tasks = f" of {len(context.names)} tasks ({', '.join(context.names)})" if context.names else ""
     print(
-        f"{len(context.setup.starts)} start postures, {len(settings)} tracker settings"
+        f"{sum(len(setup.starts) for setup in context.setups)} start postures{tasks}, {len(settings)} tracker settings"
         f" ({', '.join(setting.label for setting in settings)}), {context.duration:g} s runs"
     )
     print(f"Disturbance: {disturbance or 'none'}")
@@ -287,25 +310,32 @@ def sweep_context(config: dict[str, Any]) -> Context:
     disturbance = config.get("disturbance")
     # Under a recorded disturbance, the runs start from its log's start posture, with an arm like its log's.
     evaluation = recorded_evaluation(config["evaluation"], disturbance)
-    setup = load_setup(
+    # One setup per task, each with its own target, start postures, and takes.
+    setups = load_setups(
         {"demonstrations": config["demonstrations"], "esn": {"dt": config["esn"]["dt"]}, "evaluation": evaluation}
     )
-    with (resolve_run_path(config["demonstrations"]["run"]) / "config.toml").open("rb") as f:
-        simulator = tomllib.load(f)["simulator"]
+    simulators = []
+    for table in demonstration_tables(config["demonstrations"]):
+        with (resolve_run_path(table["run"]) / "config.toml").open("rb") as f:
+            simulators.append(tomllib.load(f)["simulator"])
     tracker = config["tracker"]
     settings = tracker_settings(tracker)
-    # Where joint PD's gains are set: where the reaches end, or the take of [tracker]'s gains_from.
-    end_posture = gains_posture(tracker, setup.demos.values(), config["esn"]["dt"])
+    # Where joint PD's gains are set: where the reaches of every task end, or the take of [tracker]'s gains_from.
+    every_demo = [q for setup in setups for q in setup.demos.values()]
+    end_posture = gains_posture(tracker, every_demo, config["esn"]["dt"])
     disturbances = [
-        placed(
-            disturbance,
-            setup.demo_hands[nearest_demonstration(start.q, setup.demos)],
-            setup.target,
-            config["esn"]["dt"],
-        )
-        for start in setup.starts
+        [
+            placed(
+                disturbance,
+                setup.demo_hands[nearest_demonstration(start.q, setup.demos)],
+                setup.target,
+                config["esn"]["dt"],
+            )
+            for start in setup.starts
+        ]
+        for setup in setups
     ]
-    start_spans = [disturbance_spans(each) for each in disturbances]
+    start_spans = [[disturbance_spans(each) for each in task] for task in disturbances]
     trackers = {}
     for setting in settings:
         tracker_config = TrackerConfig(
@@ -317,17 +347,18 @@ def sweep_context(config: dict[str, Any]) -> Context:
             control_period=tracker.get("control_period"),
             mass_matrix=tracker.get("mass_matrix", False),
         )
-        trackers[setting.name] = (tracker_config, setting.gains(tracker_config, setup.skeleton, end_posture))
+        trackers[setting.name] = (tracker_config, setting.gains(tracker_config, setups[0].skeleton, end_posture))
     duration = float(evaluation["duration"])
     return Context(
         config,
-        setup,
-        simulator,
+        task_names(config["demonstrations"]),
+        setups,
+        simulators,
         settings,
         trackers,
         duration,
         evaluation.get("effort_window", [0.0, duration]),
-        start_spans[0],
+        start_spans[0][0],
         evaluation.get("return_tolerance", RETURN_TOLERANCE),
         ringing_settings(evaluation),
         evaluation.get("following_window", FOLLOWING_WINDOW),
@@ -351,18 +382,34 @@ def sweep_job(combination: dict[str, Any]) -> tuple[dict[str, Any], list[dict[st
 def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Train the ESN of ``combination`` and run it from every start posture with every tracker setting.
 
+    An ESN of several tasks is trained on the demonstrations of every task, each with
+    its task's context, and runs every task in turn (see :func:`task_runs`).
+
     Returns its row of ``sweep.csv`` and its runs' metrics, one dict a run.
     """
-    setup, simulator, settings = context.setup, context.simulator, context.settings
     esn = ReachingEsn(EsnConfig(**(context.config["esn"] | combination)))
-    esn.fit(list(setup.demos.values()))
+    trajectories, contexts = training_set(context.setups, context.names)
+    esn.fit(trajectories, contexts, context.names or None)
+    runs = [run for task in range(len(context.setups)) for run in task_runs(context, esn, task)]
+    return combination | summarize(runs, context.settings, len(context.spans)), runs
+
+
+def task_runs(context: Context, esn: ReachingEsn, task: int) -> list[dict[str, Any]]:
+    """Run the trained ESN from every start posture of the task ``task`` with every tracker setting.
+
+    An ESN of several tasks is given that task's context from the warm-up on, and
+    its runs are measured against that task's target and takes; each run then has
+    the task's name as its ``task``. Returns the runs' metrics, one dict a run.
+    """
+    setup, simulator, settings = context.setups[task], context.simulators[task], context.settings
+    schedule = [(0.0, task)] if context.names else None
     runs = []
     for setting in settings:
         tracker_config, gains = context.trackers[setting.name]
         for i, start in enumerate(setup.starts):
             log = track(
                 posed(setup.skeleton, start.q),
-                EsnSource(esn),
+                EsnSource(esn, schedule),
                 tracker_config,
                 gains,
                 period=esn.config.dt,
@@ -372,7 +419,7 @@ def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[di
                 enforce_limits=simulator.get("enforce_limits", True),
                 stops=simulator.get("stops", "projected"),
                 external_force=make_disturbance(
-                    context.disturbances[i],
+                    context.disturbances[task][i],
                     endpoint_positions(setup.skeleton, start.q[np.newaxis])[0],
                     setup.target,
                     dt=simulator["dt"],
@@ -384,19 +431,20 @@ def sweep_combination(context: Context, combination: dict[str, Any]) -> tuple[di
                 setup,
                 esn.config.dt,
                 context.window,
-                context.start_spans[i],
+                context.start_spans[task][i],
                 context.tolerance,
                 context.ringing,
                 context.following,
             )
             hand = endpoint_positions(setup.skeleton, task_joint_angles(log, esn.config.dt, context.duration))
             runs.append(
-                {"setting": setting.name, "start": i, "origin": start.origin}
+                ({"task": context.names[task]} if context.names else {})
+                | {"setting": setting.name, "start": i, "origin": start.origin}
                 | metrics
                 | {"detour_m": detour(hand, setup.demo_hands[nearest_demonstration(start.q, setup.demos)])}
                 | {"failed": not metrics["success"] or metrics["hold_observed_s"] < setup.hold - 1e-9}
             )
-    return combination | summarize(runs, settings, len(context.spans)), runs
+    return runs
 
 
 def detour(hand: NDArray[np.float64], taught_hand: NDArray[np.float64], every: int = 5) -> float:
@@ -412,7 +460,8 @@ def summarize(runs: list[dict[str, Any]], settings: list[Setting], disturbances:
     """A combination's failed runs, path RMSE, latest arrival, and median detour ratio; then each setting's first run.
 
     The path RMSE is the worst and the mean over its runs, and the detour ratio's
-    median is over its runs that arrive (NaN if none does).
+    median is over its runs that arrive (NaN if none does). With several tasks, its
+    runs are those of all of them, and each setting's first run is the first task's.
 
     With ``disturbances`` (how many), also its runs not back on the path after one,
     the latest return, and the farthest from the path, and each setting's first run

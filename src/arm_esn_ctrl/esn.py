@@ -40,10 +40,14 @@ An ESN can be trained on the demonstrations of several tasks, such as reaches to
 different targets, or a reach and a periodic motion (``contexts`` of
 :meth:`ReachingEsn.fit`). Its input then holds, after the joint angles, one value
 per task, the context: 1 for the task of the demonstration being fed in and 0 for
-the others (a one-hot vector), times ``context_scaling``. Nothing else tells the
-ESN which task a demonstration belongs to, and its output is still the next joint
-angles alone. Run on its own or on a robot, the ESN is given the context of the
-task it should do (:meth:`ReachingEsn.set_context`), which can change at any step.
+the others (a one-hot vector), times ``context_scaling``. rclib multiplies the
+context's input weights by the input scaling, as it does the joint angles'. With
+``context_times_input_scaling`` false, the context is fed in divided by the input
+scaling, so that its weights have the scale ``context_scaling`` alone, whatever the
+input scaling is. Nothing else tells the ESN which task a demonstration belongs to,
+and its output is still the next joint angles alone. Run on its own or on a robot,
+the ESN is given the context of the task it should do
+(:meth:`ReachingEsn.set_context`), which can change at any step.
 Without contexts, the input is the joint angles alone, as before.
 """
 
@@ -98,6 +102,7 @@ class EsnConfig:
     teacher_noise_exponent: float = 0.0  # its power spectrum goes as 1/f to this: 0 white, 1 pink, 2 brown, -1 blue
     bias_scaling: float = 1.0  # each neuron's bias is drawn from [-1, 1] and multiplied by this
     context_scaling: float = 1.0  # the context input's value for the task being done (the others' is 0)
+    context_times_input_scaling: bool = True  # if false, the context is fed in divided by the input scaling
 
     @property
     def warmup_steps(self) -> int:
@@ -190,6 +195,17 @@ class ReachingEsn:
                 inputs.append(self._with_context(sequence[:-1] + noise, context))
                 targets.append(sequence[1:])
         self.model.fit_sequences(inputs, targets, washout_len=self.config.warmup_steps)
+
+    @property
+    def context_gain(self) -> float:
+        """What the context is multiplied by in the ESN's input (see the module).
+
+        It is ``context_scaling``, divided by the input scaling if
+        ``context_times_input_scaling`` is false.
+        """
+        if self.config.context_times_input_scaling:
+            return self.config.context_scaling
+        return self.config.context_scaling / self.config.input_scaling
 
     def context_vector(self, task: int | str | ArrayLike) -> NDArray[np.float64]:
         """The context of ``task``: one weight per task, 1 for the task and 0 for the others.
@@ -335,7 +351,7 @@ class ReachingEsn:
         """The ESN's input: the normalized joint angles ``u``, then the ``context`` scaled, on every row."""
         if not self.contexts or context is None:
             return u
-        return np.hstack([u, np.tile(self.config.context_scaling * context, (len(u), 1))])
+        return np.hstack([u, np.tile(self.context_gain * context, (len(u), 1))])
 
     def _normalize(self, q: NDArray[np.float64]) -> NDArray[np.float64]:
         return (q - self.center) / self.half_range

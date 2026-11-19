@@ -56,6 +56,26 @@ def test_start_run_never_reuses_a_run_directory(tmp_path: Path, monkeypatch: pyt
     assert len(run_dirs) == 3
 
 
+def test_a_run_made_from_part_of_a_configuration_has_its_own_name_and_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv(ENV_VAR, str(tmp_path / "store"))
+    config_path = tmp_path / "some_experiment" / "example.toml"
+    config_path.parent.mkdir()
+    config_path.write_text("[task]\ntargets = [1, 2]\n")
+    part = "# Target 1 alone.\n[task]\ntarget = 1\n"
+
+    config, run_dir = start_run(config_path, name="example_1", text=part)
+
+    assert config == {"task": {"target": 1}}
+    assert run_dir.parent == tmp_path / "store" / "results" / "some_experiment"
+    assert run_dir.name.endswith("-example_1")
+    assert (run_dir / "config.toml").read_text() == part
+    assert tomllib.loads((run_dir / "run.toml").read_text())["config"] == str(
+        config_path.resolve()
+    )  # what it was made from
+
+
 def stored_run(tmp_path: Path, experiment: str, name: str) -> Path:
     run = tmp_path / "store" / "results" / experiment / name
     run.mkdir(parents=True)

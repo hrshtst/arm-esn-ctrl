@@ -105,7 +105,7 @@ class ClosedLoop:
         if esn.contexts:
             held = esn.context if context is None else esn.context_vector(context)
             n_joints = len(esn.center)
-            bias = bias + esn.config.context_scaling * held @ inputs[n_joints:]
+            bias = bias + esn.context_gain * held @ inputs[n_joints:]
             inputs = inputs[:n_joints]
         elif context is not None:
             msg = "the ESN was trained without contexts"

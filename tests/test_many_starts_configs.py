@@ -8,7 +8,7 @@ import tomllib
 
 import numpy as np
 import pytest
-from skelarm import Skeleton
+from skelarm import Skeleton, Task, active_target_index, multi_target_specs
 
 from arm_esn_ctrl.demonstrations import endpoint_positions
 from arm_esn_ctrl.disturbances import same_arm
@@ -24,6 +24,7 @@ from tools.starts_figure import joint_1_wall, plot_starts, target_postures
 from tools.tip_starts import hand_postures, ring_hands
 
 TAKES = REPO_ROOT / "experiments/demonstrations/reach_manual_v2_no_limits.toml"
+TARGETS = REPO_ROOT / "experiments/demonstrations/reach_manual_v2_targets.toml"  # stage 2's, of three targets
 V2 = REPO_ROOT / "experiments/demonstrations/reach_manual_v2.toml"
 EXPERIMENT = REPO_ROOT / "experiments/manual_demonstration_v2_many_starts"
 V2_PUSHES = (
@@ -47,6 +48,33 @@ def test_the_takes_are_of_v2s_arm_without_joint_limits_and_of_its_target():
     assert takes["task"] == v2["task"]
     assert takes["simulator"] == v2["simulator"]
     assert takes["recording"]["filter"] == v2["recording"]["filter"]
+
+
+def test_the_takes_of_three_targets_are_of_the_many_starts_arm_and_recording_with_its_target_as_a():
+    """Stage 2's takes: the same robot and recording as stage 1's, A its target, and no start postures."""
+    targets, takes = load(TARGETS), load(TAKES)
+
+    for key in ("skeleton", "initial", "simulator"):
+        assert targets[key] == takes[key]
+    assert same_arm(Skeleton.from_toml(TARGETS), Skeleton.from_toml(TAKES))
+    checks = ("hold", "max_tip_speed", "filter")
+    assert {key: targets["recording"][key] for key in checks} == {key: takes["recording"][key] for key in checks}
+    assert targets["recording"]["takes"] == "data/reach_manual_v2_targets/take_*.sklog.npz"
+    assert "start_tolerance_deg" not in targets["recording"]
+    assert targets["recording"]["start_within_a_turn"]  # posing can leave a joint a whole turn away
+    assert "demonstrations" not in targets
+    task = Task.from_dict(targets["task"])
+    assert (task.type, active_target_index(task), task.duration) == ("multi_target_reaching", 0, 4.0)
+    specs = multi_target_specs(task)
+    assert [(pos.tolist(), label, tolerance) for pos, label, _, tolerance in specs] == [
+        ([-0.6, 0.4], "A", 0.02),
+        ([0.0, 0.7], "B", 0.02),
+        ([0.45, 0.2], "C", 0.02),
+    ]
+    assert specs[0][0].tolist() == takes["task"]["target"]["pos"]
+    assert len({color for _, _, color, _ in specs}) == 3
+    # Every target is within the ring the hand can reach, from 0.1 to 0.9 m around the base.
+    assert all(0.1 < np.linalg.norm(pos) < 0.9 for pos, _, _, _ in specs)
 
 
 def test_the_nine_takes_start_with_their_hands_spread_evenly_over_the_workspace():

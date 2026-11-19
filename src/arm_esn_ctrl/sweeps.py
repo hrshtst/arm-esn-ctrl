@@ -115,6 +115,11 @@ def score_settings(runs: list[dict[str, Any]], names: list[str]) -> list[dict[st
     median detour ratio; a NaN comes last, and settings equal in both keep the
     sweep's order.
 
+    With ``task`` in the runs, the name of each run's task in a sweep of several
+    tasks, a setting's runs are those of all its tasks, and each row also holds
+    ``holding_runs_<task>``: the holding runs of each task, in the order of the
+    tasks' first runs.
+
     With ``seed`` in the runs, each row also holds ``seeds`` (how many) and
     ``typical_seed``: of the setting's seeds with the most holding runs, the one
     whose own median detour ratio is nearest the setting's (the first, if none of
@@ -123,6 +128,7 @@ def score_settings(runs: list[dict[str, Any]], names: list[str]) -> list[dict[st
     settings: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for run in runs:
         settings.setdefault(tuple(run[name] for name in names), []).append(run)
+    tasks = list(dict.fromkeys(run["task"] for run in runs if "task" in run))
     scores = []
     for values, group in settings.items():
         median = _finite_median([run["detour_ratio"] for run in group])
@@ -130,6 +136,9 @@ def score_settings(runs: list[dict[str, Any]], names: list[str]) -> list[dict[st
             "runs": len(group),
             "holding_runs": sum(not run["failed"] for run in group),
             "median_detour_ratio": median,
+        }
+        score |= {
+            f"holding_runs_{task}": sum(not run["failed"] for run in group if run["task"] == task) for task in tasks
         }
         if "seed" in group[0]:
             seeds: dict[Any, list[dict[str, Any]]] = {}

@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_targets/switch_to_c_robot_esn1.toml"
+command = "experiments/robot_esn.py experiments/manual_demonstration_v2_targets/switch_to_c_robot_esn1.toml"
+started = 2026-11-19 00:37:57+09:00
+host = "delbosque"
+commit = "e0e7f91d818ed904bbc3d49c9ff1b811b14e6572"
+uncommitted_changes = false
