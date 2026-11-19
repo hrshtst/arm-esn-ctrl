@@ -1,0 +1,155 @@
+# The fine search's 20 best settings, scored again with the start postures no take
+# starts from: each with its five reservoirs (seeds 1 to 5), on the robot,
+# undisturbed, with each context from that task's starts and from stage 1's 36
+# untaught starts, the reach from the nine takes' starts for 24 s and the ellipse from
+# the eight starts on the curve for 40 s: 45 runs and 44, 89 an ESN and 445 a setting.
+# No fine setting passes all 85 of its runs; the best two pass 69, and the 20th passes
+# 51, as does the 21st (leak rate 0.055, spectral radius 1.35, input scaling 0.22,
+# ridge 10), which the ranks leave out. Each setting is scored over its 445 runs as in
+# the fine search, by how many pass, then, among the settings with as many, by the
+# worse of its two ranks, then by the better; two-task ESN #1 and ESN #2 are the
+# typical seeds of the two best. It is fine_search.toml but for the settings and the
+# untaught starts. About 80 minutes with 30 workers: 100 ESNs with 89 runs each, where
+# the fine search's 405 with 17 runs each took 61 minutes. See README.md.
+#
+#   uv run python experiments/sweep_robot_esn.py \
+#       experiments/manual_demonstration_v2_reach_and_ellipse/untaught_search.toml --workers 30
+
+# The fine search's 20 best settings (run 20261119-193314-fine_search), in its order,
+# each with its runs that pass there, of 85 (the reach's of 45 + the ellipse's of 40).
+settings = [
+  { leak_rate = 0.055, spectral_radius = 1.65, input_scaling = 0.5, ridge = 10.0 },  # 69 (33 + 36)
+  { leak_rate = 0.17, spectral_radius = 1.65, input_scaling = 0.22, ridge = 10.0 },  # 69 (35 + 34)
+  { leak_rate = 0.055, spectral_radius = 1.5, input_scaling = 0.5, ridge = 10.0 },  # 68 (41 + 27)
+  { leak_rate = 0.1, spectral_radius = 1.5, input_scaling = 1.0, ridge = 10.0 },  # 63 (41 + 22)
+  { leak_rate = 0.055, spectral_radius = 1.35, input_scaling = 1.0, ridge = 10.0 },  # 59 (43 + 16)
+  { leak_rate = 0.055, spectral_radius = 1.5, input_scaling = 1.0, ridge = 10.0 },  # 59 (43 + 16)
+  { leak_rate = 0.17, spectral_radius = 1.5, input_scaling = 1.0, ridge = 10.0 },  # 59 (44 + 15)
+  { leak_rate = 0.1, spectral_radius = 1.65, input_scaling = 1.0, ridge = 10.0 },  # 57 (42 + 15)
+  { leak_rate = 0.055, spectral_radius = 1.35, input_scaling = 0.5, ridge = 10.0 },  # 57 (43 + 14)
+  { leak_rate = 0.1, spectral_radius = 1.65, input_scaling = 0.22, ridge = 10.0 },  # 57 (23 + 34)
+  { leak_rate = 0.1, spectral_radius = 1.65, input_scaling = 0.5, ridge = 10.0 },  # 55 (32 + 23)
+  { leak_rate = 0.17, spectral_radius = 1.65, input_scaling = 0.22, ridge = 1.0 },  # 55 (39 + 16)
+  { leak_rate = 0.055, spectral_radius = 1.65, input_scaling = 1.0, ridge = 10.0 },  # 54 (41 + 13)
+  { leak_rate = 0.1, spectral_radius = 1.65, input_scaling = 0.22, ridge = 1.0 },  # 54 (35 + 19)
+  { leak_rate = 0.1, spectral_radius = 1.5, input_scaling = 0.5, ridge = 10.0 },  # 53 (37 + 16)
+  { leak_rate = 0.055, spectral_radius = 1.5, input_scaling = 0.5, ridge = 1.0 },  # 52 (42 + 10)
+  { leak_rate = 0.17, spectral_radius = 1.35, input_scaling = 0.5, ridge = 10.0 },  # 52 (45 + 7)
+  { leak_rate = 0.055, spectral_radius = 1.35, input_scaling = 1.0, ridge = 1.0 },  # 51 (42 + 9)
+  { leak_rate = 0.17, spectral_radius = 1.65, input_scaling = 1.0, ridge = 10.0 },  # 51 (37 + 14)
+  { leak_rate = 0.1, spectral_radius = 1.35, input_scaling = 1.0, ridge = 10.0 },  # 51 (43 + 8)
+]
+
+[[demonstrations]]
+# Stage 1's nine takes of reach_manual_v2_no_limits.toml, filtered at 2 Hz.
+context = "reach"
+run = "results/demonstrations/20261117-164658-reach_manual_v2_no_limits"
+train = [
+  "demo_00_filtered.sklog.npz",  # from (13, 71) deg
+  "demo_01_filtered.sklog.npz",  # from (73, 71)
+  "demo_02_filtered.sklog.npz",  # from (133, 71)
+  "demo_03_filtered.sklog.npz",  # from (-167, 71)
+  "demo_04_filtered.sklog.npz",  # from (-107, 71)
+  "demo_05_filtered.sklog.npz",  # from (-47, 71)
+  "demo_06_filtered.sklog.npz",  # from (21, 132)
+  "demo_07_filtered.sklog.npz",  # from (141, 132)
+  "demo_08_filtered.sklog.npz",  # from (-99, 132)
+]
+
+[[demonstrations]]
+# Stage 3a's take of the ellipse by hand, ten loops, filtered at 2 Hz: the run directory
+# of experiments/import_demonstrations.py for ellipse_manual_v2_no_limits.toml.
+context = "ellipse"
+run = "results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 800
+spectral_radius = 1.5  # listed in [[settings]]
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.1        # listed in [[settings]]
+input_scaling = 0.5    # listed in [[settings]]
+bias = true
+ridge = 1.0            # listed in [[settings]]
+seed = 1               # swept
+# The context, one value per task after the joint angles, is fed in divided by the
+# input scaling, so that its input weights have the scale 1 whatever the input scaling
+# is, as in stage 2. Not swept.
+context_scaling = 1.0
+context_times_input_scaling = false
+
+[sweep]
+seed = [1, 2, 3, 4, 5]
+
+[ranking]
+# The most runs that pass, then the worse of the two ranks among the settings with as
+# many, by the median detour ratio of the reach runs that arrive and by the median curve
+# RMS of the ellipse runs that cycle, then the better.
+by = "worse_rank"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+# Each task's runs, as in the stage it comes from: stage 1's scoring with the untaught
+# starts for the reach, stage 3a's for the ellipse.
+
+[evaluation.tasks.reach]
+duration = 24.0        # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start
+
+[evaluation.tasks.reach.extra_starts]
+# Stage 1's start postures no take starts from (deg): 36 hand positions spread evenly
+# over the workspace, on three rings around the base, 0.78, 0.53, and 0.28 m from it,
+# with 18, 12, and 6 hands, joint 2 positive (manual_demonstration_v2_many_starts/hand_esn.toml):
+#
+#   uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
+#       --counts 18 12 6 --first-angle 53.3
+untaught = [
+  [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
+  [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
+  [-93.0, 60.0], [-73.0, 60.0], [-53.0, 60.0], [-33.0, 60.0], [-13.0, 60.0], [7.0, 60.0],
+  [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
+  [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
+  [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
+]
+
+[evaluation.tasks.ellipse]
+duration = 40.0           # task (s), after the warm-up: about eight taught periods
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
+cycle_periods = 5
+cycle_turns = [4.0, 6.0]  # the least and the most
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0
+
+[evaluation.tasks.ellipse.extra_starts]
+# The other seven starts on the curve (deg): the hand on the ellipse at the curve's
+# angles 45, 90, ..., 315 deg, an eighth of a loop apart; joint 2 positive, as at the
+# take's start, rounded to 0.1 deg.
+on_curve = [
+  [47.3, 90.8], [62.6, 83.0], [75.1, 82.6], [79.0, 92.5], [71.5, 109.8], [53.3, 122.5], [36.2, 118.7],
+]
+# Stage 1's 36 untaught starts, as the reach's above (deg).
+untaught = [
+  [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
+  [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
+  [-93.0, 60.0], [-73.0, 60.0], [-53.0, 60.0], [-33.0, 60.0], [-13.0, 60.0], [7.0, 60.0],
+  [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
+  [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
+  [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
+]

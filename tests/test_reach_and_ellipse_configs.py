@@ -9,7 +9,7 @@ import tomllib
 import numpy as np
 import pytest
 
-from arm_esn_ctrl.autonomous import task_evaluations, task_names
+from arm_esn_ctrl.autonomous import start_postures, task_evaluations, task_names
 from arm_esn_ctrl.esn import EsnConfig, ReachingEsn
 from arm_esn_ctrl.storage import REPO_ROOT
 from arm_esn_ctrl.sweeps import sweep_combinations
@@ -108,15 +108,20 @@ def test_each_tasks_runs_are_those_of_the_coarse_search_of_the_stage_it_comes_fr
     assert len(ellipse["start_offsets_deg"]) + len(ellipse["extra_starts"]["on_curve"]) == 8
 
 
-def test_the_coarse_searchs_header_runs_it_with_sweep_robot_esn_and_a_number_of_workers():
-    words = header_command(EXPERIMENT / "coarse_search.toml")
+# The search's three sweeps: the coarse search, the fine search, and the scoring with the untaught starts.
+SEARCHES = ["coarse_search.toml", "fine_search.toml", "untaught_search.toml"]
+
+
+@pytest.mark.parametrize("name", SEARCHES)
+def test_each_searchs_header_runs_it_with_sweep_robot_esn_and_a_number_of_workers(name):
+    words = header_command(EXPERIMENT / name)
 
     assert words[:-1] == [
         "uv",
         "run",
         "python",
         "experiments/sweep_robot_esn.py",
-        "experiments/manual_demonstration_v2_reach_and_ellipse/coarse_search.toml",
+        f"experiments/manual_demonstration_v2_reach_and_ellipse/{name}",
         "--workers",
     ]
     assert int(words[-1]) > 0
@@ -153,3 +158,66 @@ def test_the_fine_search_takes_the_center_and_the_values_halfway_to_its_coarse_n
             upper = grid[k + 1] if k + 1 < len(grid) else center**2 / grid[k - 1]
             expected = [float(f"{np.sqrt(lower * center):.2g}"), center, float(f"{np.sqrt(center * upper):.2g}")]
         assert fine["sweep"][name] == expected, name
+
+
+ESN_NAMES = ["leak_rate", "spectral_radius", "input_scaling", "ridge"]
+# The fine search's two best settings (run 20261119-193314-fine_search), each passing 69 of its 85 runs.
+TWO_BEST = [(0.055, 1.65, 0.5, 10.0), (0.17, 1.65, 0.22, 10.0)]
+
+
+def test_the_untaught_search_is_the_fine_search_but_for_its_settings_seeds_and_untaught_starts():
+    again, fine = load(EXPERIMENT / "untaught_search.toml"), load(EXPERIMENT / "fine_search.toml")
+
+    settings, sweep, fine_sweep = again.pop("settings"), again.pop("sweep"), fine.pop("sweep")
+    assert len(settings) == 20
+    assert sweep == {"seed": fine_sweep["seed"]}  # seeds 1 to 5, the other values listed in settings
+    tasks = again["evaluation"]["tasks"]
+    assert list(tasks["reach"].pop("extra_starts")) == ["untaught"]  # the fine search's reach has none
+    assert list(tasks["ellipse"]["extra_starts"]) == ["on_curve", "untaught"]
+    tasks["ellipse"]["extra_starts"].pop("untaught")
+    assert again == fine  # the same takes and contexts, ESN, tracker, runs, and score
+
+
+def test_the_untaught_searchs_settings_are_distinct_and_on_the_fine_searchs_grid_its_two_best_first():
+    again, fine = load(EXPERIMENT / "untaught_search.toml"), load(EXPERIMENT / "fine_search.toml")
+
+    settings = [tuple(setting[name] for name in ESN_NAMES) for setting in again["settings"]]
+    assert len(set(settings)) == len(settings) == 20
+    for setting in again["settings"]:
+        assert list(setting) == ESN_NAMES
+        assert all(setting[name] in fine["sweep"][name] for name in ESN_NAMES)
+    assert settings[:2] == TWO_BEST
+
+
+def test_the_untaught_search_runs_each_task_from_stage_1s_36_untaught_starts_as_stage_1s_and_3as_scorings_do():
+    config = load(EXPERIMENT / "untaught_search.toml")
+    untaught = load(MANY_STARTS / "hand_esn.toml")["evaluation"]["extra_starts"]["untaught"]
+    on_curve = load(EXPERIMENT / "fine_search.toml")["evaluation"]["tasks"]["ellipse"]["extra_starts"]["on_curve"]
+
+    reach, ellipse = task_evaluations(config["evaluation"], task_names(config["demonstrations"]))
+
+    assert len(untaught) == 36
+    assert reach["extra_starts"] == {"untaught": untaught}
+    assert ellipse["extra_starts"] == {"on_curve": on_curve, "untaught": untaught}
+    # Each task's runs are those of the scoring with the untaught starts of the stage it comes from.
+    assert reach == load(MANY_STARTS / "untaught_search.toml")["evaluation"]
+    assert ellipse == load(PERIODIC / "untaught_search.toml")["evaluation"]
+
+
+def test_the_untaught_search_parses_as_a_sweep_of_100_esns_of_two_tasks_with_89_runs_each():
+    config = load(EXPERIMENT / "untaught_search.toml")
+
+    assert task_names(config["demonstrations"]) == ("reach", "ellipse")
+    combinations = sweep_combinations(config["sweep"], config["settings"])
+    assert len(combinations) == 100  # each setting with its five seeds in turn
+    assert combinations[:5] == [config["settings"][0] | {"seed": seed} for seed in range(1, 6)]
+    for combination in combinations:
+        EsnConfig(**config["esn"] | combination)
+    # Each task's start postures, from each of its takes' starts (here zeros, as only their number counts) and from
+    # its extra starts: the reach's 9 and 36, the ellipse's 1, 7, and 36.
+    evaluations = task_evaluations(config["evaluation"], task_names(config["demonstrations"]))
+    starts = [
+        start_postures(evaluation, {name: np.zeros((1, 2)) for name in table["train"]})
+        for table, evaluation in zip(config["demonstrations"], evaluations, strict=True)
+    ]
+    assert [len(each) for each in starts] == [45, 44]  # 89 runs an ESN, 445 a setting
