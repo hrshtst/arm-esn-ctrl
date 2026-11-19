@@ -55,33 +55,23 @@ uv run basedpyright && uv run mypy           # type checking
 
 ## Videos and figures for slides
 
-- **A presentation's media** are made by `presentations/<name>/make_media.py` and written
-  to the storage root under `presentations/<name>/`, with a `README.md` that says what the
-  files show and at which commit they were made, and a `media.csv` that lists every file
-  with the logs it shows. The script is kept in Git; its output is not. Start a new one
-  as a copy of the nearest: `many-starts` (reaches, report 023), or
-  `periodic-motion-from-a-script` and `periodic-motion-by-hand` (reports 026 and 027).
+- **Where:** `presentations/<name>/make_media.py` makes them and writes them to the
+  storage root under `presentations/<name>/`, not into the repository. Start from the
+  nearest existing script (`many-starts`, `periodic-motion-from-a-script`,
+  `periodic-motion-by-hand`).
 - **A single run or take:** skelarm's player,
-  `player.py <log> --export out.mp4 --fps 30 --panel` with `QT_QPA_PLATFORM=offscreen`
-  (`player_export` in those scripts). `--speed N` makes the export N times as fast.
-- **A window of a long run:** the player exports a whole log. Cut the log to the window
-  into a temporary log, keeping the samples' times and every channel, and export that
-  (`cut` in the periodic-motion scripts).
-- **Runs one after another, or text drawn on the frames:** `sequence_video` (imageio +
-  PIL). Every single clip is kept as its own file, and the concatenated videos are made
-  from the kept clips; the faster ones (`SPEEDS`) keep every N-th frame. The
-  periodic-motion scripts' `--all-starts-only` makes the concatenated videos alone, from
-  the clips already rendered.
-- **Encoding:** keep `quality=9.5` or lower and `macro_block_size=16`. Never
-  `quality=10`: that is lossless H.264 (High 4:4:4 Predictive), which PowerPoint shows as
-  a black frame while VLC plays it. A good file is H.264 High, yuv420p.
-- **Order of work:** render a few runs into a scratch storage root first (the scripts'
-  `--only` and `--starts`; a scratch root whose `results` links the storage root's), look
-  at frames and figures, and commit the script. Then render into the storage root, and
-  tell the maintainer which file to try in PowerPoint before rendering the rest. More
-  files from a script whose videos the maintainer has already confirmed need no new
-  check.
-- A script overwrites its own files and deletes nothing.
+  `player.py <log> --export out.mp4 --fps 30 --panel` with `QT_QPA_PLATFORM=offscreen`.
+  `--speed N` makes the export N times as fast.
+- **Runs one after another, or text drawn on the frames:** imageio and PIL
+  (`sequence_video` in those scripts). Keep `quality=9.5` or lower and
+  `macro_block_size=16`. Never `quality=10`: that is lossless H.264, which PowerPoint
+  shows as a black frame while VLC plays it.
+- **Render into a scratch storage root first** and look at frames, then render into the
+  storage root.
+- **Recommended, to adapt to what the videos show:** cut a long run to a window before
+  exporting it; keep every clip as its own file and build the concatenated videos from
+  the kept clips; give the script options to render a part (`--only`, `--starts`,
+  `--all-starts-only` in the periodic-motion scripts).
 
 ## Git
 
