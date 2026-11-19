@@ -14,11 +14,13 @@ section:
   another at two and five times their speed, and each take's video, joint angles, and
   hand path;
 - ``3.2_takes_starts``: the hand paths of ESN #1 and ESN #2 against the replay's,
-  undisturbed, from the nine takes' starts and from the 36 unseen starts, and each run
-  from a take's start;
+  undisturbed, from the nine takes' starts and from the 36 unseen starts, each arm's runs
+  from the takes' starts one after another at one, two, and five times their speed, and
+  each run from a take's start;
 - ``3.3_unseen_starts``: the report's measures from each unseen start and its joint
-  angles and torques over time, a figure per panel or column, and each run from an
-  unseen start;
+  angles and torques over time, a figure per panel or column, each arm's runs from the
+  unseen starts one after another at one, two, and five times their speed, and each run
+  from an unseen start;
 - ``3.4_pushes``: the hand paths and the distance to the target under the pushes over
   60 s, and each pushed run, the progress replay's too;
 - ``3.5_nine_takes_vs_one``: the nine-take ESNs against the one-take ESNs and the
@@ -76,6 +78,7 @@ TRACKER = "pd_w20_z0.4"  # the one tracker's directory in a robot run
 DT = 0.01  # the ESNs' period, and the takes' resampling for the plots (s)
 FPS = 30.0
 SPEEDS = (2, 5)  # the speeds of the videos of all takes
+STARTS_SPEEDS = (1, 2, 5)  # the speeds of the videos of an arm's runs from all starts
 CUT = 0.05  # s: the torque axes leave out the first 50 ms, as report 023's figures do
 FORCE_TOP = 22.0  # N: the top of the tip force's axis, as in report 023
 UNSEEN_SHOWN = "unseen 1"  # report 023's unseen start drawn over time
@@ -707,22 +710,27 @@ def player_export(log: Path, speed: float = 1.0, *, out: Path) -> None:
     )
 
 
-def all_takes_video(speed: int, *, out: Path) -> None:
-    """The nine takes one after another at ``speed`` times, with the speed and the take written in the side panel."""
-    big = ImageFont.truetype(findfont(FontProperties(family="DejaVu Sans", weight="bold")), 120)
-    small = ImageFont.truetype(findfont(FontProperties(family="DejaVu Sans", weight="bold")), 60)
+def sequence_video(parts: list[tuple[Path, str]], speed: int, extra: str, *, out: Path) -> None:
+    """Logs one after another in skelarm's player at ``speed`` times, with the speed written in the side panel and
+    under it each log's label; or, with ``extra``, that line under the speed and the label smaller under it."""
+    bold = findfont(FontProperties(family="DejaVu Sans", weight="bold"))
+    big, small, smaller = (ImageFont.truetype(bold, size) for size in (120, 60, 44))
     # Quality 10 would be lossless H.264, a profile (High 4:4:4 Predictive) that PowerPoint shows as black.
     writer: Any = imageio.get_writer(out, fps=FPS, codec="libx264", quality=9.5, macro_block_size=16)
     with tempfile.TemporaryDirectory() as tmp, writer:
-        for index in range(N_TAKES):
-            part = Path(tmp) / f"take_{index:02d}.mp4"
-            player_export(take_path(index), speed, out=part)
+        for index, (log, label) in enumerate(parts):
+            part = Path(tmp) / f"part_{index:02d}.mp4"
+            player_export(log, speed, out=part)
             reader: Any = imageio.get_reader(part)
             for frame in reader:
                 image = Image.fromarray(frame)
                 draw = ImageDraw.Draw(image)
                 draw.text((822, 250), f"\N{MULTIPLICATION SIGN}{speed}", fill=TITLE_COLOR, font=big)
-                draw.text((822, 410), f"take {index:02d}", fill=TITLE_COLOR, font=small)
+                if extra:
+                    draw.text((822, 410), extra, fill=TITLE_COLOR, font=small)
+                    draw.multiline_text((822, 510), label, fill=TITLE_COLOR, font=smaller)
+                else:
+                    draw.text((822, 410), label, fill=TITLE_COLOR, font=small)
                 writer.append_data(np.asarray(image))
             reader.close()
 
@@ -767,12 +775,13 @@ def takes_media() -> list[Medium]:
             functools.partial(hand_paths, False),
         ),
     ]
+    labelled = [(path, f"take {index:02d}") for index, path in enumerate(takes)]
     items += [
         Medium(
             f"{folder}/all_takes_{speed}x.mp4",
             f"the nine takes one after another, {speed} times as fast",
             takes,
-            functools.partial(all_takes_video, speed),
+            functools.partial(sequence_video, labelled, speed, ""),
         )
         for speed in SPEEDS
     ]
@@ -814,7 +823,37 @@ def takes_starts_media() -> list[Medium]:
                     functools.partial(paths_figure, heading, panels),
                 )
             )
+    items += all_starts_media(folder, "demo", "from the nine takes' starts", "the replay")
     items += per_start_media(folder, "demo", "Replay")
+    return items
+
+
+def all_starts_media(folder: str, which: str, starts: str, replay: str) -> list[Medium]:
+    """ESN #1's, ESN #2's, and the replay's undisturbed runs from a set of starts, each arm's one after another, at
+    each of the speeds."""
+    rows = group("robot_esn1", "replay", which)
+    labels = []
+    for row in rows:
+        k = take_of("robot_esn1", row["origin"])
+        labels.append(f"take {k:02d}'s\nstart" if k is not None else f"unseen {int(row['origin'].split()[1]):02d}")
+    items = []
+    for name, label, who, stem, arm in (
+        ("esn1", "ESN #1", "ESN #1", "robot_esn1", "esn"),
+        ("esn2", "ESN #2", "ESN #2", "robot_esn2", "esn"),
+        ("replay", "Replay", replay, "robot_esn1", "replay"),
+    ):
+        logs = [log_path(stem, arm, start_of(stem, arm, row["origin"])) for row in rows]
+        parts = list(zip(logs, labels, strict=True))
+        items += [
+            Medium(
+                f"{folder}/all_starts_{name}_{speed}x.mp4",
+                f"the undisturbed runs of {who} {starts} one after another, "
+                + ("at their own speed" if speed == 1 else f"{speed} times as fast"),
+                logs,
+                functools.partial(sequence_video, parts, speed, label),
+            )
+            for speed in STARTS_SPEEDS
+        ]
     return items
 
 
@@ -901,6 +940,7 @@ def unseen_media() -> list[Medium]:
                         ),
                     )
                 )
+    items += all_starts_media(folder, "unseen", "from the 36 unseen starts", "the replay of the nearest take")
     items += per_start_media(folder, "unseen", "Replay of the nearest take")
     return items
 
@@ -1071,8 +1111,8 @@ Sections 2 and 3.2 to 3.5. They are not kept in Git;
 | Folder | What it holds |
 | --- | --- |
 | `00_takes` | The takes (Section 2): `hand_paths.png`, `hand_paths_takes_only.png`, `all_takes_2x.mp4`, `all_takes_5x.mp4`, and `take_00` to `take_08`, each with `take.mp4`, `take_joints.png`, and `take_tip.png`. |
-| `3.2_takes_starts` | ESN #1 and ESN #2 against the replay, undisturbed (Sections 3.2 and 3.3): the hand paths from the nine takes' starts and from the 36 unseen starts, and `take_00_start` to `take_08_start`, the runs from each take's start. |
-| `3.3_unseen_starts` | From the unseen starts (Section 3.3): the report's measures (`unseen_*.png`), its joint angles and torques over time (`series_columns`), and `unseen_00` to `unseen_35`, the runs from each unseen start. |
+| `3.2_takes_starts` | ESN #1 and ESN #2 against the replay, undisturbed (Sections 3.2 and 3.3): the hand paths from the nine takes' starts and from the 36 unseen starts, `all_starts_*.mp4`, each arm's runs from the nine takes' starts one after another, and `take_00_start` to `take_08_start`, the runs from each take's start. |
+| `3.3_unseen_starts` | From the unseen starts (Section 3.3): the report's measures (`unseen_*.png`), its joint angles and torques over time (`series_columns`), `all_starts_*.mp4`, each arm's runs from the 36 unseen starts one after another, and `unseen_00` to `unseen_35`, the runs from each unseen start. |
 | `3.4_pushes` | Under the pushes, over {long:g} s (Section 3.4): the hand paths and the distance to the target, and `1x`, `2x`, and `4x`, each with `take_00_start` to `take_08_start`, the runs from each take's start, the progress replay's too. |
 | `3.5_nine_takes_vs_one` | The nine-take ESNs against the one-take ESNs and the replay of take 00 (Section 3.5): the hand paths from the 44 starts take 00 does not start from, and `take_00_start` to `take_08_start` and `unseen_00` to `unseen_35`, the runs of the one-take ESNs and of the replay of take 00 from all 45 starts. ESN #1's and ESN #2's runs from these starts are in `3.2_takes_starts` and `3.3_unseen_starts`. |
 
@@ -1088,6 +1128,8 @@ Sections 2 and 3.2 to 3.5. They are not kept in Git;
 | `00_takes/take_NN/take_tip.png` | its hand path, with its start and end postures |
 | `3.2_takes_starts/paths_esn1_vs_replay_takes_starts.png`, `paths_esn2_…` | the hand paths of ESN #1 (or #2) and of the replay from the nine takes' starts, the takes thick gray behind |
 | `3.2_takes_starts/paths_esn1_vs_replay_unseen_starts.png`, `paths_esn2_…` | the same from the 36 unseen starts, against the replay of the nearest take |
+| `3.2_takes_starts/all_starts_esn1_1x.mp4`, `all_starts_esn1_2x.mp4`, `all_starts_esn1_5x.mp4`, and likewise `esn2` and `replay` | the undisturbed runs of ESN #1, ESN #2, or the replay from the nine takes' starts, take 00's to take 08's, one after another in skelarm's player, at their own speed and at twice and five times it; the speed, the arm, and the start written in the side panel |
+| `3.3_unseen_starts/all_starts_esn1_1x.mp4`, … | the same from the 36 unseen starts, `unseen_00` to `unseen_35`, the replay playing the nearest take |
 | `3.3_unseen_starts/unseen_detour_ratio.png`, `unseen_reference_speed.png`, `unseen_torque.png` | the report's three panels, one a file: the detour ratio, the reference's fastest joint speed, and the largest joint torque from each unseen start, against how far the start is from the start of the take the replay plays (logarithmic vertical axes) |
 | `3.3_unseen_starts/series_columns/joints_esn1_1_undisturbed_take00.png`, … | the report's joint angles (`joints_…`) or torques (`torques_…`) of ESN #1 or #2 over time, one file a column: 1, undisturbed from take 00's start; 2, undisturbed from the unseen start of `unseen_01`; 3 to 5, under the pushes at 1x, 2x, and 4x from take 00's start. The ESN's arm (blue) is over the replay's (orange), the ESN's reference dashed, the take the replay plays thick gray, and in the pushed columns the tip force on top. |
 | `3.4_pushes/paths_esn1_vs_replay_1x.png`, … | the hand paths of ESN #1 (or #2) and of the replay under the pushes at one size, from the nine takes' starts (dots): thick black while a force acts, a cross where the run ends |
@@ -1246,11 +1288,15 @@ def write_media_csv(items: list[Medium]) -> None:
 
 
 def render(items: list[Medium], workers: int) -> None:
-    """Make the files of ``items`` in ``workers`` processes, the videos first, as they take longest."""
+    """Make the files of ``items`` in ``workers`` processes, the videos first, as they take longest: those of many logs
+    one after another, the most logs first, then the pushed runs over 60 s."""
     os.environ["OPENBLAS_NUM_THREADS"] = "1"  # for the processes started from here on
     for item in items:
         (OUT / item.path).parent.mkdir(parents=True, exist_ok=True)
-    ordered = sorted(items, key=lambda item: (not item.path.endswith(".mp4"), "3.4_pushes" not in item.path))
+    ordered = sorted(
+        items,
+        key=lambda item: (not item.path.endswith(".mp4"), -len(item.logs), "3.4_pushes" not in item.path),
+    )
     with ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("spawn")) as pool:
         futures = {pool.submit(item.make, out=OUT / item.path): item for item in ordered}
         for done, future in enumerate(as_completed(futures), start=1):
