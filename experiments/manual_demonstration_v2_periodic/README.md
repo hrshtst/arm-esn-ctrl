@@ -442,12 +442,19 @@ Beside the claims:
 ## The reach and the periodic motion in one ESN (3b)
 
 This part is a proposal. The maintainer confirms its rule and claims before 3b starts,
-and what is changed then is dated.
+and what is changed then is dated. On 2026-11-19, before any run of 3b, the maintainer
+confirmed four points of it: the reach has one target, stage 1's, and not stage 2's
+three; the ellipse is taught by the take by hand alone; 3b has no pushes and no block;
+and claim 9's second stretch on the ellipse lasts 40 s. 3b starts after stage 2's and
+stage 3's branches are brought together, since it needs stage 2's sweep over several
+tasks.
 
 **The ESN** is trained on two tasks: stage 1's nine takes of the reach to (−0.6, 0.4) m
 (context `reach`) and the take of the ellipse by hand (context `ellipse`). Its input
 holds, after the joint angles, one value per task: 1 for the task being done and 0 for
 the other (context scaling 1, not searched). The scripted take is not used in 3b.
+Proposed on 2026-11-19, after stage 2's report 025: the context is fed in as there, so
+that its size does not follow the input scaling (`context_times_input_scaling = false`).
 
 **The search** is 3a's, with both tasks in the score:
 
@@ -490,8 +497,11 @@ A claim holds if it holds for two-task ESN #1 and for two-task ESN #2.
    of the run, in all nine runs of 60 s.
 9. **Back and forth.** From each of the eight starts on the curve, the context goes
    from `ellipse` to `reach` at 16 s, back to `ellipse` at 36 s, and to `reach` again
-   at 66 s. The hand cycles over the five taught periods before the last change, and
-   arrives and holds after it, in all eight runs of 90 s.
+   at 76 s. The hand cycles over the five taught periods before the last change, and
+   arrives and holds after it, in all eight runs of 100 s. (Changed on 2026-11-19,
+   before any run: the second stretch on the ellipse was 30 s, to 66 s, in runs of
+   90 s. It was written for 4 s a loop. The take by hand's five taught periods are
+   25.6 s, and in 3a its ESNs took up to 5.1 s to join the curve.)
 
 The replays keep to their take, so these claims are counts of the ESN's runs alone.
 
