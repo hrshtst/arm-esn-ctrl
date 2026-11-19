@@ -1,0 +1,6 @@
+config = "experiments/demonstrations/ellipse_manual_v2_no_limits.toml"
+command = "experiments/import_demonstrations.py experiments/demonstrations/ellipse_manual_v2_no_limits.toml"
+started = 2026-11-19 09:37:46+09:00
+host = "delbosque"
+commit = "75ad88b3c5db1d22b3b5e040f8c7282a07e6b0a6"
+uncommitted_changes = false

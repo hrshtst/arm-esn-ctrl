@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_periodic/coarse_search.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_periodic/coarse_search.toml --workers 15"
+started = 2026-11-19 09:38:37+09:00
+host = "delbosque"
+commit = "1d43dc0729efa863aa4a3ff38d1a1fbc4fb4fae0"
+uncommitted_changes = false
