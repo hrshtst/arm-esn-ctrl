@@ -148,6 +148,37 @@ The fine search's values around the center:
 The center's spectral radius and ridge are the coarse grid's largest, so the fine search
 goes as far above them as below.
 
+**The fine search** (`20261119-193314-fine_search`, 61 minutes). None of its 81 settings
+passes all 85 runs. The best:
+
+| Leak rate | Spectral radius | Input scaling | Ridge | Runs that pass, of 85 | Reaches that hold, of 45 | Ellipse runs that cycle, of 40 | Median detour ratio | Median curve RMS (mm) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.055 | 1.65 | 0.5 | 10 | 69 | 33 | 36 | 1.048 | 8.65 |
+| 0.17 | 1.65 | 0.22 | 10 | 69 | 35 | 34 | 1.165 | 13.14 |
+| 0.055 | 1.5 | 0.5 | 10 | 68 | 41 | 27 | 1.044 | 7.91 |
+| 0.1 | 1.5 | 1 | 10 | 63 | 41 | 22 | 1.024 | 11.21 |
+| 0.055 | 1.35 | 1 | 10 | 59 | 43 | 16 | 1.015 | 6.46 |
+
+The 20th setting passes 51 runs. Four settings pass 51, and the ranks leave the fourth
+out. Of the 20 best, 16 have the ridge of 10 and nine the spectral radius of 1.65, each
+the fine grid's largest, as the center's were the coarse grid's. The rule has no step
+beyond the fine grid, and the scoring goes on with these 20.
+
+The two tasks again differ. Of the 3,645 reach runs 3,205 hold; 393 arrive and leave
+the target, 42 never arrive, and 5 arrive too late for their 2 s to be seen. Of the
+3,240 ellipse runs 545 cycle, 427 of them with the ridge of 10. Of the 2,695 that do not,
+the hand of 1,317 stays within half a turn over the last five taught periods, that of
+1,076 keeps the pace but is more than 20 mm RMS from the ellipse, that of 241 goes
+around too slowly, that of 45 backwards, and that of 16 too fast.
+
+The reservoir decides as much as the setting. Of the 405 ESNs, 184 hold all nine
+reaches and 29 cycle from all eight starts; 12 do both, 11 of them with the ridge of 10,
+and 11 more fail one run. A setting's five seeds seldom agree on the ellipse: the fifth
+setting above has two seeds that cycle from all eight starts and three that cycle from
+none, and the fourth has two of each. The first two settings are the only ones whose
+five seeds all cycle from at least six starts, and they lose reaches instead: their
+seeds hold five to eight of the nine.
+
 ## The claims
 
 They keep the numbers of the proposal, after 3a's claims 1 to 5. A claim holds if it
