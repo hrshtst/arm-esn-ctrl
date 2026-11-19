@@ -7,10 +7,10 @@
 
 It reads the copies of the runs under ``results/`` (their configurations, run records, and CSV files), the takes
 under ``data/``, and the robot runs' logs and the takes the ESNs were trained on under the storage root, which are
-not kept in Git. Each take in ``TAKES`` has its own search, ESNs, and runs, and its own figures and tables. It
-prints the tables of the report and draws into ``results/summary``:
+not kept in Git. The take in ``TAKES``, the scripted one, has its own search, ESNs, and runs, and its own figures and
+tables. It prints the tables of the report and draws into ``results/summary``:
 
-- ``starts.png``: the curve, the takes' hand paths, and the two sets of start postures;
+- ``starts.png``: the curve, the take's hand path, and the two sets of start postures;
 - ``<take>_search.png``: the coarse search's settings by their runs that cycle, and the fine search's 20 best
   settings scored again with the untaught starts;
 - ``<take>_paths.png``: the hand's paths over the first 8 s, undisturbed, from the starts on the curve and from the
@@ -20,6 +20,8 @@ prints the tables of the report and draws into ``results/summary``:
   on the curve and from an untaught start, under the pushes at each size, and with the block;
 - ``<take>_off_curve.png``: the hand's distance from the curve over time, from the untaught starts, under the
   pushes, and with the block;
+- ``<take>_block_paths.png``: the hand's paths with the block from start 0, from its onset to 4 s after its release,
+  and the ESN's reference over the hold;
 - ``<take>_long.png``: claim 1's runs of 120 s: the hand's distance from the curve over time, and its last five
   loops.
 """
@@ -90,11 +92,14 @@ SCENARIOS: dict[str, tuple[str, tuple[int, ...] | None, tuple[float, float], str
 }
 NAMES = ("leak_rate", "spectral_radius", "input_scaling", "ridge")
 STILL_TURNS = 0.5  # a hand that turns less than this over a run's last five taught periods does not go around
+SPEED_SPAN = 0.5  # the reference's joint speed at the block's release is its change over this long before it (s)
+PATHS_AFTER = 4.0  # the block's hand paths are drawn to this long after the release (s)
 # The stretches of the workspace drawn, x and y (m): all of it, the curve and the paths from the starts on it in
 # their first 8 s, and the curve alone.
 WHOLE_VIEW = ((-0.95, 0.95), (-0.95, 0.95))
 STARTS_VIEW = ((-0.35, 0.45), (0.37, 0.73))
 CURVE_VIEW = ((-0.34, 0.14), (0.40, 0.70))
+BLOCK_VIEW = ((-0.36, 0.18), (0.34, 0.75))  # the curve and how far the released hands go off it
 
 TEXT_COLOR = "#52514e"
 TITLE_COLOR = "#0b0b0b"
@@ -121,6 +126,7 @@ def main() -> None:
             for channel in ("joints", "torques"):
                 figures[f"{name}_{scenario}_{channel}.png"] = functools.partial(plot_series, name, scenario, channel)
         figures[f"{name}_off_curve.png"] = functools.partial(plot_off_curve, name)
+        figures[f"{name}_block_paths.png"] = functools.partial(plot_block_paths, name)
         figures[f"{name}_long.png"] = functools.partial(plot_long, name)
     for file, plot in figures.items():
         plot().savefig(SUMMARY / file, dpi=DPI)
@@ -260,6 +266,35 @@ def off_curve(name: str, state: StateLog, begin: float, end: float) -> tuple[NDA
     return state.times[shown], distances_to_path(hand(state.channel("q")[shown]), cycle(name).curve)
 
 
+def before(state: StateLog, time: float) -> int:
+    """The index of a log's last sample before ``time`` (s)."""
+    return int(np.searchsorted(state.times, time - 1e-9)) - 1
+
+
+def at_release(name: str, run: str, arm: str, start: int) -> tuple[float, float, float, float]:
+    """Where an arm's reference is at the last sample before the block's release, from one start.
+
+    The four are the distance of the reference's hand from the arm's (m), the distance of the reference's hand from the
+    curve (m), the reference's fastest joint speed over the last ``SPEED_SPAN`` before the release (deg/s), and how far
+    the reference's hand moved from the onset to the release, the straight distance between its positions at the last
+    samples before them (m). The onset and the release are the run's ``[disturbance]``'s.
+    """
+    block = config(run_name(run))["disturbance"]
+    state = log(run, arm, start)
+    q, reference = state.channel("q"), state.channel("q_ref")
+    release, earlier, onset = (
+        before(state, time) for time in (block["release"], block["release"] - SPEED_SPAN, block["onset"])
+    )
+    arm_hand, reference_hand, reference_at_onset = hand(np.array([q[release], reference[release], reference[onset]]))
+    speed = np.degrees(np.abs(reference[release] - reference[earlier]).max()) / SPEED_SPAN
+    return (
+        float(np.linalg.norm(reference_hand - arm_hand)),
+        float(distances_to_path(reference_hand[None], cycle(name).curve)[0]),
+        float(speed),
+        float(np.linalg.norm(reference_hand - reference_at_onset)),
+    )
+
+
 @functools.cache
 def phase(name: str, run: str, arm: str, start: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """The times (s) of one arm's log and the hand's angle about the curve's center then, unwrapped (rad)."""
@@ -347,7 +382,7 @@ def plot_starts() -> Figure:
     first = next(iter(TAKES))
     fig = Figure(figsize=(7.6, 7.4), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(
-        "The curve, the takes' hand paths, and the start postures by their hands;"
+        "The curve, the take's hand path, and the start postures by their hands;"
         "\nthe starts on the curve numbered by the curve's angle, 45° apart, 0 the take's start",
         color=TITLE_COLOR,
     )
@@ -368,7 +403,7 @@ def plot_starts() -> Figure:
     ax.set_ylabel("y (m)", color=TEXT_COLOR)
     handles = [
         Line2D([], [], color=GOAL_COLOR, linewidth=1.4, label="the curve"),
-        Line2D([], [], color=TAUGHT_COLOR, linewidth=4.0, label="a take"),
+        Line2D([], [], color=TAUGHT_COLOR, linewidth=4.0, label="the take"),
         Line2D([], [], linestyle="", marker="o", color=TITLE_COLOR, label="start on the curve"),
         Line2D([], [], linestyle="", marker="s", color=REPLAY_COLOR, label="untaught start"),
     ]
@@ -655,6 +690,44 @@ def plot_off_curve(name: str) -> Figure:
         axes[row, 0].set_ylabel("from the curve (mm)", color=TEXT_COLOR)
     for ax in axes[-1]:
         ax.set_xlabel("time (s)", color=TEXT_COLOR)
+    return fig
+
+
+def plot_block_paths(name: str) -> Figure:
+    """The hand's paths with the block from start 0, from its onset to ``PATHS_AFTER`` after its release: a panel per
+    ESN, the ESN's arm over the replay's, and the ESN's reference over the hold."""
+    block = config(run_name(stem(name, "block_robot_esn", "1")))["disturbance"]
+    onset, release = block["onset"], block["release"]
+    fig = Figure(figsize=(11, 6.4), facecolor=SURFACE_COLOR, layout="constrained")
+    fig.suptitle(
+        f"{TAKES[name]['label']}: the hand's paths with the tip held from {onset:g} s to {release:g} s, from start 0,"
+        f" until {PATHS_AFTER:g} s after the release;\nthe ESN's arm (blue) over the replay's (orange); dashed: the"
+        " ESN's reference over the hold; purple: the curve",
+        color=TITLE_COLOR,
+    )
+    axes = fig.subplots(1, len(ESNS))
+    for ax, (label, n) in zip(axes, ESNS.items(), strict=True):
+        workspace(ax, name, BLOCK_VIEW, f"{label} and the replay")
+        run = stem(name, "block_robot_esn", n)
+        for arm, color in (("esn", ESN_COLORS[label]), ("replay", REPLAY_COLOR)):
+            state = log(run, arm, 0)
+            points = hand(state.channel("q")[window(state, onset, release + PATHS_AFTER)])
+            ax.plot(points[:, 0], points[:, 1], color=color, linewidth=1.2, zorder=ARM_ZORDERS[arm])
+            ax.plot(*points[0], marker="X", color=color, markeredgecolor=TITLE_COLOR, markersize=9, zorder=5)
+            if arm == "esn":
+                reference = hand(state.channel("q_ref")[window(state, onset, release)])
+                ax.plot(*reference.T, color=color, linewidth=1.2, linestyle="--", zorder=REFERENCE_ZORDER)
+        ax.set_xlabel("x (m)", color=TEXT_COLOR)
+    axes[0].set_ylabel("y (m)", color=TEXT_COLOR)
+    handles = [
+        Line2D([], [], color=color, linewidth=1.4, label=f"{label}'s arm") for label, color in ESN_COLORS.items()
+    ]
+    handles += [
+        Line2D([], [], color=TEXT_COLOR, linewidth=1.2, linestyle="--", label="the ESN's reference over the hold"),
+        Line2D([], [], color=REPLAY_COLOR, linewidth=1.4, label="the replay's arm"),
+        Line2D([], [], linestyle="", marker="X", color=TEXT_COLOR, markersize=9, label="where the tip is held"),
+    ]
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), frameon=False, labelcolor=TEXT_COLOR)
     return fig
 
 
@@ -988,6 +1061,28 @@ def print_block(name: str) -> None:
         print(
             f"  the ESN's smaller than the replay's: largest torque after in {smaller(esn, replay, 'torque_after_nm')},"
             f" largest off the curve after in {smaller(esn, replay, 'off_curve_after_m')}"
+        )
+    print(
+        "where the reference is at the last sample before the release: its hand from the arm's and from the curve,"
+        f" its fastest joint speed over the last {SPEED_SPAN:g} s, and how far its hand moved from the onset"
+    )
+    for label, n in ESNS.items():
+        run = stem(name, "block_robot_esn", n)
+        measures = {
+            arm: np.array([at_release(name, run, arm, int(row["start"])) for row in rows(run, arm)]).T.tolist()
+            for arm in ("esn", "replay")
+        }
+        for arm, (ahead, off, speed, moved) in measures.items():
+            print(
+                f"{label} {arm:6s}: from the arm's hand {spread(ahead, '.0f', 1e3)} mm, off the curve"
+                f" {spread(off, '.1f', 1e3)} mm, speed {spread(speed, '.1f')} deg/s, moved"
+                f" {spread(moved, '.0f', 1e3)} mm"
+            )
+        after = column(rows(run, "esn"), "off_curve_after_m")
+        farther = sum(a > r for a, r in zip(after, measures["esn"][1], strict=True))
+        print(
+            f"  the ESN's hand farther off the curve in the {config(run_name(run))['evaluation']['after_window']:g} s"
+            f" after the release than its reference was at the release: from {farther} of {len(after)} starts"
         )
 
 
