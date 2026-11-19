@@ -6,9 +6,9 @@
     uv run python reports/025-three-targets-by-context/make_figures.py
 
 It reads the copies of the runs under ``results/`` (their configurations, run records,
-and CSV files), the takes under ``data/``, and the sweeps' runs and the robot runs' logs
-under the storage root, which are not kept in Git. It prints the tables of the report
-and draws into ``results/summary``:
+and CSV files), the takes and the demonstrations' logs under ``data/``, and the sweeps'
+runs and the robot runs' logs under the storage root, which are not kept in Git. It
+prints the tables of the report and draws into ``results/summary``:
 
 - ``starts.png``: the takes to the three targets and the two sets of start postures
   (Section 2);
@@ -30,8 +30,8 @@ and draws into ``results/summary``:
   context changes, one run of each change, against the replay's (Sections 3.4 and 3.5);
 - ``switch_distance.png``: the hand's distance to the new target over time from the
   change, in every run that changes (Sections 3.4 and 3.5);
-- ``demonstration.png``: the run pushed by hand in the robot app while the target
-  changes (Section 3.6).
+- ``demonstration_esn1.png``, ``demonstration_esn2.png``: each ESN's run pushed by hand
+  in the robot app while the target changes, the pushes shaded over time (Section 3.6).
 """
 
 from __future__ import annotations
@@ -40,7 +40,6 @@ import csv
 import filecmp
 import functools
 import hashlib
-import itertools
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -51,7 +50,7 @@ from matplotlib.axes import Axes
 from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap, ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.patches import Circle, Rectangle
+from matplotlib.patches import Circle, Patch, Rectangle
 from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog
 
@@ -72,8 +71,12 @@ TRACKER = "pd_w20_z0.4"  # the one tracker's directory in a robot run
 DT = 0.01  # the ESNs' period (s)
 HOLD = 2.0  # the hold window after arrival (s)
 DPI = 90
-# The run of ESN #1 pushed by hand in the robot app while the target changes, saved by the maintainer.
-DEMONSTRATION = DATA / "recorded_forces" / "hand_pushes_esn1.sklog.npz"
+# The runs pushed by hand in the robot app while the target changes, one of each ESN, saved there by the maintainer.
+RECORDED = DATA / "recorded_forces"
+DEMONSTRATIONS = {
+    "ESN #1": RECORDED / "20261119-094959-20261119-000048-esn1_lr0.17_sr1.05_is1_ridge10_seed1_pd_w20_z0.4.sklog.npz",
+    "ESN #2": RECORDED / "20261119-095414-20261119-000238-esn2_lr0.17_sr1.2_is1_ridge10_seed5_pd_w20_z0.4.sklog.npz",
+}
 
 with ARM_CONFIG.open("rb") as _f:
     _ARM = tomllib.load(_f)
@@ -99,7 +102,13 @@ JUMP_SPEED = 500.0
 JUMP_TORQUE = 20.0
 NEAR = 45.0  # an unseen start near the start of the take the replay plays: within this, over both joints (deg)
 LOW_HAND = -0.2  # no take's hand starts below this (y, m)
-PUSH_FORCE = 1.0  # a push by hand in the demonstration: the tip force above this (N)
+# The window after each change of context in a demonstration, whose peaks are tabulated apart from the rest (s).
+AFTER_CHANGE = 2.0
+# The time after each push's release left out, with the pushes, where a demonstration's arm is compared with its
+# reference (s).
+AFTER_RELEASE = 0.5
+# The last part of a stretch of a demonstration, over which the hand's speed at the stretch's end is measured (s).
+SPEED_WINDOW = 0.1
 
 TEXT_COLOR = "#52514e"
 TITLE_COLOR = "#0b0b0b"
@@ -111,6 +120,7 @@ BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#2a78d6", "#256abf", "#1c5
 ESN_COLOR, REPLAY_COLOR = "#2a78d6", "#eb6834"
 ESN_COLORS = {"ESN #1": "#1c5cab", "ESN #2": "#6da7ec"}  # where both are drawn
 TARGET_COLORS = {"A": "#7b3fa0", "B": "#1baf7a", "C": "#eda100"}  # the recorder's purple, teal, and orange
+PUSH_COLOR, PUSH_ALPHA = TITLE_COLOR, 0.2  # the band over a push in the demonstrations' panels over time
 # Where each target's letter goes from it, off the paths into it (pt).
 LABEL_OFFSETS = {"A": (-16, 6), "B": (6, 8), "C": (6, -16)}
 # The layers of the lines over time: the ESN's arm on top, its reference (dashed) under it, the replay's below.
@@ -133,17 +143,10 @@ def main() -> None:
         for channel in ("joints", "torques"):
             figures[f"{channel}_esn{n}.png"] = functools.partial(plot_series, name, channel)
             figures[f"switch_{channel}_esn{n}.png"] = functools.partial(plot_switch_series, name, channel)
-    # The demonstration is not recorded yet; these branches go once its log is under data/.
-    recorded = DEMONSTRATION.exists()
-    if recorded:
-        figures["demonstration.png"] = functools.partial(plot_demonstration, DEMONSTRATION)
-    else:
-        print(f"The demonstration is not recorded yet ({DEMONSTRATION.relative_to(REPORT)}): no demonstration.png")
+        figures[f"demonstration_esn{n}.png"] = functools.partial(plot_demonstration, name)
     for name, plot in figures.items():
         plot().savefig(SUMMARY / name, dpi=DPI)
     print_tables()
-    if recorded:
-        print_demonstration(DEMONSTRATION)
     print(f"\nWrote {', '.join(figures)} to {SUMMARY}")
 
 
@@ -279,6 +282,12 @@ def start_posture(task: str, row: dict[str, Any]) -> NDArray[np.float64]:
     return extra_starts("robot_esn1.toml", "unseen")[int(row["origin"].split()[1])]
 
 
+@functools.cache
+def demonstration(name: str) -> StateLog:
+    """The run of an ESN pushed by hand in the robot app while the target changes, from its saved log."""
+    return StateLog.load(DEMONSTRATIONS[name])
+
+
 # ---------------------------------------------------------------------------- measures
 
 
@@ -366,6 +375,18 @@ def stretches(mask: NDArray[np.bool_]) -> list[tuple[int, int]]:
     """The stretches of a mask where it holds, each as its first index and the index after its last."""
     edges = np.flatnonzero(np.diff(np.concatenate(([0], mask.astype(int), [0]))))
     return [(int(first), int(after)) for first, after in zip(edges[::2], edges[1::2], strict=True)]
+
+
+def changes_and_pushes(state: StateLog) -> tuple[list[int], list[tuple[int, int]]]:
+    """A robot app's log over the task: its changes of context, each as the first step with the new one, and its
+    pushes, each as a stretch of steps where the tip force is not zero. The force is exactly zero while the tip is
+    not dragged, so one drag is one push."""
+    task = state.times > -1e-9
+    first = int(np.flatnonzero(task)[0])
+    named = np.argmax(state.channel("context"), axis=1)
+    changes = [first + 1 + int(k) for k in np.flatnonzero(np.diff(named[first:]))]
+    force = np.linalg.norm(state.channel("ext_force"), axis=1)
+    return changes, stretches(task & (force > 0.0))
 
 
 # ---------------------------------------------------------------------------- figures
@@ -830,23 +851,23 @@ def plot_switch_distance() -> Figure:
     return fig
 
 
-def plot_demonstration(log_path: Path) -> Figure:
-    """The run pushed by hand in the robot app while the target changes, from its saved log: the hand's path in the
-    color of the target its context names, and over time the joint angles and their reference, the torques, the
-    tip force, the hand's distance to that target, and the context."""
-    state = StateLog.load(log_path)
+def plot_demonstration(name: str) -> Figure:
+    """The run of an ESN pushed by hand in the robot app while the target changes, from its saved log: the hand's
+    path in the color of the target its context names, and over time the joint angles and their reference, the
+    torques, the tip force, the hand's distance to that target, and the context, each push shaded."""
+    state = demonstration(name)
     times = state.times
     task = times > -1e-9
     points = hand(state.channel("q"))
     labels, named, distance = named_targets(state, points)
-    changes = times[1:][np.diff(named) != 0]
+    changes, pushes = changes_and_pushes(state)
     force = np.linalg.norm(state.channel("ext_force"), axis=1)
 
     fig = Figure(figsize=(17, 10), facecolor=SURFACE_COLOR, layout="constrained")
     fig.suptitle(
-        "ESN #1 in the robot app, pushed by hand while the target changes: the hand's path in the color of the target"
-        " the context names;\nthick black: while a force acts; diamonds: where the hand is when the context changes"
-        " (gray lines)",
+        f"{name} in the robot app, pushed by hand while the target changes: the hand's path in the color of the target"
+        " the context names;\nthick black, and shaded over time: while a force acts; diamonds: where the hand is when"
+        " the context changes (gray lines)",
         color=TITLE_COLOR,
     )
     grid = fig.add_gridspec(6, 2, width_ratios=[1.0, 1.5], height_ratios=[1.0, 1.0, 1.0, 0.8, 1.0, 0.45])
@@ -858,8 +879,7 @@ def plot_demonstration(log_path: Path) -> Figure:
     pushed = np.where((task & (force > 0.0))[:, None], points, np.nan)
     ax.plot(pushed[:, 0], pushed[:, 1], color=TITLE_COLOR, linewidth=2.4, zorder=3.5)
     ax.plot(*points[task][0], marker="o", color=TARGET_COLORS[labels[named[task][0]]], markersize=5, zorder=4)
-    for time in changes:
-        k = int(np.searchsorted(times, time))
+    for k in changes:
         color = TARGET_COLORS[labels[named[k]]]
         ax.plot(*points[k], marker="D", color=color, markeredgecolor=TITLE_COLOR, markersize=6, zorder=6)
     ax.set_xlabel("x (m)", color=TEXT_COLOR)
@@ -870,8 +890,10 @@ def plot_demonstration(log_path: Path) -> Figure:
         other.sharex(series[0])
     for row, ax_ in enumerate(series):
         style(ax_)
-        for time in changes:
-            ax_.axvline(time, color=TEXT_COLOR, linewidth=1.0, zorder=1.8)  # above the grid
+        for k in changes:
+            ax_.axvline(times[k], color=TEXT_COLOR, linewidth=1.0, zorder=1.8)  # above the grid
+        for a, b in pushes:
+            ax_.axvspan(times[a], times[b - 1], color=PUSH_COLOR, alpha=PUSH_ALPHA, linewidth=0.0, zorder=1.0)
         ax_.set_xlim(times[0], times[-1])
         if row < len(series) - 1:
             ax_.tick_params(labelbottom=False)
@@ -902,18 +924,23 @@ def plot_demonstration(log_path: Path) -> Figure:
         Line2D([], [], color=ESN_COLOR, linewidth=1.0, linestyle="--", label="its reference"),
         Line2D([], [], color=joint_colors[0], linewidth=1.0, label="joint 1's torque"),
         Line2D([], [], color=joint_colors[1], linewidth=1.0, label="joint 2's torque"),
+        Patch(facecolor=PUSH_COLOR, alpha=PUSH_ALPHA, label="a push"),
     ]
     handles += [Line2D([], [], color=TARGET_COLORS[label], linewidth=2.0, label=f"target {label}") for label in labels]
     fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), frameon=False, labelcolor=TEXT_COLOR)
     return fig
 
 
-def print_demonstration(log_path: Path) -> None:
-    """The run pushed by hand in the robot app, from its saved log: where it starts, the changes of context, the
-    pushes, whether the hand arrives at each target the context names, and the reference's fastest joint speed and
-    the largest torque."""
-    print("\n== The demonstration: ESN #1 in the robot app, pushed by hand while the target changes")
-    state = StateLog.load(log_path)
+def print_demonstration(name: str) -> None:
+    """The run of an ESN pushed by hand in the robot app, from its saved log: where it starts; its changes of
+    context and its pushes; the stretches between events, and whether the hand arrives at the named target in each;
+    the reference's fastest joint speed and the largest torque, over the run, after each change, and elsewhere; and
+    how far the arm is from its reference where no hand acts.
+
+    The events are the task's start, each change of context, and each push's release. A stretch runs from an event
+    to the next push's onset, the next change, or the run's end."""
+    print(f"\n== The demonstration of {name}: in the robot app, pushed by hand while the target changes")
+    state = demonstration(name)
     times = state.times
     task = times > -1e-9
     points = hand(state.channel("q"))
@@ -924,30 +951,76 @@ def print_demonstration(log_path: Path) -> None:
         f"{times[-1]:.1f} s after a warm-up of {-times[0]:.1f} s; from ({start[0]:.0f}, {start[1]:.0f}) deg, the hand"
         f" at ({points[first, 0]:.2f}, {points[first, 1]:.2f}) m, with the context {labels[named[first]]}"
     )
-    changes = [first + 1 + int(k) for k in np.flatnonzero(np.diff(named[first:]))]
+    changes, pushes = changes_and_pushes(state)
+    ends = sorted([*changes, *(a for a, _ in pushes), len(times)])  # the steps where a stretch ends
+
+    def end_of(k: int) -> int:
+        """The end of the stretch from step ``k``: the first push's onset or change after it, or the run's end."""
+        return next(end for end in ends if end > k)
+
+    print("The changes of context: time (s) | from | to | the hand's distance to the new target then (mm)")
     for k in changes:
-        print(f"  at {times[k]:.2f} s the context changes from {labels[named[k - 1]]} to {labels[named[k]]}")
+        print(f"  {times[k]:.2f} | {labels[named[k - 1]]} | {labels[named[k]]} | {1e3 * distance[k]:.0f}")
     force = np.linalg.norm(state.channel("ext_force"), axis=1)
-    pushes = stretches(task & (force > PUSH_FORCE))
-    print(f"{len(pushes)} pushes, where the tip force is above {PUSH_FORCE:g} N:")
-    for a, b in pushes:
-        moved = np.linalg.norm(points[a:b] - points[a], axis=1).max()
+    gaps = np.degrees(np.abs(state.channel("q") - state.channel("q_ref"))).max(axis=1)  # the larger joint's
+    print(
+        f"{len(pushes)} pushes, where the tip force is not zero: push | onset (s) | duration (s) | largest force (N) |"
+        " the hand moved, from the onset to the release (mm) | the largest difference of a joint's angle from its"
+        " reference (deg) | context | the hand's distance to the named target (mm): at the onset | at the release |"
+        " farthest from the onset to the next push's onset, change, or the run's end"
+    )
+    for i, (a, b) in enumerate(pushes, start=1):
         print(
-            f"  from {times[a]:.2f} s for {(b - a) * state.extra['robot_app']['dt']:.2f} s, at most"
-            f" {force[a:b].max():.1f} N, with the context {labels[named[a]]}: the hand goes {1e3 * moved:.0f} mm"
-            " from where it was at the onset"
+            f"  {i} | {times[a]:.2f} | {(b - a) * state.extra['robot_app']['dt']:.2f} | {force[a:b].max():.1f} |"
+            f" {1e3 * np.linalg.norm(points[b] - points[a]):.0f} | {gaps[a:b].max():.1f} | {labels[named[a]]} |"
+            f" {1e3 * distance[a]:.0f} | {1e3 * distance[b]:.0f} | {1e3 * distance[a : end_of(a)].max():.0f}"
         )
-    print("Each stretch of one context: when the hand arrives within the goal from the stretch's start, and its end")
-    for a, b in itertools.pairwise([first, *changes, len(times)]):
-        label = labels[named[a]]
+    begins = sorted(
+        [(first, "the start"), *((k, f"the change to {labels[named[k]]}") for k in changes)]
+        + [(b, f"push {i}'s release") for i, (_, b) in enumerate(pushes, start=1)]
+    )
+    print(
+        "The stretches between events: from (s) | to (s) | begun by | context | the hand's distance to the named"
+        " target at the start (mm) | the nearest (mm) | within the goal, from the start | the distance at the end"
+        f" (mm) | the hand's speed at the end, over the last {SPEED_WINDOW:g} s (mm/s)"
+    )
+    for a, what in begins:
+        b = end_of(a)
         inside = np.flatnonzero(distance[a:b] <= TOLERANCE)
-        arrival = f"arrives after {times[a + inside[0]] - times[a]:.2f} s" if len(inside) else "never arrives"
+        if distance[a] <= TOLERANCE:
+            arrival = "already within it"
+        elif len(inside):
+            arrival = f"arrives after {times[a + inside[0]] - times[a]:.2f} s"
+        else:
+            arrival = "does not arrive"
+        last = max(int(np.searchsorted(times, times[b - 1] - SPEED_WINDOW - 1e-9)), a)
+        speed = np.linalg.norm(points[b - 1] - points[last]) / (times[b - 1] - times[last])
         print(
-            f"  {times[a]:.2f} to {times[b - 1]:.2f} s, the context {label}: {arrival};"
-            f" at the end {1e3 * distance[b - 1]:.1f} mm from {label}"
+            f"  {times[a]:.2f} | {times[min(b, len(times) - 1)]:.2f} | {what} | {labels[named[a]]} |"
+            f" {1e3 * distance[a]:.0f} | {1e3 * distance[a:b].min():.0f} | {arrival} | {1e3 * distance[b - 1]:.0f} |"
+            f" {1e3 * speed:.0f}"
         )
+    print("The reference's fastest joint speed (deg/s) | the largest torque (N m):")
     speed, torque = peaks(state, task)
-    print(f"over the run: the reference's fastest joint speed {speed:.1f} deg/s, the largest torque {torque:.2f} N m")
+    print(f"  over the run | {speed:.1f} | {torque:.2f}")
+    windows = [(times >= times[k]) & (times < times[k] + AFTER_CHANGE) for k in changes]
+    for k, window in zip(changes, windows, strict=True):
+        speed, torque = peaks(state, window)
+        print(
+            f"  the {AFTER_CHANGE:g} s from the change at {times[k]:.2f} s ({labels[named[k - 1]]} →"
+            f" {labels[named[k]]}) | {speed:.1f} | {torque:.2f}"
+        )
+    # peaks takes the differences of neighboring samples, so each part outside the windows is measured on its own.
+    steps = np.arange(len(times))
+    outside = [peaks(state, (steps >= a) & (steps < b)) for a, b in stretches(task & ~np.any(windows, axis=0))]
+    print(f"  outside those | {max(s for s, _ in outside):.1f} | {max(t for _, t in outside):.2f}")
+    pushed = np.any([(times >= times[a]) & (times < times[b] + AFTER_RELEASE) for a, b in pushes], axis=0)
+    free = np.flatnonzero(task & ~pushed)
+    k = free[np.argmax(gaps[free])]
+    print(
+        f"Outside the pushes and the {AFTER_RELEASE:g} s after each release, a joint's angle is at most"
+        f" {gaps[k]:.2f} deg from its reference (at {times[k]:.2f} s)"
+    )
 
 
 # ---------------------------------------------------------------------------- tables
@@ -959,6 +1032,8 @@ def print_tables() -> None:
     print_claims_1_2()
     print_claim_3()
     print_switches()
+    for name in ESNS:
+        print_demonstration(name)
     print_settings()
     print_checks()
 
@@ -1337,6 +1412,58 @@ def print_checks() -> None:
         order = np.argsort(column(replays_, "peak_torque_nm"))
         picks[label] = replays_[order[len(order) // 2 - 1]]["origin"]
     print(f"the unseen starts shown are those of the rule: {picks == UNSEEN_SHOWN}")
+    print_demonstration_checks()
+
+
+def print_demonstration_checks() -> None:
+    """The demonstrations' logs against the storage root's, and their ESNs and trackers against the robot runs'."""
+    for name, n in ESNS.items():
+        copy = DEMONSTRATIONS[name]
+        same = filecmp.cmp(copy, storage_root() / "data" / RECORDED.name / copy.name, shallow=False)
+        app, tracking = demonstration(name).extra["robot_app"], demonstration(name).extra["tracking"]
+        config = config_of(robot(n))
+        esn, tracker = Path(config["esn"]["model"]).parent.name, config["tracker"]
+        agree = (
+            [tracking["law"]] == tracker["laws"]
+            and [tracking["omega"]] == tracker["omegas"]
+            and [tracking["damping"]] == tracker["dampings"]
+            and tracking["control_period"] == tracker["control_period"]
+            and tracking["reference_velocity"] == tracker["reference_velocity"]
+        )
+        dirty = " WITH UNCOMMITTED CHANGES" if app["uncommitted_changes"] else ""
+        print(f"the demonstration of {name}, recorded at {app['commit'][:7]}{dirty}:")
+        print(f"  {copy.relative_to(REPORT)} equals the storage root's file: {same}")
+        print(f"  it runs the ESN of {robot(n)}, {esn}: {app['name'] == esn}")
+        print(
+            f"  its tracker is that of {robot(n)}.toml ({tracking['law']}, omega {tracking['omega']:g}, damping"
+            f" {tracking['damping']:g}, every {tracking['control_period']:g} s, with the reference's velocity"
+            f" {tracking['reference_velocity']}): {agree}"
+        )
+        print_first_reach(name, n)
+
+
+def print_first_reach(name: str, n: str) -> None:
+    """A demonstration's first reach against the undisturbed run of its ESN from take demo_00's start with the
+    context A, which it should equal until its first change of context: the arrival times, and the largest
+    difference in joint angle between the two logs up to that change."""
+    state = demonstration(name)
+    stem = robot(n)
+    run = log(stem, "esn", "A", start_of(stem, "A", TAKE_SHOWN))
+    run_arrival = float(next(row for row in rows(stem, "esn", "A") if row["origin"] == TAKE_SHOWN)["arrival_time_s"])
+    task = state.times > -1e-9
+    first = int(np.flatnonzero(task)[0])
+    labels, named, distance = named_targets(state, hand(state.channel("q")))
+    end = min(changes_and_pushes(state)[0][0], len(run.times))  # the first change, within the undisturbed run
+    inside = np.flatnonzero(distance[first:end] <= TOLERANCE)
+    arrival = float(state.times[first + inside[0]]) if len(inside) else np.nan
+    gaps = np.degrees(np.abs(state.channel("q")[:end] - run.channel("q")[:end])).max(axis=1)
+    same = bool(gaps[0] <= 0.05 and labels[named[first]] == "A" and np.array_equal(state.times[:end], run.times[:end]))
+    print(
+        f"  its first reach, to {state.times[end]:.2f} s, against {stem}'s run from take demo_00's start with the"
+        f" context A (the same start posture, context, and clock: {same}): arrives at {arrival:.2f} s and"
+        f" {run_arrival:.2f} s, the joint angles differ by at most {gaps.max():.4f} deg; within 0.01 s and 0.05 deg:"
+        f" {same and abs(arrival - run_arrival) <= 0.01 and gaps.max() <= 0.05}"
+    )
 
 
 def print_switch_checks() -> None:
