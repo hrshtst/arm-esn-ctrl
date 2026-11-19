@@ -6,9 +6,9 @@
     uv run python reports/028-a-reach-and-a-periodic-motion-in-one-esn/make_figures.py
 
 It reads the copies of the runs under ``results/`` (their configurations, run records, and CSV files), the copies of
-report 023's and report 027's robot runs under their own ``results/``, and the searches' runs, the robot runs' logs,
-and the takes the ESNs were trained on under the storage root, which are not kept in Git. It prints the tables of the
-report and draws into ``results/summary``:
+report 023's and report 027's robot runs under their own ``results/``, and the searches' runs, the robot runs' logs
+(and those of report 027's ESNs from the starts on the curve), and the takes the ESNs were trained on under the storage
+root, which are not kept in Git. It prints the tables of the report and draws into ``results/summary``:
 
 - ``starts.png``: the target, the ellipse, the ten takes' hand paths, and the four sets of start postures;
 - ``search.png``: the fine search's settings by their reaches that hold and their ellipse runs that cycle, and the
@@ -81,6 +81,7 @@ EACH_TASK, TO_REACH, TO_ELLIPSE, BACK_AND_FORTH = (
 )
 # The ESNs that do one task, ESN #1 and ESN #2 of these reports, whose robot runs are compared with claim 6's.
 ONE_TASK = {"reach": "023-one-target-from-many-starts", "ellipse": "027-a-periodic-motion-by-hand"}
+ONE_TASK_ELLIPSE = "manual_demonstration_v2_periodic"  # the experiment of report 027's runs under the storage root
 SEARCHES = {
     "coarse_search": "The coarse search",
     "fine_search": "The fine search",
@@ -91,6 +92,18 @@ BEST = 5  # the best settings of the coarse and the fine search printed
 STILL_TURNS = 0.5  # a hand that turns less than this over a run's last five taught periods does not go around
 ON_CURVE = 8  # the starts on the curve, an eighth of a loop apart; start 0 is the ellipse take's
 UNSEEN_SHOWN = "unseen 1"  # the unseen start drawn over time with the reach, report 023's
+# How the motions the text describes are taken from the logs. A reach that holds swings if, after the hand first
+# enters the goal, its distance to the target rises by SWING above the nearest it has come since (m). A hand within RIM
+# of the arm's full reach is at the rim of the workspace (m). Joint 1 within AT_ELLIPSE is where the ellipse was
+# taught, the take's 33 to 78 deg and a margin (deg).
+SWING = 0.010
+RIM = 0.05
+AT_ELLIPSE = (30.0, 85.0)
+EARLY = 20.0  # the first seconds of the runs from the starts on the curve, where the hand may leave it (s)
+MOVE = 1.0  # the first seconds after a change, over which joint 1's move is taken (s)
+REFERENCE_AT = 0.4  # when after claim 8's change the reference's joint 1 is taken (s)
+AFTER = 12.0  # the seconds after claim 8's change over which joint 1's largest and smallest are taken (s)
+BEFORE = 6.0  # the seconds before claim 7's change over which the reference's fastest joint speed is taken (s)
 # The scenarios drawn over time: the robot run, the task it starts with, the time drawn (s), and the figure's title.
 # Their starts are series_starts'.
 SCENARIOS: dict[str, tuple[str, str, tuple[float, float], str]] = {
@@ -208,6 +221,14 @@ def log(run: str, arm: str, task: str, start: int) -> StateLog:
     return StateLog.load(path / task / TRACKER / f"{arm}_{start:02d}.sklog.npz")
 
 
+def one_task_log(n: str, start: int) -> StateLog:
+    """The log of report 027's ESN #``n``, which does the ellipse alone, from a start on the curve, under the storage
+    root."""
+    results = REPORTS / ONE_TASK["ellipse"] / "results"
+    path = resolve_run_path(f"results/{ONE_TASK_ELLIPSE}/{run_name(f'{EACH_TASK}{n}', results)}")
+    return StateLog.load(path / TRACKER / f"esn_{start:02d}.sklog.npz")
+
+
 def duration(run: str, task: str) -> float:
     """How long a robot run that starts with ``task``'s context lasts, after the warm-up (s)."""
     evaluation = config_of(run)["evaluation"]
@@ -301,9 +322,9 @@ def clock(run: str, task: str) -> NDArray[np.float64]:
 
 
 @functools.cache
-def joints(run: str, arm: str, task: str, start: int) -> NDArray[np.float64]:
-    """A run's joint angles at ``clock``'s times (rad)."""
-    return task_joint_angles(log(run, arm, task, start), DT, duration(run, task))
+def joints(run: str, arm: str, task: str, start: int, channel: str = "q") -> NDArray[np.float64]:
+    """A run's joint angles at ``clock``'s times (rad), or with ``channel`` ``q_ref`` its reference's."""
+    return task_joint_angles(log(run, arm, task, start), DT, duration(run, task), channel)
 
 
 @functools.cache
@@ -321,6 +342,24 @@ def to_target(run: str, arm: str, task: str, start: int) -> NDArray[np.float64]:
 def off_curve(run: str, arm: str, task: str, start: int) -> NDArray[np.float64]:
     """A run's distance from the ellipse at ``clock``'s times (m)."""
     return distances_to_path(places(run, arm, task, start), cycle().curve)
+
+
+def start_to_target(start: int) -> float:
+    """How far a start posture of the reach puts the hand from the target (m)."""
+    return float(np.linalg.norm(hand(np.array([setups()["reach"].starts[start].q]))[0] - TARGET))
+
+
+def full_reach() -> float:
+    """How far the hand reaches from the base, the arm stretched (m)."""
+    return float(sum(link.prop.length for link in SKELETON.links[1:]))
+
+
+def joint_1_move(run: str, task: str, start: int, time: float) -> float:
+    """How far joint 1 of an ESN's arm moves in the first ``MOVE`` s after ``time``: its largest less its smallest
+    (deg)."""
+    times = clock(run, task)
+    q1 = np.degrees(joints(run, "esn", task, start)[index_at(times, time) : index_at(times, time + MOVE) + 1, 0])
+    return float(q1.max() - q1.min())
 
 
 def holds(row: dict[str, Any]) -> bool:
@@ -1204,6 +1243,7 @@ def print_esns() -> None:
     print("the reach takes' joint 1 at their rest (deg): " + ", ".join(f"{k} {v:.0f}" for k, v in rests.items()))
     q1 = np.degrees(setups()["ellipse"].demos["demo_00_filtered"][:, 0])
     print(f"the ellipse take's joint 1: {q1.min():.0f} to {q1.max():.0f} deg")
+    print(f"the nearest the ellipse comes to the target: {distances_to_path(TARGET[None, :], cycle().curve)[0]:.3f} m")
     tracker = config_of(f"{EACH_TASK}1")["tracker"]
     print(
         f"the tracker: {tracker['laws']}, omega {tracker['omegas']} rad/s, damping ratio {tracker['dampings']},"
@@ -1274,6 +1314,80 @@ def print_reach() -> None:
             )
     print_table(header, body)
     print(f"  {len(body)} do not hold; they go out to {1e3 * min(farthest):.1f} to {1e3 * max(farthest):.1f} mm")
+    print_reach_leaving()
+    print_detours()
+
+
+def print_reach_leaving() -> None:
+    """The reaches that hold but leave the goal after their 2 s, the reaches that hold and swing after they first
+    enter it, and all the reaches that leave it after they first enter, from the hand's distance to the target."""
+    print(
+        "\nThe reaches that hold but leave the 20 mm after their 2 s, from the hand's distance to the target every"
+        " 10 ms (times in s, from 0):"
+    )
+    header = ["", "start", "posture (deg)", "first in", "first out", "farthest (mm)", "at", "in to stay", "times out"]
+    header += ["at the end (mm)"]
+    body = []
+    summary = []
+    leaving = []
+    for label, n in ESNS.items():
+        run = f"{EACH_TASK}{n}"
+        held, swing, swing_in, held_out = 0, 0, 0, 0
+        for row in rows(run, "esn", "reach"):
+            start = int(row["start"])
+            distance = to_target(run, "esn", "reach", start)
+            since = distance[int(np.argmax(distance <= TOLERANCE)) :]  # from when the hand first enters the goal
+            out = bool((since > TOLERANCE).any())
+            leaving.append(out)
+            if not holds(row):
+                continue
+            held += 1
+            if (since - np.minimum.accumulate(since)).max() >= SWING - 1e-9:
+                swing += 1
+                swing_in += not out
+            if not out:
+                continue
+            held_out += 1
+            gone = excursion(run, start)
+            q1, q2 = posture("reach", start)
+            body.append(
+                [
+                    f"two-task {label}",
+                    str(row["origin"]),
+                    f"({q1:.0f}, {q2:.0f})",
+                    f"{gone['enters']:.2f}",
+                    f"{gone['leaves']:.2f}",
+                    f"{1e3 * gone['farthest']:.1f}",
+                    f"{gone['farthest_at']:.2f}",
+                    f"{gone['back']:.2f}",
+                    f"{gone['exits']:.0f}",
+                    f"{1e3 * gone['final']:.1f}",
+                ]
+            )
+        summary.append(
+            f"  two-task {label}: {held_out} of its {held} reaches that hold leave the 20 mm after their 2 s; {swing}"
+            f" rise by {1e3 * SWING:g} mm or more, after they first enter it, above the nearest they have come since,"
+            f" and {swing_in} of these stay within it"
+        )
+    print_table(header, body)
+    print("\n".join(summary))
+    print(f"  over both ESNs, {sum(leaving)} of the {len(leaving)} reaches leave the 20 mm after they first enter it")
+
+
+def print_detours() -> None:
+    """Each ESN's largest detour ratios with the context reach, by their starts' distance to the target."""
+    print("\nThe three largest detour ratios with the context reach, the start and its distance to the target:")
+    for label, n in ESNS.items():
+        runs = sorted(rows(f"{EACH_TASK}{n}", "esn", "reach"), key=lambda row: -row["detour_ratio"])
+        largest = ", ".join(
+            f"{row['detour_ratio']:.3f} from {row['origin']} ({start_to_target(int(row['start'])):.3f} m)"
+            for row in runs[:3]
+        )
+        print(f"  two-task {label}: {largest}")
+    nearest = min(rows(f"{EACH_TASK}1", "esn", "reach"), key=lambda row: start_to_target(int(row["start"])))
+    print(
+        f"  the start nearest the target: {nearest['origin']}, {start_to_target(int(nearest['start'])):.3f} m from it"
+    )
 
 
 def print_ellipse() -> None:
@@ -1310,6 +1424,66 @@ def print_ellipse() -> None:
                 ]
             )
     print_table(header, body)
+    print_ellipse_early()
+    print_rim()
+
+
+def print_ellipse_early() -> None:
+    """From the starts on the curve: how often and how far the hand leaves the ellipse over the first ``EARLY`` s, how
+    many runs join it after 0 s, and the two-task ESNs' highest hand."""
+    tolerance = cycle().tolerance
+    print(
+        f"\nFrom the eight starts on the curve, over the first {EARLY:g} s: from how many starts the hand goes beyond"
+        f" {1e3 * tolerance:g} mm from the ellipse, how far at most, and the runs with a joining time above 0;"
+        "\nand over the whole run, the hand's largest y"
+    )
+    header = ["", f"beyond {1e3 * tolerance:g} mm", "farthest (mm)", "joining time above 0", "largest y (m)"]
+    groups = []
+    for label, n in ESNS.items():
+        run = f"{EACH_TASK}{n}"
+        k = index_at(clock(run, "ellipse"), EARLY)
+        runs = [row for row in rows(run, "esn", "ellipse") if on_curve(row)]
+        off = [float(off_curve(run, "esn", "ellipse", int(row["start"]))[: k + 1].max()) for row in runs]
+        high = max(float(places(run, "esn", "ellipse", int(row["start"]))[:, 1].max()) for row in runs)
+        groups.append((f"two-task {label}", runs, off, f"{high:.3f}"))
+    for label, n in ESNS.items():
+        runs = one_task_rows("ellipse", EACH_TASK, n, "esn")
+        off = []
+        for row in runs:
+            points = hand(task_joint_angles(one_task_log(n, int(row["start"])), DT, EARLY))
+            off.append(float(distances_to_path(points, cycle().curve).max()))
+        groups.append((f"027's {label}", runs, off, ""))
+    body = [
+        [
+            label,
+            f"{sum(value > tolerance for value in off)} of {len(runs)}",
+            f"{1e3 * max(off):.1f}",
+            f"{sum(row['joining_time_s'] > 0 for row in runs)} of {len(runs)}",
+            high,
+        ]
+        for label, runs, off, high in groups
+    ]
+    print_table(header, body)
+
+
+def print_rim() -> None:
+    """From the untaught starts: the runs whose hand comes to the rim of the workspace before it joins the curve."""
+    reach = full_reach()
+    print(
+        f"\nFrom the 36 untaught starts with the context ellipse: the runs whose hand comes within {RIM:g} m of the"
+        f" arm's full reach, {reach:g} m, before it joins the curve (up to the joining time)"
+    )
+    for label, run, arm, _ in arms():
+        times = clock(run, "ellipse")
+        runs = [row for row in rows(run, arm, "ellipse") if not on_curve(row)]
+        rim = [
+            np.linalg.norm(
+                places(run, arm, "ellipse", int(row["start"]))[: index_at(times, row["joining_time_s"]) + 1], axis=1
+            ).max()
+            >= reach - RIM - 1e-9
+            for row in runs
+        ]
+        print(f"  {label if arm == 'replay' else f'two-task {label}'}: {sum(rim)} of {len(runs)}")
 
 
 def print_to_reach() -> None:
@@ -1355,6 +1529,74 @@ def print_to_reach() -> None:
             f" {spread(column(runs, 'switch_arrival_time_s'), '.2f')} s after the change, detour ratio"
             f" {spread(detours, '.3f')}, speed {spread(column(runs, 'switch_peak_reference_speed_dps_1'), '.0f')}"
             f" deg/s, torque {spread(column(runs, 'switch_peak_torque_nm_1'), '.1f')} N m"
+        )
+    print_table(header, body)
+    print("\n".join(summary))
+    print_to_reach_way()
+
+
+def print_to_reach_way() -> None:
+    """Claim 7's way to the target after the change, from the logs: where the hand goes farthest from the target, joint
+    1's lowest, how far joint 1 moves at first, and the reference's fastest joint speed before the change and after."""
+    run1 = f"{TO_REACH}1"
+    (time, _), *_ = changes(run1)
+    print(
+        f"\nAfter the change, from the hand and the joint angles every 10 ms, times after the change (s): the hand's"
+        f" largest distance to the target and where the hand is then; joint 1's lowest; how far joint 1 moves in the"
+        f"\nfirst {MOVE:g} s (its largest less its smallest); and the reference's fastest joint speed over the"
+        f" {BEFORE:g} s before the change ({time - BEFORE:g} s to {time:g} s) and over the {HOLD:g} s after"
+    )
+    header = ["", "start", "farthest (m)", "after (s)", "x (m)", "y (m)", "joint 1's lowest (deg)", "after (s)"]
+    header += ["joint 1 moves (deg)", "speed before (deg/s)", "speed after (deg/s)"]
+    body = []
+    summary = []
+    for label, n in ESNS.items():
+        run = f"{TO_REACH}{n}"
+        times = clock(run, "ellipse")
+        k = index_at(times, time)
+        ones = []
+        for row in rows(run, "esn", "ellipse"):
+            start = int(row["start"])
+            distance = to_target(run, "esn", "ellipse", start)
+            far = k + int(np.argmax(distance[k:]))
+            q1 = np.degrees(joints(run, "esn", "ellipse", start)[:, 0])
+            low = k + int(np.argmin(q1[k:]))
+            x, y = places(run, "esn", "ellipse", start)[far]
+            one = {
+                "far": float(distance[far]),
+                "far_at": float(times[far] - time),
+                "x": float(x),
+                "y": float(y),
+                "low": float(q1[low]),
+                "low_at": float(times[low] - time),
+                "move": joint_1_move(run, "ellipse", start, time),
+                "before": peaks(log(run, "esn", "ellipse", start), time - BEFORE, time)[0],
+                "after": float(row["switch_peak_reference_speed_dps_1"]),
+            }
+            ones.append(one)
+            body.append(
+                [
+                    f"two-task {label}",
+                    str(start),
+                    f"{one['far']:.3f}",
+                    f"{one['far_at']:.2f}",
+                    f"{one['x']:.2f}",
+                    f"{one['y']:.2f}",
+                    f"{one['low']:.0f}",
+                    f"{one['low_at']:.2f}",
+                    f"{one['move']:.0f}",
+                    f"{one['before']:.0f}",
+                    f"{one['after']:.0f}",
+                ]
+            )
+        summary.append(
+            f"  two-task {label}: farthest {spread([e['far'] for e in ones], '.2f')} m,"
+            f" {spread([e['far_at'] for e in ones], '.2f')} s after the change, at x"
+            f" {spread([e['x'] for e in ones], '.2f')} m; joint 1's lowest {spread([e['low'] for e in ones], '.0f')}"
+            f" deg, {spread([e['low_at'] for e in ones], '.2f')} s after; joint 1 moves"
+            f" {spread([e['move'] for e in ones], '.0f')} deg in the first {MOVE:g} s; speed before"
+            f" {spread([e['before'] for e in ones], '.0f')} deg/s, after {spread([e['after'] for e in ones], '.0f')}"
+            " deg/s"
         )
     print_table(header, body)
     print("\n".join(summary))
@@ -1434,6 +1676,51 @@ def print_to_ellipse() -> None:
             )
         agree = all(np.isclose(e["log_speed"], e["speed"]) and np.isclose(e["log_torque"], e["torque"]) for e in ones)
         print(f"    the peaks after the change from the logs equal the metrics': {agree}")
+    print_to_ellipse_way()
+
+
+def print_to_ellipse_way() -> None:
+    """Claim 8's joint 1 after the change, from the logs: the reference's at first, the arm's largest and smallest, when
+    it comes to the ellipse's to stay, and how far it moves at first."""
+    run1 = f"{TO_ELLIPSE}1"
+    (time, _), *_ = changes(run1)
+    low, high = AT_ELLIPSE
+    print(
+        f"\nJoint 1 after the change, every 10 ms, times after the change (s): the reference's at {REFERENCE_AT:g} s;"
+        f" the arm's largest and smallest over the {AFTER:g} s after; from when it is within {low:g} to {high:g} deg"
+        f" to the end;\nand how far it moves in the first {MOVE:g} s (its largest less its smallest)"
+    )
+    header = ["", "take", "at the change (deg)", "reference's (deg)", "largest (deg)", "after (s)", "smallest (deg)"]
+    header += ["after (s)", f"within {low:g} to {high:g} deg from (s)", "moves (deg)"]
+    body = []
+    for label, n in ESNS.items():
+        run = f"{TO_ELLIPSE}{n}"
+        times = clock(run, "reach")
+        k = index_at(times, time)
+        later = index_at(times, time + AFTER)
+        for row in rows(run, "esn", "reach"):
+            start = int(row["start"])
+            q1 = np.degrees(joints(run, "esn", "reach", start)[:, 0])
+            reference = np.degrees(joints(run, "esn", "reach", start, "q_ref")[index_at(times, time + REFERENCE_AT), 0])
+            top = k + int(np.argmax(q1[k : later + 1]))
+            bottom = k + int(np.argmin(q1[k : later + 1]))
+            outside = np.flatnonzero((q1[k:] < low) | (q1[k:] > high))
+            settled = float("nan") if outside[-1] == len(q1) - k - 1 else float(times[k + outside[-1] + 1] - time)
+            body.append(
+                [
+                    f"two-task {label}",
+                    str(row["origin"]).split("_")[1],
+                    f"{q1[k]:.0f}",
+                    f"{reference:.0f}",
+                    f"{q1[top]:.0f}",
+                    f"{times[top] - time:.2f}",
+                    f"{q1[bottom]:.0f}",
+                    f"{times[bottom] - time:.2f}",
+                    f"{settled:.2f}",
+                    f"{joint_1_move(run, 'reach', start, time):.0f}",
+                ]
+            )
+    print_table(header, body)
 
 
 def print_back_and_forth() -> None:
@@ -1526,6 +1813,32 @@ def print_back_and_forth() -> None:
         ["", "start", *(f"after change {k} ({time:g} s)" for k, (time, _) in enumerate(moments, start=1))], peak_body
     )
     print("\n".join(summary))
+    print_moves()
+
+
+def print_moves() -> None:
+    """How far joint 1 moves in the first ``MOVE`` s after each change of claim 9's runs, and over every change of
+    claims 7 to 9."""
+    print(f"\nHow far joint 1 moves in the first {MOVE:g} s after a change (its largest less its smallest, deg):")
+    for label, n in ESNS.items():
+        run = f"{BACK_AND_FORTH}{n}"
+        starts = [int(row["start"]) for row in rows(run, "esn", "ellipse")]
+        each = ", ".join(
+            f"change {k} {spread([joint_1_move(run, 'ellipse', start, time) for start in starts], '.0f')}"
+            for k, (time, _) in enumerate(changes(run), start=1)
+        )
+        print(f"  two-task {label}, claim 9: {each}")
+    for label, n in ESNS.items():
+        moves = []
+        for base in (TO_REACH, TO_ELLIPSE, BACK_AND_FORTH):
+            run = f"{base}{n}"
+            task = first_task(run)
+            for row in rows(run, "esn", task):
+                moves += [joint_1_move(run, task, int(row["start"]), time) for time, _ in changes(run)]
+        print(
+            f"  two-task {label}, over the {len(moves)} changes of claims 7 to 9: {min(moves):.0f} to"
+            f" {max(moves):.0f} deg"
+        )
 
 
 def print_checks() -> None:
@@ -1563,6 +1876,12 @@ def print_checks() -> None:
     print_same_start(TO_REACH, "ellipse", EACH_TASK, "ellipse", changes(f"{TO_REACH}1")[0][0])
     print_same_start(TO_ELLIPSE, "reach", EACH_TASK, "reach", changes(f"{TO_ELLIPSE}1")[0][0])
     print_contexts()
+    for base in (TO_REACH, BACK_AND_FORTH):
+        print(
+            f"{base}: the peaks over the {HOLD:g} s after each change from the ESN logs equal the metrics':"
+            f" {peaks_agree(base)}"
+        )
+    print_same_rest()
 
 
 def same_rows(first: list[dict[str, Any]], second: list[dict[str, Any]]) -> bool:
@@ -1617,6 +1936,58 @@ def print_contexts() -> None:
         f"the context in every ESN log is the first task's until each change and the new one's from it, the contexts"
         f" in the order {names}: {sum(right)} of {len(right)} logs"
     )
+
+
+def peaks_agree(base: str) -> bool:
+    """Whether the reference's fastest joint speed and the largest torque over the 2 s after each change, taken again
+    from the ESN logs of a robot run whose context changes, equal its metrics', for both ESNs."""
+    agree = []
+    for n in ESNS.values():
+        run = f"{base}{n}"
+        task = first_task(run)
+        for row in rows(run, "esn", task):
+            state = log(run, "esn", task, int(row["start"]))
+            for k, (time, _) in enumerate(changes(run), start=1):
+                speed, torque, _ = peaks(state, time, time + HOLD)
+                agree.append(
+                    bool(np.isclose(speed, row[f"switch_peak_reference_speed_dps_{k}"]))
+                    and bool(np.isclose(torque, row[f"switch_peak_torque_nm_{k}"]))
+                )
+    return all(agree)
+
+
+def print_same_rest() -> None:
+    """How far apart the ESN's runs after claim 8's change are from one rest posture, by their joint angles every
+    10 ms: the takes that rest at 114 deg, takes 03 and 04, and claim 9's runs after its second change against claim
+    8's from take 00 after its change, over as long."""
+    (time, _), *_ = changes(f"{TO_ELLIPSE}1")
+    (_, _), (second, _), (third, _) = changes(f"{BACK_AND_FORTH}1")
+    names = " and ".join(name.split("_")[1] for name in turned())
+    for label, n in ESNS.items():
+        run = f"{TO_ELLIPSE}{n}"
+        k = index_at(clock(run, "reach"), time)
+        after = {
+            str(row["origin"]): joints(run, "esn", "reach", int(row["start"]))[k:] for row in rows(run, "esn", "reach")
+        }
+        others = [q for origin, q in after.items() if origin not in turned()]
+        gap_others = float(np.ptp(np.stack(others), axis=0).max())
+        gap_turned = float(np.ptp(np.stack([after[origin] for origin in turned()]), axis=0).max())
+        later = f"{BACK_AND_FORTH}{n}"
+        times = clock(later, "ellipse")
+        span = slice(index_at(times, second), index_at(times, third) + 1)
+        take = after["demo_00_filtered"][: span.stop - span.start]
+        gaps = []
+        for row in rows(later, "esn", "ellipse"):
+            q = joints(later, "esn", "ellipse", int(row["start"]))[span]
+            assert len(q) == len(take)
+            gaps.append(float(np.abs(q - take).max()))
+        print(
+            f"two-task {label}'s ESN runs after claim 8's change at {time:g} s, by their joint angles: the"
+            f" {len(others)} takes that do not rest a whole turn below differ by at most"
+            f" {np.degrees(gap_others):.3g} deg, takes {names} by {np.degrees(gap_turned):.3g} deg; claim 9's"
+            f" {len(gaps)} from {second:g} s to {third:g} s against claim 8's from take 00 over as long, by at most"
+            f" {np.degrees(max(gaps)):.3g} deg"
+        )
 
 
 if __name__ == "__main__":
