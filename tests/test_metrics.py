@@ -7,15 +7,19 @@ import numpy as np
 import pytest
 
 from arm_esn_ctrl.metrics import (
+    _nearest_on_path,
     arrival_index,
     count_speed_peaks,
+    cycle_metrics,
     directness,
+    distances_to_path,
     disturbance_following,
     disturbance_returns,
     disturbance_ringing,
     hold_metrics,
     jitter,
     join_index,
+    largest_after,
     loop_periods,
     loop_phase,
     mean_loop,
@@ -26,6 +30,8 @@ from arm_esn_ctrl.metrics import (
     path_rmse,
     reach_metrics,
     route_spread,
+    taught_loop,
+    taught_period,
 )
 
 START = np.array([0.5, 1.2])
@@ -461,6 +467,17 @@ def test_each_whole_loop_takes_its_period(clockwise):
     assert turned[-1] - turned[0] == pytest.approx((-1 if clockwise else 1) * 3.6 * 2 * np.pi, abs=1e-6)
 
 
+def test_the_taught_period_is_the_median_of_the_whole_loops_after_the_first():
+    # Still for 1 s, a first loop of 5 s more, then loops of 3.8, 4.0, 4.4, and 4.1 s, and half of one more.
+    times = np.arange(0.0, 24.0, 0.001)
+    ends = np.cumsum([0.0, 1.0, 5.0, 3.8, 4.0, 4.4, 4.1])
+    angle = np.interp(times, np.append(ends, 24.0), 2 * np.pi * np.array([0, 0, 1, 2, 3, 4, 5, 5.5]))
+    hand = np.array([0.3, 0.1]) + 0.2 * np.column_stack([np.cos(angle), np.sin(angle)])
+
+    assert loop_periods(times, hand, center=[0.3, 0.1]) == pytest.approx([6.0, 3.8, 4.0, 4.4, 4.1], abs=1e-3)
+    assert taught_period(times, hand, center=[0.3, 0.1]) == pytest.approx(4.05, abs=1e-3)
+
+
 def test_less_than_a_loop_has_no_period():
     times, hand = circles(0.8)
 
@@ -494,3 +511,167 @@ def test_the_mean_loop_fills_in_the_angles_no_point_falls_at():
     loop, _ = mean_loop(hand, center=[0.3, 0.1])
 
     assert np.linalg.norm(loop - [0.3, 0.1], axis=1) == pytest.approx(0.2, abs=1e-9)
+
+
+def ellipse_take(turns: float, drift=None):
+    """A hand going around (-0.1, 0.55) on an ellipse of 0.2 by 0.12 m, 4 s a turn, sampled every 10 ms.
+
+    The posture follows the ellipse's angle, the same at the same place of every
+    turn, plus ``drift``, a function of time added to joint 1.
+    """
+    times = np.arange(0.0, 4.0 * turns + 0.005, 0.01)
+    angle = 2 * np.pi * times / 4.0
+    hand = np.array([-0.1, 0.55]) + np.column_stack([0.2 * np.cos(angle), 0.12 * np.sin(angle)])
+    q = np.column_stack([0.6 + 0.4 * np.cos(angle), 1.8 + 0.3 * np.sin(angle)])
+    if drift is not None:
+        q[:, 0] += drift(times)
+    return times, q, hand
+
+
+def test_the_taught_loop_of_an_exact_ellipse_closes_where_its_first_loop_ends():
+    _, q, hand = ellipse_take(3.5)
+
+    first, end = taught_loop(q, hand, center=[-0.1, 0.55])
+
+    assert first == 400  # the end of the first loop, at 4 s
+    assert end in (800, 1200)
+    assert np.linalg.norm(q[end] - q[first]) < 1e-9
+
+
+def test_the_taught_loop_ends_at_the_later_loop_end_whose_posture_is_nearest_the_first():
+    # Joint 1 drifts by 0.3, 0.05, and 0.2 rad at the ends of the second, third, and fourth loops.
+    _, q, hand = ellipse_take(4.5, drift=lambda times: np.interp(times, [4.0, 8.0, 12.0, 16.0], [0.0, 0.3, 0.05, 0.2]))
+
+    first, end = taught_loop(q, hand, center=[-0.1, 0.55])
+
+    assert (first, end) == (400, 1200)
+    assert np.linalg.norm(q[end] - q[first]) == pytest.approx(0.05)
+
+
+def test_a_take_of_fewer_than_two_whole_loops_has_no_taught_loop():
+    _, q, hand = ellipse_take(1.8)
+
+    with pytest.raises(ValueError, match="fewer than the two"):
+        taught_loop(q, hand, center=[-0.1, 0.55])
+
+
+CENTER = np.array([-0.1, 0.55])
+# A circle of 0.2 m around CENTER as a polygon of 360 sides, within 0.01 mm of it: a hand at a radius r is
+# r - 0.2 off the curve.
+CURVE = CENTER + 0.2 * np.column_stack([np.cos(np.radians(np.arange(361))), np.sin(np.radians(np.arange(361)))])
+
+
+def circle_run(period=4.0, duration=40.0, clockwise=False, radius=0.2):
+    """A hand around the curve's center at ``radius``, ``period`` seconds a turn, for ``duration`` s, every 10 ms."""
+    times = np.arange(0.0, duration + 0.005, 0.01)
+    angle = (-1 if clockwise else 1) * 2 * np.pi * times / period
+    return times, CENTER + radius * np.column_stack([np.cos(angle), np.sin(angle)])
+
+
+def measured(times, hand):
+    """The cycle measures of a hand against the curve, taught at 4 s a loop: within 20 mm RMS, over five loops."""
+    return cycle_metrics(
+        times, hand, CURVE, CENTER, period=4.0, tolerance=0.02, cycle_periods=5, cycle_turns=[4.0, 6.0]
+    )
+
+
+def test_a_hand_on_the_curve_at_the_taught_pace_cycles():
+    m = measured(*circle_run())
+
+    assert m["cycles"]
+    assert m["turns"] == pytest.approx(5.0, abs=1e-6)  # over the last 20 s
+    assert m["curve_rms_m"] == pytest.approx(0.0, abs=1e-5)
+    assert m["off_curve_max_m"] == pytest.approx(0.0, abs=1e-5)
+    assert m["period_s"] == pytest.approx(4.0, abs=1e-6)
+    assert m["period_ratio"] == pytest.approx(1.0, abs=1e-6)
+    assert m["joining_time_s"] == 0.0
+
+
+@pytest.mark.parametrize(
+    ("run", "turns"),
+    [
+        (circle_run(period=6.0), 20.0 / 6.0),  # too slow: fewer than four turns in the last 20 s
+        (circle_run(period=3.0), 20.0 / 3.0),  # too fast: more than six
+        (circle_run(clockwise=True), -5.0),  # the wrong way around
+        (circle_run(radius=0.23), 5.0),  # 30 mm off the curve all along: an RMS above the tolerance
+    ],
+    ids=["too slow", "too fast", "clockwise", "off the curve"],
+)
+def test_a_hand_too_slow_too_fast_clockwise_or_off_the_curve_does_not_cycle(run, turns):
+    m = measured(*run)
+
+    assert not m["cycles"]
+    assert m["turns"] == pytest.approx(turns, abs=1e-6)
+
+
+def test_a_hand_that_leaves_the_curve_for_a_moment_still_cycles():
+    times, hand = circle_run()
+    away = (times >= 30.0 - 1e-9) & (times < 30.5 - 1e-9)
+    hand[away] = CENTER + 1.2 * (hand[away] - CENTER)  # 40 mm off the curve for half a second
+
+    m = measured(times, hand)
+
+    assert m["cycles"]
+    assert m["off_curve_max_m"] == pytest.approx(0.04, abs=1e-5)
+    assert m["curve_rms_m"] == pytest.approx(0.04 * np.sqrt(50 / 2001), abs=1e-5)  # 50 of the window's 2001 samples
+
+
+def test_a_hand_off_the_curve_is_measured_by_how_far_it_is_and_never_joins():
+    m = measured(*circle_run(radius=0.23))
+
+    assert m["curve_rms_m"] == pytest.approx(0.03, abs=1e-5)
+    assert m["off_curve_max_m"] == pytest.approx(0.03, abs=1e-5)
+    assert m["period_ratio"] == pytest.approx(1.0, abs=1e-6)
+    assert np.isnan(m["joining_time_s"])  # its last taught period is off the curve
+
+
+def test_a_stopped_hand_does_not_cycle_and_has_no_period():
+    times = np.arange(0.0, 40.005, 0.01)
+    hand = np.tile(CURVE[0], (len(times), 1))  # at rest on the curve
+
+    m = measured(times, hand)
+
+    assert not m["cycles"]
+    assert m["turns"] == 0.0
+    assert m["curve_rms_m"] == pytest.approx(0.0, abs=1e-9)
+    assert np.isnan(m["period_s"]) and np.isnan(m["period_ratio"])
+
+
+def test_a_hand_joins_the_curve_once_every_taught_period_from_then_on_is_within_the_tolerance_in_rms():
+    times, on_curve = circle_run()
+    _, wide = circle_run(radius=0.25)
+    hand = np.where((times < 12.0 - 1e-9)[:, np.newaxis], wide, on_curve)  # 50 mm off until 12 s, then on the curve
+
+    m = measured(times, hand)
+
+    # A taught period's window holds 401 samples; from 11.36 s, 64 of them or fewer are 50 mm off: 20 mm RMS at most.
+    assert m["joining_time_s"] == pytest.approx(11.36, abs=1e-9)
+    assert m["cycles"]
+
+
+def test_a_run_whose_last_taught_period_is_off_the_curve_may_cycle_but_has_not_joined():
+    times, hand = circle_run()
+    late = times > 37.0 - 1e-9
+    hand[late] = CENTER + 1.15 * (hand[late] - CENTER)  # 30 mm off over the last 3 s
+
+    m = measured(times, hand)
+
+    assert m["cycles"]  # 30 mm off over 3 s of the 20 s window: 12 mm RMS
+    assert m["curve_rms_m"] == pytest.approx(0.03 * np.sqrt(301 / 2001), abs=1e-5)  # 301 of its 2001 samples
+    assert np.isnan(m["joining_time_s"])  # the last taught period: 26 mm RMS
+
+
+def test_the_distances_of_many_points_to_a_path_are_those_of_the_nearest_points_on_it_exactly():
+    _, hand = circle_run(radius=0.21)  # 4001 points, in five parts
+
+    assert np.array_equal(distances_to_path(hand, CURVE), _nearest_on_path(hand, CURVE)[2])
+
+
+def test_the_largest_value_after_each_disturbance_is_over_its_window_from_its_end():
+    times = np.arange(0.0, 10.05, 0.1)
+    values = np.abs(times - 6.0)  # largest far from 6 s
+
+    largest = largest_after(times, values, [(1.0, 2.0), (5.0, 5.5), (10.0, 10.5)], window=2.0)
+
+    assert largest[:2] == pytest.approx([4.0, 1.5])  # at 2 s, and at 7.5 s
+    assert np.isnan(largest[2])  # the run ends before this one does

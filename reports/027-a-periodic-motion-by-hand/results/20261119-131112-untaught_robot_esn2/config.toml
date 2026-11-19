@@ -1,0 +1,48 @@
+# The take by hand's ESN #2 (leak rate 0.055, spectral radius 0.9, input scaling 0.5,
+# ridge 10, seed 5) on the robot, undisturbed, for 60 s, from the 36 untaught starts
+# alone, against the replay of its take, which begins at the take's start wherever the
+# arm is and goes on without end through the take's taught loop: claims 2 and 3. About
+# 18 minutes: 72 runs of 60 s, one after another. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_periodic/untaught_robot_esn2.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py, relative
+# to the storage root.
+model = "results/manual_demonstration_v2_periodic/20261119-124537-esn2_lr0.055_sr0.9_is0.5_ridge10_seed5/esn.toml"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 60.0           # task (s), after the warm-up: about 12 taught periods
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
+cycle_periods = 5
+cycle_turns = [4.0, 6.0]  # the least and the most
+start_offsets_deg = []    # not from the take's own start, but from the untaught starts alone
+
+[evaluation.extra_starts]
+# hand_esn.toml's 36 untaught starts, stage 1's (deg): hand positions spread evenly over
+# the workspace, joint 2 positive.
+untaught = [
+  [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
+  [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
+  [-93.0, 60.0], [-73.0, 60.0], [-53.0, 60.0], [-33.0, 60.0], [-13.0, 60.0], [7.0, 60.0],
+  [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
+  [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
+  [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
+]

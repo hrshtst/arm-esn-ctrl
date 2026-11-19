@@ -75,6 +75,22 @@ joint angles; with `[recording]` `start_within_a_turn`, the import moves each ta
 whole turns to start within -180 to 180 deg in every joint. Without joint limits that
 is the same motion, and the hand path is the take's.
 
+`ellipse_manual_v2_no_limits.toml` and `ellipse_scripted_v2_no_limits.toml` teach a
+periodic motion instead, on the same arm: skelarm's `periodic_curve` task, the hand
+going around an ellipse centered at (-0.1, 0.55) m, of semi-axes 0.2 m in x and
+0.12 m in y, counterclockwise, about 4 s a loop. The first is one take taught by
+hand, from a start on the curve. The second is one take that
+`experiments/make_periodic_take.py` makes from the same start: the hand exactly on
+the curve, 4 s a loop, ten loops. Their headers give the commands. The import checks
+that the hand goes around the curve's center at least `[recording]` `min_loops`
+whole times, counterclockwise, and measures its loops instead of a reach.
+
+The hand take is recorded without the tip trail, which slows the recorder's sampling
+of a long take. The recorder now and then writes two samples a fraction of a
+millisecond apart, and the filter would make a jump of them: the import leaves a
+sample that follows another within `[recording]` `min_interval` (1 ms) out of the hand
+take's filtered copy.
+
 ## Runs
 
 Under `results/demonstrations/` in the storage:

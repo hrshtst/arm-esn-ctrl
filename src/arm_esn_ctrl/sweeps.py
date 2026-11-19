@@ -156,6 +156,57 @@ def score_settings(runs: list[dict[str, Any]], names: list[str]) -> list[dict[st
     return sorted(scores, key=lambda score: (-score["holding_runs"], _nan_last(score["median_detour_ratio"])))
 
 
+def score_cycles(runs: list[dict[str, Any]], names: list[str]) -> list[dict[str, Any]]:
+    """Score each setting of a sweep of a periodic task by how many of its runs cycle, then by their curve RMS.
+
+    ``runs`` are the rows of a sweep's ``runs.csv``: each holds its swept values,
+    whether it cycles (``cycles``), and its curve RMS (``curve_rms_m``; see
+    :func:`arm_esn_ctrl.metrics.cycle_metrics`). A setting is a combination of the
+    values of ``names``, the swept keys other than ``seed``; its runs are those of
+    all its seeds.
+
+    Returns one row per setting, the best first: its values, then ``runs`` (how
+    many), ``cycling_runs`` (those that cycle), and ``median_curve_rms_m`` (over its
+    runs that cycle; NaN if none does). The settings with the most cycling runs come
+    first, and among equals, the smallest median curve RMS; a NaN comes last, and
+    settings equal in both keep the sweep's order.
+
+    With ``seed`` in the runs, each row also holds ``seeds`` (how many) and
+    ``typical_seed``: of the setting's seeds with the most cycling runs, the one
+    whose own median curve RMS, over its runs that cycle, is nearest the setting's
+    (the first, if none of them cycles), as :func:`score_settings` chooses one.
+    """
+
+    def median_rms(group: list[dict[str, Any]]) -> float:
+        return _finite_median([run["curve_rms_m"] for run in group if run["cycles"]])
+
+    settings: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for run in runs:
+        settings.setdefault(tuple(run[name] for name in names), []).append(run)
+    scores = []
+    for values, group in settings.items():
+        median = median_rms(group)
+        score = dict(zip(names, values, strict=True)) | {
+            "runs": len(group),
+            "cycling_runs": sum(bool(run["cycles"]) for run in group),
+            "median_curve_rms_m": median,
+        }
+        if "seed" in group[0]:
+            seeds: dict[Any, list[dict[str, Any]]] = {}
+            for run in group:
+                seeds.setdefault(run["seed"], []).append(run)
+            cycling = {seed: sum(bool(run["cycles"]) for run in each) for seed, each in seeds.items()}
+            gaps = {
+                seed: abs(median_rms(each) - median)
+                for seed, each in seeds.items()
+                if cycling[seed] == max(cycling.values())
+            }
+            typical = min(gaps, key=lambda seed: _nan_last(gaps[seed]))
+            score |= {"seeds": len(seeds), "typical_seed": typical}
+        scores.append(score)
+    return sorted(scores, key=lambda score: (-score["cycling_runs"], _nan_last(score["median_curve_rms_m"])))
+
+
 def _nan_last(value: float) -> float:
     """``value``, or infinity for a NaN, so that it sorts last."""
     return value if np.isfinite(value) else float("inf")

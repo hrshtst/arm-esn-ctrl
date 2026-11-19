@@ -37,7 +37,7 @@ from skelarm import (
     smooth,
 )
 
-from arm_esn_ctrl.metrics import hold_metrics
+from arm_esn_ctrl.metrics import hold_metrics, loop_periods, loop_phase
 from arm_esn_ctrl.storage import resolve_run_path
 
 # The configuration tables that make up a skelarm scenario (see skelarm's
@@ -189,7 +189,9 @@ def joint_trajectory_log(
     return log
 
 
-def smooth_take(log: StateLog, skeleton: Skeleton, task: dict[str, Any], smoothing: dict[str, Any]) -> StateLog:
+def smooth_take(
+    log: StateLog, skeleton: Skeleton, task: dict[str, Any], smoothing: dict[str, Any], *, min_interval: float = 0.0
+) -> StateLog:
     """Return a take with its joint angles smoothed, at the take's own sample times.
 
     The recorder moves the tip with the cursor, in whole screen pixels of a few
@@ -200,9 +202,17 @@ def smooth_take(log: StateLog, skeleton: Skeleton, task: dict[str, Any], smoothi
     it is smoothed as if sampled at its mean interval, as skelarm's
     trajectory-tracking tasks do. ``task`` is the skelarm ``[task]`` table the player
     draws.
+
+    The recorder now and then writes two samples a fraction of a millisecond apart.
+    Taken as evenly spaced, the filtered angles would move a whole sample's step
+    between the two, in that fraction of a millisecond: a jump the hand never made.
+    A sample that follows the one before it by less than ``min_interval`` (s) is
+    therefore left out, and the rest are smoothed at their own mean interval and
+    kept at their own times. With the default, 0, every sample is kept.
     """
-    times = log.times
-    q = log.channel("q").reshape(len(times), -1)
+    keep = np.r_[True, np.diff(log.times) >= min_interval]
+    times = log.times[keep]
+    q = log.channel("q").reshape(len(log.times), -1)[keep]
     smoothed = smooth(q, float(np.mean(np.diff(times))), **smoothing)
     return joint_trajectory_log(skeleton, times, smoothed, task, producer=f"{log.producer}, smoothed: {smoothing}")
 
@@ -217,6 +227,10 @@ def check_take(
     hold: float,
     start_tolerance: float,
     max_tip_speed: float,
+    center: ArrayLike | None = None,
+    min_loops: int = 0,
+    end_window: float = 0.0,
+    end_speed_ratio: float = 0.0,
 ) -> list[str]:
     """Return why a take taught by hand cannot be a demonstration, or nothing if it can.
 
@@ -227,6 +241,12 @@ def check_take(
     - the hand arrives within ``radius`` of the ``target`` and stays there for
       ``hold`` seconds, before the take ends; a task without a target, such as a
       periodic motion, has no arrival to check (``target`` is None);
+    - the hand of a periodic motion goes around its curve's ``center`` at least
+      ``min_loops`` whole times (see :func:`arm_esn_ctrl.metrics.loop_periods`),
+      counterclockwise, the way the curve's angle grows, and the take ends while the
+      hand still goes around: over its last ``end_window`` seconds, the hand's mean
+      speed is at least ``end_speed_ratio`` of its median speed over the whole take.
+      A reach has no center to go around (``center`` is None);
     - the hand never moves faster than ``max_tip_speed`` (m/s) between two samples,
       which would be a jump rather than a reach.
     """
@@ -253,7 +273,21 @@ def check_take(
                 f"the take ends {times[-1] - held['arrival_time_s']:.2f} s after the hand arrives,"
                 f" before {hold:g} s of holding"
             )
-    speed = np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(times)
+    speed = np.linalg.norm(np.diff(hand, axis=0), axis=1) / np.diff(times)  # between each two samples
+    if center is not None:
+        phase = loop_phase(hand, center)
+        loops = len(loop_periods(times, hand, center))
+        if phase[-1] < phase[0]:
+            problems.append("the hand goes around the curve's center clockwise, not counterclockwise")
+        elif loops < min_loops:
+            problems.append(f"the hand goes around the curve's center {loops} whole times, fewer than {min_loops}")
+        ending = float(np.mean(speed[times[1:] > times[-1] - end_window]))
+        typical = float(np.median(speed))
+        if ending < end_speed_ratio * typical:
+            problems.append(
+                f"the take ends with the hand at {ending:.2f} m/s over its last {end_window:g} s, less than"
+                f" {end_speed_ratio:g} of its median speed, {typical:.2f} m/s: end the take while the hand moves"
+            )
     if speed.max() > max_tip_speed:
         k = int(np.argmax(speed))
         problems.append(

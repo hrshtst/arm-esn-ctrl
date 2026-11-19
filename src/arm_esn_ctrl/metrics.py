@@ -13,9 +13,15 @@ hand comes within the goal radius r of the target (:func:`arrival_index`): the
 reach phase [0, t_a] and the hold window [t_a, t_a + T_h], where T_h is the hold
 duration. :func:`hold_metrics` measures whether the hand dwells at the target
 during the hold window; it needs no reference trajectory.
+
+A periodic motion has no target: its hand goes around a curve again and again.
+:func:`cycle_metrics` measures whether a run's hand goes around the curve, close to
+it and at about the taught pace, by its end.
 """
 
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -33,6 +39,9 @@ PATH_SPACING = 0.005
 # Normalized time at which a minimum-jerk speed profile first exceeds
 # MOVING_THRESHOLD: the solution of 16 tau^2 (1 - tau)^2 = MOVING_THRESHOLD.
 _MINIMUM_JERK_ONSET = 0.5 * (1.0 - np.sqrt(1.0 - np.sqrt(MOVING_THRESHOLD)))
+# Distances to a path are measured this many points at a time: an 80-s run against a take of
+# 44 s would otherwise take 3 GB at once.
+_CHUNK = 1000
 
 
 def minimum_jerk_profile(tau: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -186,9 +195,12 @@ def distances_to_path(points: NDArray[np.float64], reference: NDArray[np.float64
     """Return the distance from each of ``points`` to the nearest point on the polyline through ``reference``.
 
     Both are sequences of points of any dimension, shaped ``(n, d)``, such as hand
-    positions or joint angles.
+    positions or joint angles. The points are taken a thousand at a time, so that a
+    long run against a long path takes little memory.
     """
-    return _nearest_on_path(points, reference)[2]
+    return np.concatenate(
+        [_nearest_on_path(points[k : k + _CHUNK], reference)[2] for k in range(0, len(points), _CHUNK)]
+    )
 
 
 def route_spread(paths: list[NDArray[np.float64]]) -> NDArray[np.float64]:
@@ -419,14 +431,58 @@ def loop_periods(times: NDArray[np.float64], points: NDArray[np.float64], center
     whole turn past where the last one ended, in the direction of the motion; its time
     is interpolated between the two samples. Fewer than one loop gives nothing.
     """
+    ends = [times[i - 1] + fraction * (times[i] - times[i - 1]) for i, fraction in _loop_ends(points, center)]
+    return np.diff(np.concatenate([[times[0]], ends]))
+
+
+def taught_period(times: NDArray[np.float64], points: NDArray[np.float64], center: ArrayLike) -> float:
+    """Return the taught period of a periodic take (s): the median time of its whole loops after the first.
+
+    The loops are those of :func:`loop_periods`. The first holds the start from rest,
+    so it is left out; the others are the taught loops.
+    """
+    return float(np.median(loop_periods(times, points, center)[1:]))
+
+
+def taught_loop(q: NDArray[np.float64], points: NDArray[np.float64], center: ArrayLike) -> tuple[int, int]:
+    """Return the samples of a periodic take to replay without end: the loop's first and one past its last.
+
+    ``q`` are the take's joint angles and ``points`` its hand positions, both shaped
+    ``(n, d)``, going around ``center``. Its loops end as in :func:`loop_periods`,
+    each at the sample nearest where its whole turn is complete. The first is the
+    end of the first loop; the other is, of the ends of the later loops, the one
+    whose posture is nearest to the first's. Replayed again and again, as
+    ``ReplaySource(loop=(first, end))`` does, the samples from the first to the one
+    before the other close with the smallest step the take offers: the replay goes
+    on to ``q[first]`` where the take went on to ``q[end]``, and their distance,
+    ``np.linalg.norm(q[end] - q[first])``, is the loop's closing mismatch.
+
+    Raises
+    ------
+    ValueError
+        If the take has fewer than two whole loops.
+    """
+    ends = [i - 1 if fraction < 0.5 else i for i, fraction in _loop_ends(points, center)]
+    if len(ends) < 2:
+        msg = f"the take has {len(ends)} whole loops, fewer than the two a taught loop needs"
+        raise ValueError(msg)
+    first, later = ends[0], np.array(ends[1:])
+    return first, int(later[np.argmin(np.linalg.norm(q[later] - q[first], axis=1))])
+
+
+def _loop_ends(points: NDArray[np.float64], center: ArrayLike) -> list[tuple[int, float]]:
+    """Where each whole loop of ``points`` around ``center`` ends, as :func:`loop_periods` defines it.
+
+    For each loop, the first sample at or past its whole turn, and how far between
+    the sample before and that one the turn is complete (0 to 1).
+    """
     phase = loop_phase(points, center)
     turned = np.sign(phase[-1] - phase[0]) * (phase - phase[0])
     ends = []
     for k in range(1, int(turned.max() // (2 * np.pi)) + 1):
         i = int(np.argmax(turned >= 2 * np.pi * k))
-        fraction = (2 * np.pi * k - turned[i - 1]) / (turned[i] - turned[i - 1])
-        ends.append(times[i - 1] + fraction * (times[i] - times[i - 1]))
-    return np.diff(np.concatenate([[times[0]], ends]))
+        ends.append((i, float((2 * np.pi * k - turned[i - 1]) / (turned[i] - turned[i - 1]))))
+    return ends
 
 
 def mean_loop(points: NDArray[np.float64], center: ArrayLike, n: int = 360) -> tuple[NDArray[np.float64], float]:
@@ -454,6 +510,87 @@ def mean_loop(points: NDArray[np.float64], center: ArrayLike, n: int = 360) -> t
     angles = grid * (2 * np.pi / n)
     loop = center + radii[:, np.newaxis] * np.column_stack([np.cos(angles), np.sin(angles)])
     return loop, float(np.sqrt(np.mean(distances_to_path(points, loop) ** 2)))
+
+
+def cycle_metrics(
+    times: NDArray[np.float64],
+    hand: NDArray[np.float64],
+    curve: NDArray[np.float64],
+    center: ArrayLike,
+    period: float,
+    tolerance: float,
+    cycle_periods: int,
+    cycle_turns: Sequence[float],
+) -> dict[str, float | bool]:
+    """Measure whether a run of a periodic motion cycles: whether its hand goes around the curve at about its pace.
+
+    ``hand`` holds the hand positions at ``times``, evenly spaced (shape ``(n, 2)``);
+    ``curve`` is the task's curve as a closed polygon, which goes around ``center``,
+    such as :func:`arm_esn_ctrl.demonstrations.task_path` gives; and ``period`` is the
+    taught period (s). The hand is measured by its distance from the curve, wherever
+    along it the hand is and whenever: off the curve. The window is the run's last
+    ``cycle_periods`` taught periods.
+
+    Returns
+    -------
+    dict[str, float | bool]
+        - ``cycles``: over the window, the hand's angle about the center (see
+          :func:`loop_phase`) grows, counterclockwise, by a number of turns within
+          ``cycle_turns``, the least and the most, and the RMS of off the curve is at
+          most ``tolerance`` (m). The hand may leave the curve for a moment.
+        - ``turns``: that number of turns, negative for a hand that goes clockwise.
+        - ``curve_rms_m`` and ``off_curve_max_m``: the RMS and the largest of off the
+          curve over the window (m).
+        - ``period_s``: the median time of the whole loops in the window, counted from
+          its start (see :func:`loop_periods`), NaN if there is none; and
+          ``period_ratio``: that over the taught period.
+        - ``joining_time_s``: the earliest time from which the RMS of off the curve
+          over every following window of one taught period, to the end of the run, is
+          at most ``tolerance``; NaN if the last such window, which ends with the run,
+          is above it.
+    """
+    nan = float("nan")
+    off = distances_to_path(hand, curve)
+    window = times > times[-1] - cycle_periods * period - 1e-9
+    phase = loop_phase(hand[window], center)
+    turns = float((phase[-1] - phase[0]) / (2 * np.pi))
+    periods = loop_periods(times[window], hand[window], center)
+    period_s = float(np.median(periods)) if len(periods) else nan
+    curve_rms = float(np.sqrt(np.mean(off[window] ** 2)))
+    # The RMS over each window of one taught period, from each sample whose window ends within the run.
+    width = int(np.searchsorted(times, times[0] + period + 1e-9, side="right"))
+    each = np.sqrt(np.lib.stride_tricks.sliding_window_view(off**2, width).mean(axis=1))
+    above = np.flatnonzero(each > tolerance)
+    joining = nan
+    if above.size == 0:
+        joining = float(times[0])
+    elif above[-1] < len(each) - 1:
+        joining = float(times[above[-1] + 1])
+    return {
+        "cycles": bool(cycle_turns[0] <= turns <= cycle_turns[1] and curve_rms <= tolerance),
+        "turns": turns,
+        "curve_rms_m": curve_rms,
+        "off_curve_max_m": float(off[window].max()),
+        "period_s": period_s,
+        "period_ratio": period_s / period,
+        "joining_time_s": joining,
+    }
+
+
+def largest_after(
+    times: NDArray[np.float64], values: NDArray[np.float64], spans: list[tuple[float, float]], window: float
+) -> list[float]:
+    """Return the largest of ``values`` at ``times`` over ``window`` seconds after the end of each of ``spans``.
+
+    ``spans`` are when each disturbance acts, as ``(onset, end)``; the window runs
+    from the end, the sample at it included, to ``window`` seconds later. NaN if no
+    sample falls in it.
+    """
+    largest = []
+    for _, end in spans:
+        after = (times > end - 1e-9) & (times < end + window + 1e-9)
+        largest.append(float(values[after].max()) if after.any() else float("nan"))
+    return largest
 
 
 def arrival_index(hand: NDArray[np.float64], target: ArrayLike, radius: float) -> int | None:

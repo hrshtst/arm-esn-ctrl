@@ -62,7 +62,7 @@ maintainer brings the two branches together.
 | 0 | the code every later stage needs | implemented |
 | 1 | one target from many start postures | reports 023 and 024 written and reviewed; its open questions are deferred |
 | 2 | several targets, named by a one-hot context | report 025 written, awaiting review |
-| 3 | a periodic motion, and switching between it and reaching | next, beside stage 2 |
+| 3 | a periodic motion, and switching between it and reaching | 3a: reports 026 (the scripted take) and 027 (the take by hand) written, awaiting review; 3b not started |
 | 4 | all tasks in one ESN | not started |
 
 ### Stage 0: the code

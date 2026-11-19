@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_periodic/scripted_untaught_search.toml"
+command = "experiments/sweep_robot_esn.py experiments/manual_demonstration_v2_periodic/scripted_untaught_search.toml --workers 15"
+started = 2026-11-18 20:58:22+09:00
+host = "delbosque"
+commit = "f0da264b99b24bb56b3340a023836374fd3c569c"
+uncommitted_changes = false

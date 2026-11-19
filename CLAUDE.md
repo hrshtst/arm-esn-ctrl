@@ -53,6 +53,27 @@ uv run basedpyright && uv run mypy           # type checking
   compares the chosen ESNs with the replay, and shows joint angles and torques over time
   for every scenario, the undisturbed one too.
 
+## Videos and figures for slides
+
+- **Where:** `presentations/<name>/make_media.py` makes them and writes them to the
+  storage root under `presentations/<name>/`, not into the repository. Start from the
+  nearest existing script (`many-starts`, `periodic-motion-from-a-script`,
+  `periodic-motion-by-hand`).
+- **A single run or take:** skelarm's player,
+  `player.py <log> --export out.mp4 --fps 30 --panel` with `QT_QPA_PLATFORM=offscreen`.
+  `--speed N` makes the export N times as fast.
+- **Runs one after another, or text drawn on the frames:** imageio and PIL
+  (`sequence_video` in those scripts). Keep `quality=9.5` or lower and
+  `macro_block_size=16`. Never `quality=10`: that is lossless H.264, which PowerPoint
+  shows as a black frame while VLC plays it.
+- **Keep every clip as its own file,** and build the concatenated videos from the kept
+  clips.
+- **Render into a scratch storage root first** and look at frames, then render into the
+  storage root.
+- **Recommended, to adapt to what the videos show:** cut a long run to a window before
+  exporting it; give the script options to render a part (`--only`, `--starts`,
+  `--all-starts-only` in the periodic-motion scripts).
+
 ## Git
 
 - Commit each change before producing results from it or asking for review. Fixes after

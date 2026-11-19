@@ -1,0 +1,56 @@
+# The scripted take's ESN #1 (leak rate 0.017, spectral radius 1.35, input scaling 4,
+# ridge 0.001, seed 5) on the robot with the tip held from 10 s to 13 s, three quarters
+# of a loop, then let go, from the eight starts on the curve, against the replay of its
+# take, which goes on without end through the take's taught loop: claim 5. About 5
+# minutes: 16 runs of 60 s, one after another. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_periodic/scripted_block_robot_esn1.toml
+
+[esn]
+# A trained ESN: esn.toml in a run directory of experiments/autonomous_esn.py, relative
+# to the storage root.
+model = "results/manual_demonstration_v2_periodic/20261118-225615-scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5/esn.toml"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 60.0           # task (s), after the warm-up: 15 taught periods; the tip is let go at 13 s
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
+cycle_periods = 5
+cycle_turns = [4.0, 6.0]  # the least and the most
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0
+return_tolerance = 0.02   # after a disturbance, the hand is back once within this of the curve (m)
+after_window = 2.0        # the largest torque and off the curve are taken over this long after a disturbance's end (s)
+ringing_cutoff_hz = 1.5   # after a disturbance, the hand's motion above this is its ringing (Hz)
+ringing_window = 2.0      # the ringing is measured over this long after the disturbance's end (s)
+following_window = 0.5    # the following gain: from a disturbance's onset to this long after its end (s)
+
+[evaluation.extra_starts]
+# hand_esn.toml's other seven starts on the curve (deg).
+on_curve = [
+  [47.3, 90.8], [62.6, 83.0], [75.1, 82.6], [79.0, 92.5], [71.5, 109.8], [53.3, 122.5], [36.2, 118.7],
+]
+
+# The consistent search's block (report 017): a stiff spring-damper holds the tip where
+# it was at its onset, then lets go.
+[disturbance]
+type = "block"
+onset = 10.0           # task time when the tip is gripped (s)
+release = 13.0         # task time when it is let go (s)
+stiffness = 20000.0    # N/m
+damping = 100.0        # N s/m

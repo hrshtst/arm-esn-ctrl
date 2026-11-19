@@ -1,0 +1,6 @@
+config = "experiments/manual_demonstration_v2_periodic/scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5.toml"
+command = "experiments/autonomous_esn.py experiments/manual_demonstration_v2_periodic/scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5.toml"
+started = 2026-11-18 22:56:15+09:00
+host = "delbosque"
+commit = "66bc163ad3e16c5c9f5f920aee3dd87ab9186e80"
+uncommitted_changes = false

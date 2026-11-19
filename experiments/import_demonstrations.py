@@ -15,8 +15,13 @@ printed, no run is created, and the take must be recorded again.
 Several takes of one task, each from its own start posture, are listed as ``takes``
 instead, in the order of the start postures of ``[demonstrations]`` ``start_q``.
 They are imported together, as ``demo_00``, ``demo_01``, ..., each with its filtered
-copy, only if every one passes; the figure then draws them together. A task without
-a target, such as a periodic motion, has no arrival to check or to measure.
+copy, only if every one passes; the figure then draws them together.
+
+A periodic motion (a ``[task]`` of type ``periodic_curve``) has no target to arrive
+at and hold: its hand must go around the curve's center instead, at least
+``[recording]`` ``min_loops`` whole times, counterclockwise, the way the curve's angle
+grows, and the take must end while the hand still goes around (``end_window`` and
+``end_speed_ratio``), or an ESN would learn to stop where it ends.
 
 Takes of several targets have a ``[task]`` of type ``multi_target_reaching``, whose
 ``targets`` the recorder shows, and ``takes`` is a pattern instead of a list, such
@@ -54,7 +59,11 @@ as any others:
 - ``demo_00_filtered.sklog.npz``: the take smoothed by the filter of
   ``[recording.filter]`` (see :func:`arm_esn_ctrl.demonstrations.smooth_take`),
   which removes the steps of the cursor's whole screen pixels; the same checks
-  apply to it;
+  apply to it. The recorder now and then writes two samples a fraction of a
+  millisecond apart, which the filter would turn into a jump: where
+  ``[recording]`` sets ``min_interval``, a sample that follows the one before it
+  by less than that many seconds is left out of the filtered copy, and kept in
+  the copy as recorded;
 
 and their measurements:
 
@@ -65,9 +74,11 @@ and their measurements:
   and the longest interval), with ``start_within_a_turn`` the whole turns taken off
   each joint (``turns_q1``, ``turns_q2``, ...; 0 where nothing moved), and the
   take's file, relative to the storage root, and its SHA-256, which ties the run to
-  it;
-- ``demonstrations.png``: the hand path, the joint angles and the hand speed over
-  time of both, and the sampling intervals of the take.
+  it; of a periodic motion, its loops instead of the reach metrics and the arrival
+  (see :func:`loop_metrics`);
+- ``demonstrations.png``: the hand path, over the curve of a periodic task, the
+  joint angles and the hand speed over time of both, and the sampling intervals of
+  the take.
 """
 
 from __future__ import annotations
@@ -87,8 +98,19 @@ from matplotlib.figure import Figure
 from numpy.typing import NDArray
 from skelarm import Skeleton, StateLog, Task, active_target_index, multi_target_specs
 
-from arm_esn_ctrl.demonstrations import check_take, endpoint_positions, smooth_take
-from arm_esn_ctrl.metrics import hand_speed, hold_metrics, jitter, onset_index, reach_metrics
+from arm_esn_ctrl.demonstrations import check_take, endpoint_positions, smooth_take, task_path
+from arm_esn_ctrl.metrics import (
+    distances_to_path,
+    hand_speed,
+    hold_metrics,
+    jitter,
+    loop_periods,
+    mean_loop,
+    onset_index,
+    reach_metrics,
+    taught_loop,
+    taught_period,
+)
 from arm_esn_ctrl.postures import joint_columns
 from arm_esn_ctrl.storage import REPO_ROOT, resolve_run_path, start_run, storage_root
 
@@ -107,6 +129,8 @@ JOINT_STYLES = [("-", "solid"), ("--", "dashed"), (":", "dotted"), ("-.", "dash-
 MULTI_TARGET_TASK = "multi_target_reaching"  # the [task] type of takes of several targets
 # The keys of a multi-target [task] that the [task] of one of its targets does not have.
 MULTI_TARGET_KEYS = ("type", "active", "targets")
+# A periodic task's curve is measured and drawn as a polygon of this many sides, within 0.01 mm of it.
+CURVE_SIDES = 360
 
 
 def main() -> None:
@@ -152,11 +176,16 @@ def main() -> None:
             else:
                 shutil.copy2(take_of[demo], run_dir / f"{demo}.sklog.npz")
         task = Task.from_dict(run["task"])
+        periodic = task.type == "periodic_curve"
         hands = {demo: endpoint_positions(skeleton, joint_angles(log)) for demo, log in demos.items()}
         within_a_turn = run["recording"].get("start_within_a_turn", False)
         rows = [
             {"demo": demo}
-            | demo_metrics(log, hands[demo], start_of[demo], task, run["recording"]["hold"])
+            | (
+                loop_metrics(log, hands[demo], start_of[demo], task)
+                if periodic
+                else demo_metrics(log, hands[demo], start_of[demo], task, run["recording"]["hold"])
+            )
             | sampling_metrics(demos[demo.removesuffix("_filtered")])
             | ({f"turns_q{j}": int(n) for j, n in enumerate(turns_of[demo], start=1)} if within_a_turn else {})
             | {"take": str(take_of[demo].relative_to(storage_root())), "take_sha256": sha256_of(take_of[demo])}
@@ -298,7 +327,16 @@ def load_demos(
         recorded, turns = load_take(take, recording)
         for name, log in (
             (f"demo_{i:02d}", recorded),
-            (f"demo_{i:02d}_filtered", smooth_take(recorded, skeleton, config["task"], recording["filter"])),
+            (
+                f"demo_{i:02d}_filtered",
+                smooth_take(
+                    recorded,
+                    skeleton,
+                    config["task"],
+                    recording["filter"],
+                    min_interval=recording.get("min_interval", 0.0),
+                ),
+            ),
         ):
             demos[name], start_of[name], take_of[name], turns_of[name] = log, start_deg, take, turns
     return demos, start_of, take_of, turns_of
@@ -318,6 +356,14 @@ def check_demos(
     if task.target is not None and task.tolerance is None:
         msg = "the [task] target needs a tolerance, which is the goal radius"
         raise ValueError(msg)
+    periodic = task.type == "periodic_curve"
+    # A periodic motion goes around its curve's center, enough times, and ends moving.
+    loop_checks = (
+        {"center": task.params["center"]}
+        | {key: recording[key] for key in ("min_loops", "end_window", "end_speed_ratio")}
+        if periodic
+        else {}
+    )
     return {
         name: check_take(
             log,
@@ -325,9 +371,10 @@ def check_demos(
             start_q=np.radians(start_of[name]),
             target=task.target,
             radius=task.tolerance or 0.0,
-            hold=recording["hold"],
+            hold=0.0 if periodic else recording["hold"],  # a periodic motion has no target to hold at
             start_tolerance=float(np.radians(recording.get("start_tolerance_deg", np.inf))),
             max_tip_speed=recording["max_tip_speed"],
+            **loop_checks,
         )
         for name, log in demos.items()
     }
@@ -363,6 +410,51 @@ def demo_metrics(
     )
 
 
+def loop_metrics(log: StateLog, hand: NDArray[np.float64], start_deg: list[float], task: Task) -> dict[str, Any]:
+    """A periodic demonstration's start, its loops, its taught loop, its onset, and its joint jitter (5 samples).
+
+    The loops are the hand's around the center of the task's curve:
+
+    - ``loops``: how many whole times it goes around (see
+      :func:`arm_esn_ctrl.metrics.loop_periods`), and ``median_period_s``,
+      ``shortest_period_s``, and ``longest_period_s``: how long a taught loop takes,
+      a whole loop after the first, which holds the start from rest; the median is
+      the taught period (see :func:`arm_esn_ctrl.metrics.taught_period`);
+    - ``loop_spread_m``: the hand's RMS distance from its mean loop, how much its
+      loops differ from each other (see :func:`arm_esn_ctrl.metrics.mean_loop`);
+    - ``curve_rms_m`` and ``curve_max_m``: the hand's RMS and largest distance from
+      the task's curve;
+    - ``taught_loop_start_s`` and ``taught_loop_end_s``: the times of the first
+      sample and of the one past the last of the loop a replay goes through again
+      and again, at the take's own samples (see
+      :func:`arm_esn_ctrl.metrics.taught_loop`), and ``taught_loop_mismatch_deg``:
+      how far apart the postures at the two are, the step the replay misses where
+      it goes back to the first.
+    """
+    times, q = log.times, joint_angles(log)
+    center = task.params["center"]
+    periods = loop_periods(times, hand, center)
+    curve = task_path(task.to_dict(), CURVE_SIDES)
+    assert curve is not None
+    from_curve = distances_to_path(hand, curve)
+    first, end = taught_loop(q, hand, center)
+    onset = onset_index(hand)
+    return joint_columns("start_q{j}_deg", start_deg) | {
+        "loops": len(periods),
+        "median_period_s": taught_period(times, hand, center),
+        "shortest_period_s": float(periods[1:].min()),
+        "longest_period_s": float(periods[1:].max()),
+        "loop_spread_m": mean_loop(hand, center)[1],
+        "curve_rms_m": float(np.sqrt(np.mean(from_curve**2))),
+        "curve_max_m": float(from_curve.max()),
+        "taught_loop_start_s": float(times[first]),
+        "taught_loop_end_s": float(times[end]),
+        "taught_loop_mismatch_deg": float(np.degrees(np.linalg.norm(q[end] - q[first]))),
+        "onset_time_s": float("nan") if onset is None else float(times[onset]),
+        "jitter_deg": float(np.degrees(jitter(q, JITTER_WINDOW))),
+    }
+
+
 def sampling_metrics(log: StateLog) -> dict[str, Any]:
     """How the take was sampled: the number of samples, the length, the rates, and the longest interval."""
     times = log.times
@@ -382,8 +474,23 @@ def sha256_of(path: Path) -> str:
 
 
 def print_metrics(rows: list[dict[str, Any]]) -> None:
-    """Print each demonstration's timing and reach metrics, then how each take was sampled, and moved if it was."""
+    """Print each demonstration's timing and reach or loop metrics, then how each take was sampled.
+
+    A take moved by whole turns is printed with how it was moved.
+    """
     for row in rows:
+        if "loops" in row:  # a periodic motion
+            print(
+                f"{row['demo']}: moves at {row['onset_time_s']:.2f} s of {row['length_s']:.2f} s;"
+                f" {int(row['loops'])} whole loops, the taught ones (after the first) of"
+                f" {row['median_period_s']:.2f} s in the median ({row['shortest_period_s']:.2f} to"
+                f" {row['longest_period_s']:.2f} s); the hand {1000 * row['loop_spread_m']:.1f} mm RMS from its mean"
+                f" loop, and {1000 * row['curve_rms_m']:.1f} mm RMS and {1000 * row['curve_max_m']:.1f} mm at most"
+                f" from the curve;"
+                f" taught loop {row['taught_loop_start_s']:.2f} to {row['taught_loop_end_s']:.2f} s, closing"
+                f" {row['taught_loop_mismatch_deg']:.3f} deg apart; joint jitter {row['jitter_deg']:.3f} deg"
+            )
+            continue
         if "movement_time" not in row:  # a task without a target
             print(
                 f"{row['demo']}: moves at {row['onset_time_s']:.2f} s of {row['length_s']:.2f} s;"
@@ -431,17 +538,21 @@ def plot_take(
     """The hand path, the joint angles and hand speed over time of each demonstration, and the takes' sampling.
 
     With one take, the dotted lines mark when its hand starts to move and when it
-    arrives. With several, each take has its own color, its recorded hand path
-    gray under the filtered one, and only the filtered joint angles and speeds are
-    drawn.
+    arrives, or, of a periodic motion, where its taught loop begins and ends. With
+    several, each take has its own color, its recorded hand path gray under the
+    filtered one, and only the filtered joint angles and speeds are drawn. The curve
+    of a periodic task is drawn under the hand paths.
     """
     several = len(demos) > 2
     fig = Figure(figsize=(12, 8.5), facecolor=SURFACE_COLOR, layout="constrained")
-    fig.suptitle(f"Demonstration{'s' if several else ''} taught by hand: {title}", color="#0b0b0b")
+    fig.suptitle(f"Demonstration{'s' if several else ''}: {title}", color="#0b0b0b")
     ax_hand, ax_joint, ax_speed, ax_interval = fig.subplots(2, 2).flat
     for ax in (ax_hand, ax_joint, ax_speed, ax_interval):
         style(ax)
 
+    path = task_path(task.to_dict(), CURVE_SIDES)
+    if path is not None:
+        ax_hand.plot(path[:, 0], path[:, 1], color="#0b0b0b", linewidth=0.8, label="the task's curve", zorder=1)
     for name, log in demos.items():
         times, hand = log.times, hands[name]
         filtered = name.endswith("_filtered")
@@ -482,8 +593,8 @@ def plot_take(
     ax_speed.set(title="Hand speed", xlabel="time (s)", ylabel="speed (m/s)")
     if not several:
         for ax in (ax_joint, ax_speed):
-            for key in ("onset_time_s", "arrival_time_s"):
-                if np.isfinite(rows[0][key]):
+            for key in ("onset_time_s", "arrival_time_s", "taught_loop_start_s", "taught_loop_end_s"):
+                if key in rows[0] and np.isfinite(rows[0][key]):
                     ax.axvline(rows[0][key], color=TEXT_COLOR, linewidth=0.8, linestyle=":")
         times = demos["demo_00"].times
         ax_interval.plot(times[1:], 1000 * np.diff(times), color=TAKE_COLOR, linewidth=1.0)
