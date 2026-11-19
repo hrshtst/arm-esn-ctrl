@@ -89,6 +89,7 @@ SCENARIOS: dict[str, tuple[str, tuple[int, ...] | None, tuple[float, float], str
     "block": ("block_robot_esn", (0,), (8.0, 20.0), "the tip held from 10 s to 13 s, from start 0"),
 }
 NAMES = ("leak_rate", "spectral_radius", "input_scaling", "ridge")
+STILL_TURNS = 0.5  # a hand that turns less than this over a run's last five taught periods does not go around
 # The stretches of the workspace drawn, x and y (m): all of it, the curve and the paths from the starts on it in
 # their first 8 s, and the curve alone.
 WHOLE_VIEW = ((-0.95, 0.95), (-0.95, 0.95))
@@ -230,6 +231,12 @@ def spans(run: str) -> list[tuple[float, float]]:
 
 def scores(run: str) -> list[dict[str, Any]]:
     return table(run, "scores.csv")
+
+
+def search_runs(directory: str) -> list[dict[str, Any]]:
+    """A search's runs, one row a run, by its directory's name: its ``runs.csv`` under the storage root, which is not
+    copied under ``results/``."""
+    return read_csv(resolve_run_path(f"results/{EXPERIMENT}/{directory}") / "runs.csv")
 
 
 def setting_of(row: dict[str, Any]) -> tuple[float, ...]:
@@ -715,6 +722,8 @@ def print_search(name: str) -> None:
     for key in NAMES:
         counts = {v: sum(row[key] == v for row in full) for v in sorted({row[key] for row in coarse})}
         print(f"  settings that cycle from all starts, by {key}: {counts}")
+    directory = run_name(stem(name, "coarse_search"))
+    print_coarse_runs(search_runs(directory), config(directory)["evaluation"])
     fine = scores(stem(name, "fine_search"))
     full = [row for row in fine if row["cycling_runs"] == row["runs"]]
     others = [row for row in fine if row["cycling_runs"] < row["runs"]]
@@ -760,6 +769,12 @@ def print_search(name: str) -> None:
                 f"  not every run cycles: {setting_text(row)}, seed {int(row['seed'])}:"
                 f" {int(row['cycling_runs'])} of {int(row['runs'])}"
             )
+    for row in search_runs(run_name(stem(name, "untaught_search"))):
+        if not row["cycles"]:
+            print(
+                f"  a run that does not cycle: {setting_text(row)}, seed {int(row['seed'])}, start {int(row['start'])}"
+                f" ({row['origin']}): {row['turns']:.3f} turns, curve RMS {1e3 * row['curve_rms_m']:.1f} mm"
+            )
     for label, row in zip(ESNS, rescored, strict=False):
         own = [seed for seed in seeds if setting_of(seed) == setting_of(row)]
         each = ", ".join(
@@ -770,6 +785,71 @@ def print_search(name: str) -> None:
             f"  {label}: {setting_text(row)}, the setting's median {1e3 * row['median_curve_rms_m']:.4f} mm; each"
             f" seed's (runs that cycle): {each}; typical seed {int(row['typical_seed'])}"
         )
+    print_untaught_starts(name)
+
+
+def print_coarse_runs(runs: list[dict[str, Any]], evaluation: dict[str, Any]) -> None:
+    """A coarse search's runs that cycle, by each parameter's value, and why the others do not.
+
+    The bounds are the search's own: its ``[evaluation]``'s ``cycle_turns`` and ``curve_tolerance``. A run that does
+    not cycle turns under ``STILL_TURNS``, or too few turns otherwise, or keeps the pace but is too far from the curve,
+    or turns too many; the count of the runs in none of these shows that they add up.
+    """
+    least, most = evaluation["cycle_turns"]
+    tolerance = evaluation["curve_tolerance"]
+    cycling = [run for run in runs if run["cycles"]]
+    print(f"coarse search's runs: {len(cycling)} of {len(runs)} cycle; those that cycle by each parameter's value:")
+    for key in NAMES:
+        counts = ", ".join(
+            f"{v:g}: {sum(run[key] == v for run in cycling)}/{sum(run[key] == v for run in runs)}"
+            for v in sorted({run[key] for run in runs})
+        )
+        print(f"  {key}: {counts}")
+    others = [run for run in runs if not run["cycles"]]
+    still = [run for run in others if run["turns"] < STILL_TURNS]
+    backwards = sum(run["turns"] <= -STILL_TURNS for run in still)
+    slow = [run for run in others if STILL_TURNS <= run["turns"] < least]
+    off = [run for run in others if least <= run["turns"] <= most and run["curve_rms_m"] > tolerance]
+    fast = [run for run in others if run["turns"] > most]
+    rest = len(others) - len(still) - len(slow) - len(off) - len(fast)
+    print(
+        f"  of the {len(others)} that do not cycle: {len(still)} make under {STILL_TURNS:g} turns ({backwards} of them"
+        f" {STILL_TURNS:g} turns or more backwards), {len(slow)} go around too slowly ({STILL_TURNS:g} to under"
+        f" {least:g} turns), {len(off)} keep the pace ({least:g} to {most:g} turns) but are over {1e3 * tolerance:g} mm"
+        f" in curve RMS, {len(fast)} go around too fast (over {most:g} turns), {rest} none of these"
+    )
+
+
+def print_untaught_starts(name: str) -> None:
+    """How the scoring's runs from the untaught starts begin and join the curve, setting by setting, in its order."""
+    runs = search_runs(run_name(stem(name, "untaught_search")))
+    untaught = [run for run in runs if str(run["origin"]).startswith("untaught")]
+    print(
+        "  from the untaught starts, by setting: the median fastest reference joint speed, the median largest torque,"
+        " and the median and the largest joining time"
+    )
+    measures = []
+    for rank, row in enumerate(scores(stem(name, "untaught_search")), start=1):
+        own = [run for run in untaught if setting_of(run) == setting_of(row)]
+        joining = column(own, "joining_time_s")
+        each = (
+            float(np.median(column(own, "peak_reference_speed_dps"))),
+            float(np.median(column(own, "peak_torque_nm"))),
+            float(np.nanmedian(joining)),
+            float(np.nanmax(joining)),
+        )
+        measures.append(each)
+        missing = int(np.isnan(joining).sum())
+        print(
+            f"    {rank:2d}. {setting_text(row)} ({len(own)} runs): {each[0]:.0f} deg/s, {each[1]:.1f} N m, joining"
+            f" {each[2]:.2f} s, at most {each[3]:.2f} s" + (f" ({missing} without a joining time)" if missing else "")
+        )
+    low, high = np.min(measures, axis=0), np.max(measures, axis=0)
+    print(
+        f"    across the {len(measures)} settings: speed {low[0]:.0f} to {high[0]:.0f} deg/s, torque {low[1]:.1f} to"
+        f" {high[1]:.1f} N m, joining time {low[2]:.2f} to {high[2]:.2f} s in the median, at most {low[3]:.2f} to"
+        f" {high[3]:.2f} s"
+    )
 
 
 def print_esns(name: str) -> None:
