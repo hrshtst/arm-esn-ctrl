@@ -5,6 +5,7 @@
 
 import sys
 import tomllib
+from typing import Any
 
 import numpy as np
 import pytest
@@ -37,6 +38,16 @@ ESN = {
 }
 TRACKER = {"laws": ["computed_torque"], "omegas": [40.0], "acceleration_filter": 0.02}
 EVALUATION = {"duration": 2.5, "hold": 0.5, "start_offsets_deg": [[0.0, 0.0]]}
+# A periodic task's curve on the same arm, around the near task's target, and what its runs are measured by.
+LOOP: dict[str, Any] = {
+    "type": "periodic_curve",
+    "curve": "ellipse",
+    "center": [0.0, 1.2],
+    "a": 0.2,
+    "b": 0.12,
+    "period": 1.0,
+}
+CYCLE = {"curve_tolerance": 0.02, "cycle_periods": 2, "cycle_turns": [1.0, 3.0]}
 
 
 def joint_reach(start, goal, n=200):
@@ -67,6 +78,30 @@ def storage(tmp_path, monkeypatch):
         log.save(run / "demo_00.sklog.npz")
     monkeypatch.setenv("ARM_ESN_CTRL_STORAGE_ROOT", str(tmp_path))
     return tmp_path
+
+
+def add_periodic_task(root, name):
+    """Add to the storage root a run of one take taught by hand of LOOP: still for 0.5 s, then three loops of 1 s."""
+    with CONFIG.open("rb") as f:
+        demo_config = tomllib.load(f)
+    del demo_config["controller"]
+    demo_config["task"] = LOOP | {"duration": 3.5}
+    times = np.arange(0.0, 3.505, 0.01)
+    angle = 2 * np.pi * np.clip(times - 0.5, 0.0, None) / LOOP["period"]
+    hand = np.array(LOOP["center"]) + np.column_stack([LOOP["a"] * np.cos(angle), LOOP["b"] * np.sin(angle)])
+    # The inverse kinematics of reach_tvs.toml's arm, joint 2 positive.
+    upper, forearm = 1.0, 0.8
+    q2 = np.arccos((np.sum(hand**2, axis=1) - upper**2 - forearm**2) / (2 * upper * forearm))
+    q1 = np.arctan2(hand[:, 1], hand[:, 0]) - np.arctan2(forearm * np.sin(q2), upper + forearm * np.cos(q2))
+    run = root / "results" / "demonstrations" / name
+    run.mkdir(parents=True)
+    (run / "config.toml").write_text(tomli_w.dumps(demo_config))
+    skeleton = Skeleton.from_toml(CONFIG)
+    log = StateLog(skeleton)
+    for k, posture in enumerate(np.column_stack([q1, q2])):
+        skeleton.q = posture
+        log.record_skeleton(skeleton, 0.01 * k)
+    log.save(run / "demo_00.sklog.npz")
 
 
 def sweep_config(*tasks):
@@ -122,3 +157,13 @@ def test_a_single_task_sweep_has_no_task_column_and_no_scores_of_each_task(stora
     assert row["runs"] == 1
     (score,) = score_settings([{"leak_rate": 0.05} | run for run in runs], ["leak_rate"])
     assert list(score) == ["leak_rate", "runs", "holding_runs", "median_detour_ratio"]
+
+
+def test_a_sweep_of_several_tasks_with_a_periodic_one_is_refused(storage):
+    add_periodic_task(storage, "loop")
+    evaluation = EVALUATION | CYCLE
+
+    with pytest.raises(ValueError, match=r"^a periodic task is swept alone"):
+        sweep_context(sweep_config("near", "loop") | {"evaluation": evaluation})
+    # Alone, the same task is swept.
+    assert sweep_context(sweep_config("loop") | {"evaluation": evaluation}).cycle is not None
