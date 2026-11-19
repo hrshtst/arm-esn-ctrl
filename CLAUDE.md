@@ -66,11 +66,12 @@ uv run basedpyright && uv run mypy           # type checking
   (`sequence_video` in those scripts). Keep `quality=9.5` or lower and
   `macro_block_size=16`. Never `quality=10`: that is lossless H.264, which PowerPoint
   shows as a black frame while VLC plays it.
+- **Keep every clip as its own file,** and build the concatenated videos from the kept
+  clips.
 - **Render into a scratch storage root first** and look at frames, then render into the
   storage root.
 - **Recommended, to adapt to what the videos show:** cut a long run to a window before
-  exporting it; keep every clip as its own file and build the concatenated videos from
-  the kept clips; give the script options to render a part (`--only`, `--starts`,
+  exporting it; give the script options to render a part (`--only`, `--starts`,
   `--all-starts-only` in the periodic-motion scripts).
 
 ## Git
