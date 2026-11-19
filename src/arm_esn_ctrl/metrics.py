@@ -39,9 +39,10 @@ PATH_SPACING = 0.005
 # Normalized time at which a minimum-jerk speed profile first exceeds
 # MOVING_THRESHOLD: the solution of 16 tau^2 (1 - tau)^2 = MOVING_THRESHOLD.
 _MINIMUM_JERK_ONSET = 0.5 * (1.0 - np.sqrt(1.0 - np.sqrt(MOVING_THRESHOLD)))
-# Distances to a path are measured this many points at a time: an 80-s run against a take of
-# 44 s would otherwise take 3 GB at once.
-_CHUNK = 1000
+# Distances to a path are measured a few points at a time, about this many pairs of a point and
+# a segment of the path at once, each pair taking some 80 bytes: a run whose hand spins fast
+# leaves a path of 90,000 points, against which a take's 2,000 would otherwise take gigabytes.
+_PAIRS = 2**20
 
 
 def minimum_jerk_profile(tau: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -195,12 +196,12 @@ def distances_to_path(points: NDArray[np.float64], reference: NDArray[np.float64
     """Return the distance from each of ``points`` to the nearest point on the polyline through ``reference``.
 
     Both are sequences of points of any dimension, shaped ``(n, d)``, such as hand
-    positions or joint angles. The points are taken a thousand at a time, so that a
-    long run against a long path takes little memory.
+    positions or joint angles. The points are taken a few at a time, as many as make
+    about a million pairs with the segments of the reference, so that a long run
+    against a long path takes little memory.
     """
-    return np.concatenate(
-        [_nearest_on_path(points[k : k + _CHUNK], reference)[2] for k in range(0, len(points), _CHUNK)]
-    )
+    part = max(1, _PAIRS // max(1, len(reference) - 1))  # points at a time
+    return np.concatenate([_nearest_on_path(points[k : k + part], reference)[2] for k in range(0, len(points), part)])
 
 
 def route_spread(paths: list[NDArray[np.float64]]) -> NDArray[np.float64]:

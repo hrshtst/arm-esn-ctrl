@@ -662,9 +662,29 @@ def test_a_run_whose_last_taught_period_is_off_the_curve_may_cycle_but_has_not_j
 
 
 def test_the_distances_of_many_points_to_a_path_are_those_of_the_nearest_points_on_it_exactly():
-    _, hand = circle_run(radius=0.21)  # 4001 points, in five parts
+    _, hand = circle_run(radius=0.21)  # 4001 points, in two parts
 
     assert np.array_equal(distances_to_path(hand, CURVE), _nearest_on_path(hand, CURVE)[2])
+
+
+def test_the_distances_to_a_long_path_are_measured_a_few_points_at_a_time_with_the_same_values(monkeypatch):
+    _, hand = circle_run(radius=0.21)
+    hand = hand[::10]  # 401 points
+    angles = np.linspace(0.0, 2 * np.pi, 30_001)
+    curve = CENTER + 0.2 * np.column_stack([np.cos(angles), np.sin(angles)])  # 30,000 segments
+    parts = []
+
+    def recorded(points, reference):
+        parts.append(len(points) * (len(reference) - 1))
+        return _nearest_on_path(points, reference)
+
+    monkeypatch.setattr("arm_esn_ctrl.metrics._nearest_on_path", recorded)
+    distances = distances_to_path(hand, curve)
+
+    assert len(parts) == 12  # 34 points a part
+    assert max(parts) <= 2**20  # pairs of a point and a segment at once
+    for k in (0, 123, 400):
+        assert distances[k] == _nearest_on_path(hand[k : k + 1], curve)[2][0]
 
 
 def test_the_largest_value_after_each_disturbance_is_over_its_window_from_its_end():
