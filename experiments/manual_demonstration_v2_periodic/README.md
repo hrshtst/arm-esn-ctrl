@@ -207,8 +207,8 @@ The hand goes around ten whole times in 52.9 s, sampled at 100 Hz. Its taught pe
 is 5.12 s (the taught loops take 4.3 to 5.4 s), slower than the 4 s aimed at and than
 the scripted take's. The take as recorded is 9.3 mm RMS from the ellipse and 23.5 mm
 at most; its copy filtered at 2 Hz, which the ESNs are trained on, 10.3 mm RMS and
-21.9 mm at most. The hand passes about 10 mm inside the ellipse around its left end
-on every loop.
+21.9 mm at most. The hand passes inside the ellipse at its left end on every loop, by
+13 to 20 mm in the filtered copy (corrected on 2026-11-19: it read "about 10 mm").
 
 The takes recorded before it were not used. The import refused them for a jump of
 the filtered copy that the hand never made: the recorder now and then writes two
@@ -394,8 +394,7 @@ Beside the claims:
 
 ### The outcomes for the take by hand
 
-Added on 2026-11-19, after the runs of the take by hand's ESNs (commits a1b1d0b and
-30dd596, which differ in no file a run reads).
+Added on 2026-11-19, after the runs of the take by hand's ESNs (commit 30dd596).
 
 | Claim | ESN #1 | ESN #2 | The replay | Outcome |
 | --- | --- | --- | --- | --- |
@@ -420,18 +419,25 @@ Beside the claims:
   slower from all seven, and from the 36 untaught starts from all 36; the torque is
   the smaller from all but one untaught start of ESN #1. From an untaught start the
   reference still moves at about 2,000 deg/s in the median, where the take's own start
-  asks for 32 deg/s and 0.2 N m. The ESNs join the curve in 1.5 and 1.6 s in the
+  asks for 32 and 33 deg/s and 0.2 and 0.3 N m. The ESNs join the curve in 1.5 and 1.6 s in the
   median (5.1 and 3.6 s at most), the replay in 0.2 s.
-- **The pushes** send the ESNs' hands farther than the replay's: 149 to 221 mm off
+- **The pushes** send the ESNs' hands farther than the replay's: 149 to 220 mm off
   the curve in the median at report 007's forces, against 28 to 61 mm, and up to
   726 mm at four times them. The ESNs are back within 20 mm for good in 5.4 and 6.0 s
   at most after any push, at every size. The replay's return time measures the take,
   not the push: the take itself goes up to 22 mm off the curve, so the replay is
   "back for good" only after its last such loop before the next push.
 - **The delay** is taken within a loop of 5.12 s, between −1.3 s and 3.8 s. After the
-  pushes ESN #1 ends 1.5 to 1.6 s behind its undisturbed run in the median (1.1 s
-  ahead to 3.7 s behind), and ESN #2 2.2 to 2.6 s behind (1.5 to 3.8 s). After the
-  block of 3 s they end 3.2 s behind (3.0 to 3.7 s): the whole hold.
+  block of 3 s the ESNs end 3.2 s behind their undisturbed runs (3.0 to 3.7 s): the
+  whole hold. After the pushes the reading gives 1.5 to 1.6 s behind in the median for
+  ESN #1 (from −1.1 s to +3.7 s) and 2.2 to 2.6 s for ESN #2 (from +1.5 s to +3.8 s,
+  the window's top). These spread over most of a loop, so a window of one loop cannot
+  tell ahead from behind for them, and the medians depend on where the window is put
+  (added on 2026-11-19 with report 027's script: a first version gave the medians
+  without this).
+- **The replay's delay after the block reads −0.07 s** and is none: its hand cuts
+  inside the curve after the release and loses a turn of its angle, which the reading
+  takes off as one taught period, while the replay's own loop is 0.987 of it.
 
 ## The reach and the periodic motion in one ESN (3b)
 
