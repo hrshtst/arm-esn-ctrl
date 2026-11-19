@@ -214,6 +214,26 @@ recorder's tip trail also slowed the sampling of those takes after their first 1
 25 s, to about 55 Hz in the longest, so the take is recorded without it. The take
 that is used has no such sample.
 
+**The center.** Of the coarse search's 108 settings (`20261119-093837-coarse_search`),
+16 cycle from all eight starts and 64 from none, where the scripted take's had 65 and
+24. All 16 have the ridge of 1, the grid's largest: of the 288 runs at each ridge,
+186 cycle at 1, 17 at 10⁻², and 2 at 10⁻⁴. Of the 659 runs that do not cycle, the hand
+of 432 does not go around at all, that of 142 keeps the pace but is more than 20 mm
+RMS from the ellipse, and that of 13 goes around too fast. The smallest median curve
+RMS among the 16, 5.67 mm, is that of leak rate 0.03, spectral radius 0.9, input
+scaling 0.5, and ridge 1. The fine search's values around it:
+
+| Parameter | Values |
+| --- | --- |
+| leak rate | 0.017, 0.03, 0.055 |
+| spectral radius | 0.75, 0.9, 1.05 |
+| input scaling | 0.22, 0.5, 1 |
+| ridge | 10⁻¹, 1, 10 |
+
+The center's spectral radius is the coarse grid's smallest and its ridge the largest,
+so the fine search goes as far below the one and above the other as it goes toward
+the grid's inside.
+
 ## The analysis (3a)
 
 The chosen ESNs are tested on the robot against the replay. No size is fixed in
@@ -419,5 +439,6 @@ the machine is shared.
 | `scripted_pushes{1,2,4}x_robot_esn{1,2}.toml` | claim 4: each under the three pushes at 1, 2, and 4 times their forces, for 80 s from the eight starts on the curve |
 | `scripted_block_robot_esn{1,2}.toml` | claim 5: each with the tip held from 10 s to 13 s, for 60 s from the eight starts on the curve |
 | `coarse_search.toml` | the same on the take by hand; its `run` names the take's import |
+| `fine_search.toml` | the fine search on the take by hand: 81 settings around its coarse search's best, seeds 1 to 5, alike |
 | `hand_esn.toml` | an ESN to tune by hand, trained on the take by hand and run on its own from the eight starts on the curve and the 36 untaught ones; it prints the apps' commands |
 | `hand_robot.toml` | that ESN on the robot, undisturbed, from the same starts, against the replay (88 runs) |

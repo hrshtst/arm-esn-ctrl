@@ -4,7 +4,7 @@
 # the curve, for 40 s. Each setting is scored by how many of its eight runs cycle, then
 # by the median curve RMS of the runs that cycle; the best is the center of the fine
 # search. It is scripted_coarse_search.toml but for the take. Sweeps here take 15
-# workers, not 30: the machine is shared. About 10 minutes with 15 workers.
+# workers, not 30: the machine is shared. About 20 minutes with 15 workers.
 # See README.md.
 #
 #   uv run python experiments/sweep_robot_esn.py \

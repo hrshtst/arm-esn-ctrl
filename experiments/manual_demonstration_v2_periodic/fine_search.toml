@@ -1,0 +1,80 @@
+# The fine search on the take by hand: 81 settings around the best of the coarse search
+# (run 20261119-093837-coarse_search: leak rate 0.03, spectral radius 0.9, input scaling
+# 0.5, ridge 1; its 8 runs cycle, median curve RMS 5.67 mm), five reservoirs each (seeds
+# 1 to 5), trained on the take of the ellipse by hand and run on the robot, undisturbed,
+# from the eight starts on the curve, for 40 s. Each setting is scored over the 40 runs
+# of its five seeds by how many cycle, then by the median curve RMS of the runs that
+# cycle. It is scripted_fine_search.toml but for the take and the center. Sweeps here
+# take 15 workers, not 30: the machine is shared. About 75 minutes with 15 workers: 405
+# ESNs, where the coarse search's 108 took 20 minutes. See README.md.
+#
+#   uv run python experiments/sweep_robot_esn.py \
+#       experiments/manual_demonstration_v2_periodic/fine_search.toml --workers 15
+
+[demonstrations]
+# The run directory of experiments/import_demonstrations.py for
+# ellipse_manual_v2_no_limits.toml, relative to the storage root, and its take
+# filtered at 2 Hz.
+run = "results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 800
+spectral_radius = 0.9  # swept; the center's
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.03       # swept; the center's
+input_scaling = 0.5    # swept; the center's
+bias = true
+ridge = 1.0            # swept; the center's
+seed = 1               # swept
+
+[sweep]
+# The center's value, and the one halfway to its coarse neighbor on each side: in ratio
+# for the leak rate (0.01 and 0.1), the input scaling (0.1 and 2), and the ridge, in
+# difference for the spectral radius, to two digits. The center's spectral radius is the
+# coarse grid's smallest and its ridge the largest, so the value beyond each is as far
+# from the center as the one on its other side: 0.75 as 1.05 (from 1.2), and 10, in
+# ratio, as 0.1 (from 1e-2).
+leak_rate = [0.017, 0.03, 0.055]
+spectral_radius = [0.75, 0.9, 1.05]
+input_scaling = [0.22, 0.5, 1.0]
+ridge = [0.1, 1.0, 10.0]
+seed = [1, 2, 3, 4, 5]
+
+[ranking]
+# The most runs that cycle, then the smallest median curve RMS of the runs that cycle.
+by = "curve_rms_m"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+[evaluation]
+duration = 40.0           # task (s), after the warm-up: ten taught periods
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
+cycle_periods = 5
+cycle_turns = [4.0, 6.0]  # the least and the most
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0
+
+[evaluation.extra_starts]
+# The other seven starts on the curve (deg): the hand on the ellipse at the curve's
+# angles 45, 90, ..., 315 deg, which the scripted take's grows at an even rate, an
+# eighth of a loop apart; joint 2 positive, as at the take's start, rounded to 0.1 deg.
+on_curve = [
+  [47.3, 90.8], [62.6, 83.0], [75.1, 82.6], [79.0, 92.5], [71.5, 109.8], [53.3, 122.5], [36.2, 118.7],
+]

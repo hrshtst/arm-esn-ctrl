@@ -104,23 +104,34 @@ def test_the_hand_robot_runs_the_hand_esn_with_the_searchs_tracker_against_the_r
 
 # The scripted coarse search's best setting (run 20261118-191114-scripted_coarse_search): the fine search's center.
 SCRIPTED_CENTER = {"leak_rate": 0.03, "spectral_radius": 1.5, "input_scaling": 2.0, "ridge": 0.01}
+# The coarse search's best setting on the take by hand (run 20261119-093837-coarse_search): its fine search's center.
+HAND_CENTER = {"leak_rate": 0.03, "spectral_radius": 0.9, "input_scaling": 0.5, "ridge": 1.0}
+# Each take's fine search, with its coarse search and its center.
+FINE_SEARCHES = {
+    "fine_search.toml": ("coarse_search.toml", HAND_CENTER),
+    "scripted_fine_search.toml": ("scripted_coarse_search.toml", SCRIPTED_CENTER),
+}
 
 
-def test_the_scripted_fine_search_is_the_scripted_coarse_search_but_for_its_values_and_seeds():
-    fine, coarse = load(EXPERIMENT / "scripted_fine_search.toml"), load(EXPERIMENT / "scripted_coarse_search.toml")
+@pytest.mark.parametrize("search", FINE_SEARCHES)
+def test_each_fine_search_is_its_coarse_search_but_for_its_values_and_seeds(search):
+    coarse_name, center = FINE_SEARCHES[search]
+    fine, coarse = load(EXPERIMENT / search), load(EXPERIMENT / coarse_name)
 
     fine_sweep, coarse_sweep = fine.pop("sweep"), coarse.pop("sweep")
     assert fine_sweep.pop("seed") == [1, 2, 3, 4, 5]
     assert list(fine_sweep) == list(coarse_sweep)
     fine_esn, coarse_esn = fine.pop("esn"), coarse.pop("esn")
-    assert fine_esn == coarse_esn | SCRIPTED_CENTER | {"seed": 1}  # the center's values, and the first seed
+    assert fine_esn == coarse_esn | center | {"seed": 1}  # the center's values, and the first seed
     assert fine == coarse  # the same take, tracker, runs, and score
 
 
-def test_the_scripted_fine_search_takes_the_center_and_the_values_halfway_to_its_coarse_neighbors():
-    fine, coarse = load(EXPERIMENT / "scripted_fine_search.toml"), load(EXPERIMENT / "scripted_coarse_search.toml")
+@pytest.mark.parametrize("search", FINE_SEARCHES)
+def test_each_fine_search_takes_the_center_and_the_values_halfway_to_its_coarse_neighbors(search):
+    coarse_name, setting = FINE_SEARCHES[search]
+    fine, coarse = load(EXPERIMENT / search), load(EXPERIMENT / coarse_name)
 
-    for name, center in SCRIPTED_CENTER.items():
+    for name, center in setting.items():
         grid = coarse["sweep"][name]
         k = grid.index(center)
         if name == "spectral_radius":  # halfway in difference
