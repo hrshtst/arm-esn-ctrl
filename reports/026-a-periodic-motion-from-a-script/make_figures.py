@@ -3,7 +3,7 @@
 
 """Make the summary figures and tables of report 026.
 
-    uv run python reports/026-a-periodic-motion/make_figures.py
+    uv run python reports/026-a-periodic-motion-from-a-script/make_figures.py
 
 It reads the copies of the runs under ``results/`` (their configurations, run records, and CSV files), the takes
 under ``data/``, and the robot runs' logs and the takes the ESNs were trained on under the storage root, which are
