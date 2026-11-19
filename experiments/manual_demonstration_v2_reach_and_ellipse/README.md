@@ -294,3 +294,29 @@ Sweeps here take 30 workers. In 3a's sweeps a worker took up to 9 GB for moments
 one measure of a run whose arm runs away; that measure now takes its points in pieces
 (9f3855c), with the same values, and a worker of the coarse search here peaks at
 0.36 GB.
+
+## The claims' outcome
+
+Added on 2026-11-19 after the claims' runs (`20261119-223315-*`, all eight from commit
+`de4d5ad`).
+
+| Claim | Two-task ESN #1 | Two-task ESN #2 | |
+| --- | --- | --- | --- |
+| 6, the reach: holds from all 45 starts | 43 (8 of the nine takes', 35 of the 36 unseen) | 37 (8 and 29) | **fails** |
+| 6, the ellipse: cycles from all 44 starts | 44 | 44 | holds |
+| 7: arrives and holds after the change, in all 8 runs | 8 | 8 | **holds** |
+| 8: cycles at the end, in all 9 runs | 9 | 9 | **holds** |
+| 9: cycles before the last change and arrives and holds after it, in all 8 runs | 8 | 8 | **holds** |
+
+Claim 6 fails, by its reach. In each of the ten reaches that do not hold, the hand
+enters the 20 mm around the target, leaves it by 21 to 50 mm within the 2 s, and comes
+back to stay: every one of the 90 reaches ends within 13 mm of the target. The replays
+hold from all 45 starts, as report 023's ESNs did.
+
+**The two rest postures** (claim 8). From takes 03 and 04, both ESNs rest at the target
+with joint 1 at −246° when the context changes. Joint 1 then turns the whole way back
+to where the ellipse was taught, 34° to 79°, and the hand cycles as from the other
+seven. It joins the curve 7.6 s after the change for ESN #1 and 9.9 s for ESN #2,
+where the other seven take 7.9 s and 9.4 s. In the 2 s after the change the
+reference's fastest joint speed is 726 deg/s for ESN #1 and 154 deg/s for ESN #2,
+against 405 and 87 deg/s from the other seven.
