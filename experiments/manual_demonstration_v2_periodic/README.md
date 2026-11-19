@@ -249,6 +249,29 @@ seven with 0.03, and one with 0.017; nine with the ridge of 1 and eleven with 10
 best, at 4.34 mm, is the center but for its leak rate of 0.055, the fine grid's
 largest. The rule does not move the grid, so the search goes on from these 20.
 
+**The scoring with the untaught starts** (`20261119-110011-untaught_search`). Nine of
+the 20 settings cycle in all 220 runs, and all nine have the ridge of 10. The eleven
+others cycle in 159 to 218; nine of them have the ridge of 1, the fine search's best
+among them (217 of 220, twelfth here). All 202 runs that do not cycle start from an
+untaught start: the hand of 173 stays within half a turn over the last five taught
+periods, and that of 29 keeps the pace but is more than 20 mm RMS from the ellipse.
+So the order is not the fine search's, as it was for the scripted take: the untaught
+starts tell the settings apart.
+
+**The chosen ESNs of the take by hand** are the typical seeds of the two best:
+
+| | leak rate | spectral radius | input scaling | ridge | seed | median curve RMS |
+| --- | --- | --- | --- | --- | --- | --- |
+| ESN #1 | 0.055 | 1.05 | 0.5 | 10 | 1 | 5.09 mm |
+| ESN #2 | 0.055 | 0.9 | 0.5 | 10 | 5 | 5.66 mm |
+
+They were second and seventh in the fine search. Seen in the search's runs, before the
+claims' runs: from the untaught starts these two settings send the reference off at a
+fastest joint speed near 1,900 deg/s and with a largest torque near 100 N m in the
+median, about a third of the scripted take's settings', and the hand joins the curve
+after 1.8 and 2.7 s in the median and 5.5 and 6.0 s at the latest. Over the 20 settings
+the medians run from 1,063 to 3,681 deg/s and from 37 to 189 N m.
+
 ## The analysis (3a)
 
 The chosen ESNs are tested on the robot against the replay. No size is fixed in
@@ -453,6 +476,8 @@ the machine is shared.
 | `scripted_untaught_robot_esn{1,2}.toml` | claims 2 and 3: the same for 60 s from the 36 untaught starts |
 | `scripted_pushes{1,2,4}x_robot_esn{1,2}.toml` | claim 4: each under the three pushes at 1, 2, and 4 times their forces, for 80 s from the eight starts on the curve |
 | `scripted_block_robot_esn{1,2}.toml` | claim 5: each with the tip held from 10 s to 13 s, for 60 s from the eight starts on the curve |
+| `esn1_lr0.055_sr1.05_is0.5_ridge10_seed1.toml`, `esn2_lr0.055_sr0.9_is0.5_ridge10_seed5.toml` | the take by hand's ESN #1 and ESN #2, trained and run on their own as the scripted take's |
+| `robot_esn{1,2}.toml`, `untaught_robot_esn{1,2}.toml`, `pushes{1,2,4}x_robot_esn{1,2}.toml`, `block_robot_esn{1,2}.toml` | the claims' runs for the take by hand's ESNs, each as its `scripted_` counterpart but for the take and the ESN |
 | `coarse_search.toml` | the same on the take by hand; its `run` names the take's import |
 | `fine_search.toml` | the fine search on the take by hand: 81 settings around its coarse search's best, seeds 1 to 5, alike |
 | `untaught_search.toml` | the scoring with the untaught starts on the take by hand: its fine search's 20 best settings, seeds 1 to 5, each on the robot for 40 s from the eight starts on the curve and the 36 untaught ones (about 80 minutes with 15 workers) |

@@ -194,46 +194,69 @@ def test_each_untaught_search_starts_on_its_fine_searchs_curve_and_from_stage_1s
     assert len(starts["untaught"]) == 36
 
 
-# The scripted take's chosen ESNs, the typical seeds of the two best settings of the scoring with the untaught starts
-# (run 20261118-205822-scripted_untaught_search): the stems of their configurations.
-SCRIPTED_ESNS = {
-    1: "scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5",
-    2: "scripted_esn2_lr0.017_sr1.5_is4_ridge0.001_seed5",
+# Each take's chosen ESNs, the typical seeds of the two best settings of its scoring with the untaught starts (runs
+# 20261119-110011-untaught_search and 20261118-205822-scripted_untaught_search). For each take: the prefix of its
+# configurations' names, none for the take by hand; for ESN #1 and ESN #2, the stem of its configuration, the place of
+# its setting in the scoring's list, and its seed; and what its two ESNs differ in, ESN #1's value and ESN #2's.
+CHOSEN_ESNS = {
+    "by_hand": (
+        "",
+        {1: ("esn1_lr0.055_sr1.05_is0.5_ridge10_seed1", 1, 1), 2: ("esn2_lr0.055_sr0.9_is0.5_ridge10_seed5", 6, 5)},
+        {"spectral_radius": (1.05, 0.9), "seed": (1, 5)},
+    ),
+    "scripted": (
+        "scripted_",
+        {
+            1: ("scripted_esn1_lr0.017_sr1.35_is4_ridge0.001_seed5", 0, 5),
+            2: ("scripted_esn2_lr0.017_sr1.5_is4_ridge0.001_seed5", 1, 5),
+        },
+        {"spectral_radius": (1.35, 1.5)},
+    ),
 }
 
 
 @pytest.mark.parametrize("n", [1, 2])
-def test_the_scripted_takes_esn_n_is_trained_as_the_untaught_searchs_esns_with_its_nth_setting_and_seed_5(n):
-    esn, search = load(EXPERIMENT / f"{SCRIPTED_ESNS[n]}.toml"), load(EXPERIMENT / "scripted_untaught_search.toml")
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_each_takes_esn_n_is_trained_as_its_untaught_searchs_esns_with_the_setting_and_seed_the_scoring_chose(take, n):
+    prefix, esns, _ = CHOSEN_ESNS[take]
+    stem, place, seed = esns[n]
+    esn, search = load(EXPERIMENT / f"{stem}.toml"), load(EXPERIMENT / f"{prefix}untaught_search.toml")
 
-    assert esn["demonstrations"] == search["demonstrations"]  # the scripted take, as it is made
-    assert esn["esn"] == search["esn"] | search["settings"][n - 1] | {"seed": 5}
+    assert esn["demonstrations"] == search["demonstrations"]  # the take, as the search trains on it
+    assert esn["esn"] == search["esn"] | search["settings"][place] | {"seed": seed}
 
 
-def test_the_scripted_takes_two_esns_differ_only_in_the_spectral_radius():
-    one, two = (load(EXPERIMENT / f"{stem}.toml") for stem in SCRIPTED_ESNS.values())
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_each_takes_two_esns_differ_only_in_the_spectral_radius_and_for_the_take_by_hand_the_seed(take):
+    _, esns, differences = CHOSEN_ESNS[take]
+    one, two = (load(EXPERIMENT / f"{stem}.toml") for stem, _, _ in esns.values())
 
-    assert (one["esn"].pop("spectral_radius"), two["esn"].pop("spectral_radius")) == (1.35, 1.5)
+    for name, values in differences.items():
+        assert (one["esn"].pop(name), two["esn"].pop(name)) == values
     assert one == two
 
 
 @pytest.mark.parametrize("n", [1, 2])
-def test_the_scripted_takes_esns_run_on_their_own_as_the_hand_esn(n):
-    esn, hand = load(EXPERIMENT / f"{SCRIPTED_ESNS[n]}.toml"), load(EXPERIMENT / "hand_esn.toml")
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_each_takes_esns_run_on_their_own_as_the_hand_esn(take, n):
+    _, esns, _ = CHOSEN_ESNS[take]
+    stem, _, _ = esns[n]
+    esn, hand = load(EXPERIMENT / f"{stem}.toml"), load(EXPERIMENT / "hand_esn.toml")
 
     # For 40 s, from the eight starts on the curve and the 36 untaught ones, with the same apps' commands.
     assert esn["evaluation"] == hand["evaluation"]
     assert esn["apps"] == hand["apps"]
 
 
-# The analysis of the scripted take's two ESNs: each kind of run, with a configuration for ESN #1 and one for ESN #2.
+# The analysis of each take's two ESNs: each kind of run, with a configuration for ESN #1 and one for ESN #2, their
+# names led by the take's prefix.
 CLAIM_RUNS = [
-    "scripted_robot",  # claims 1 and 2
-    "scripted_untaught_robot",  # claims 2 and 3
-    "scripted_pushes1x_robot",  # claim 4
-    "scripted_pushes2x_robot",
-    "scripted_pushes4x_robot",
-    "scripted_block_robot",  # claim 5
+    "robot",  # claims 1 and 2
+    "untaught_robot",  # claims 2 and 3
+    "pushes1x_robot",  # claim 4
+    "pushes2x_robot",
+    "pushes4x_robot",
+    "block_robot",  # claim 5
 ]
 # Report 017's runs of report 007's pushes and of its block.
 CONSISTENT = REPO_ROOT / "experiments/manual_demonstration_v2_consistent_search"
@@ -244,37 +267,47 @@ STAMP = r"(YYYYMMDD-HHMMSS|\d{8}-\d{6})"
 
 
 @pytest.mark.parametrize("name", CLAIM_RUNS)
-def test_each_claims_run_takes_each_esn_from_the_run_of_its_configuration_and_is_alike_for_both(name):
-    one, two = load(EXPERIMENT / f"{name}_esn1.toml"), load(EXPERIMENT / f"{name}_esn2.toml")
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_each_claims_run_takes_each_esn_from_the_run_of_its_configuration_and_is_alike_for_both(take, name):
+    prefix, esns, _ = CHOSEN_ESNS[take]
+    one, two = load(EXPERIMENT / f"{prefix}{name}_esn1.toml"), load(EXPERIMENT / f"{prefix}{name}_esn2.toml")
 
     for n, config in ((1, one), (2, two)):
         esn = config.pop("esn")
         assert list(esn) == ["model"]  # esn.toml in the run of the ESN's configuration
-        run = rf"results/manual_demonstration_v2_periodic/{STAMP}-{re.escape(SCRIPTED_ESNS[n])}"
+        stem, _, _ = esns[n]
+        run = rf"results/manual_demonstration_v2_periodic/{STAMP}-{re.escape(stem)}"
         assert re.fullmatch(rf"{run}/esn\.toml", esn["model"])
     assert one == two
 
 
 @pytest.mark.parametrize("n", [1, 2])
 @pytest.mark.parametrize("name", CLAIM_RUNS)
-def test_each_claims_run_has_the_hand_robots_tracker_and_cycle_against_the_replay_alone(name, n):
-    config, hand = load(EXPERIMENT / f"{name}_esn{n}.toml"), load(EXPERIMENT / "hand_robot.toml")
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_each_claims_run_has_the_hand_robots_tracker_and_cycle_against_the_replay_alone(take, name, n):
+    prefix, _, _ = CHOSEN_ESNS[take]
+    config, hand = load(EXPERIMENT / f"{prefix}{name}_esn{n}.toml"), load(EXPERIMENT / "hand_robot.toml")
 
     assert config["tracker"] == hand["tracker"]
     assert {key: config["evaluation"][key] for key in CYCLE} == {key: hand["evaluation"][key] for key in CYCLE} == CYCLE
     assert "progress" not in config  # no progress replay in this stage
 
 
-def test_the_undisturbed_runs_on_the_curve_last_120_s_from_the_eight_starts_on_the_curve():
-    config, search = load(EXPERIMENT / "scripted_robot_esn1.toml"), load(EXPERIMENT / "scripted_fine_search.toml")
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_the_undisturbed_runs_on_the_curve_last_120_s_from_the_eight_starts_on_the_curve(take):
+    prefix, _, _ = CHOSEN_ESNS[take]
+    config, search = load(EXPERIMENT / f"{prefix}robot_esn1.toml"), load(EXPERIMENT / f"{prefix}fine_search.toml")
 
-    # The take's own start and the seven others on the curve, as in the search, for 30 taught loops.
+    # The take's own start and the seven others on the curve, as in the search, for 120 s: 30 taught loops of the
+    # scripted take, about 23 of the take by hand.
     assert config["evaluation"] == search["evaluation"] | {"duration": 120.0}
     assert "disturbance" not in config
 
 
-def test_the_untaught_runs_last_60_s_from_stage_1s_36_untaught_starts_alone():
-    config = load(EXPERIMENT / "scripted_untaught_robot_esn1.toml")
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_the_untaught_runs_last_60_s_from_stage_1s_36_untaught_starts_alone(take):
+    prefix, _, _ = CHOSEN_ESNS[take]
+    config = load(EXPERIMENT / f"{prefix}untaught_robot_esn1.toml")
     untaught = load(STAGE_1 / "hand_esn.toml")["evaluation"]["extra_starts"]["untaught"]
 
     assert len(untaught) == 36
@@ -288,8 +321,10 @@ def test_the_untaught_runs_last_60_s_from_stage_1s_36_untaught_starts_alone():
 
 
 @pytest.mark.parametrize("times", [1, 2, 4])
-def test_the_pushes_are_report_007s_three_at_8_20_5_and_33_s_at_one_two_and_four_times_their_forces(times):
-    pushes = load(EXPERIMENT / f"scripted_pushes{times}x_robot_esn1.toml")["disturbance"]
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_the_pushes_are_report_007s_three_at_8_20_5_and_33_s_at_one_two_and_four_times_their_forces(take, times):
+    prefix, _, _ = CHOSEN_ESNS[take]
+    pushes = load(EXPERIMENT / f"{prefix}pushes{times}x_robot_esn1.toml")["disturbance"]
     theirs = load(REPORT_017_PUSHES)["disturbance"]
 
     assert [(push["force"], push["angle_deg"], push["duration"]) for push in pushes] == [
@@ -297,7 +332,8 @@ def test_the_pushes_are_report_007s_three_at_8_20_5_and_33_s_at_one_two_and_four
         (5.0 * times, 80.0, 0.5),
         (4.0 * times, -80.0, 0.5),
     ]
-    assert [push["onset"] for push in pushes] == [8.0, 20.5, 33.0]  # 12.5 s apart, three loops and an eighth
+    # 12.5 s apart: three loops and an eighth of the scripted take, 2.44 taught loops of the take by hand.
+    assert [push["onset"] for push in pushes] == [8.0, 20.5, 33.0]
     for push, their in zip(pushes, theirs, strict=True):
         assert push.pop("force") == times * their.pop("force")
         push.pop("onset")
@@ -306,8 +342,10 @@ def test_the_pushes_are_report_007s_three_at_8_20_5_and_33_s_at_one_two_and_four
 
 
 @pytest.mark.parametrize("n", [1, 2])
-def test_the_three_sizes_of_pushes_differ_only_in_their_forces(n):
-    sizes = [load(EXPERIMENT / f"scripted_pushes{times}x_robot_esn{n}.toml") for times in (1, 2, 4)]
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_the_three_sizes_of_pushes_differ_only_in_their_forces(take, n):
+    prefix, _, _ = CHOSEN_ESNS[take]
+    sizes = [load(EXPERIMENT / f"{prefix}pushes{times}x_robot_esn{n}.toml") for times in (1, 2, 4)]
 
     for config in sizes:
         for push in config["disturbance"]:
@@ -315,9 +353,13 @@ def test_the_three_sizes_of_pushes_differ_only_in_their_forces(n):
     assert sizes[0] == sizes[1] == sizes[2]
 
 
-@pytest.mark.parametrize(("name", "duration"), [("scripted_pushes1x_robot", 80.0), ("scripted_block_robot", 60.0)])
-def test_the_pushed_and_blocked_runs_come_back_within_20_mm_of_the_curve_from_the_eight_starts_on_it(name, duration):
-    config, robot = load(EXPERIMENT / f"{name}_esn1.toml"), load(EXPERIMENT / "scripted_robot_esn1.toml")
+@pytest.mark.parametrize(("name", "duration"), [("pushes1x_robot", 80.0), ("block_robot", 60.0)])
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_the_pushed_and_blocked_runs_come_back_within_20_mm_of_the_curve_from_the_eight_starts_on_it(
+    take, name, duration
+):
+    prefix, _, _ = CHOSEN_ESNS[take]
+    config, robot = load(EXPERIMENT / f"{prefix}{name}_esn1.toml"), load(EXPERIMENT / f"{prefix}robot_esn1.toml")
     stage_1 = load(STAGE_1 / "pushes1x_60s_robot_esn1.toml")["evaluation"]
 
     evaluation = config["evaluation"]
@@ -328,10 +370,12 @@ def test_the_pushed_and_blocked_runs_come_back_within_20_mm_of_the_curve_from_th
     assert evaluation == robot["evaluation"] | {"duration": duration}
 
 
-def test_the_block_holds_the_tip_from_10_s_to_13_s_with_report_017s_stiffness_and_damping():
-    block = load(EXPERIMENT / "scripted_block_robot_esn1.toml")["disturbance"]
+@pytest.mark.parametrize("take", CHOSEN_ESNS)
+def test_the_block_holds_the_tip_from_10_s_to_13_s_with_report_017s_stiffness_and_damping(take):
+    prefix, _, _ = CHOSEN_ESNS[take]
+    block = load(EXPERIMENT / f"{prefix}block_robot_esn1.toml")["disturbance"]
     theirs = load(REPORT_017_BLOCK)["disturbance"]
 
     assert (theirs["stiffness"], theirs["damping"]) == (20000.0, 100.0)
-    # The same block, held 3 s, three quarters of a loop, from 10 s.
+    # The same block, held 3 s from 10 s: three quarters of the scripted take's loop, 0.59 of the take by hand's.
     assert block == theirs | {"onset": 10.0, "release": 13.0}
