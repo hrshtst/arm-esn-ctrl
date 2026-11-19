@@ -168,5 +168,7 @@ has given it.
 | 6 | each two-task ESN with one context for the whole run: `reach` from the nine reach takes' starts and stage 1's 36 unseen ones for 24 s, `ellipse` from the eight starts on the curve and the 36 untaught ones for 60 s (`robot_esn.py`) |
 | 7, 8, 9 | each two-task ESN with the changes of context above (`robot_esn.py`, `[[switch]]`) |
 
-Sweeps here take as many workers as the machine's memory allows: a worker of a sweep
-with a periodic task took up to 2.4 GB for moments in 3a's sweeps.
+Sweeps here take 30 workers. In 3a's sweeps a worker took up to 9 GB for moments, in
+one measure of a run whose arm runs away; that measure now takes its points in pieces
+(9f3855c), with the same values, and a worker of the coarse search here peaks at
+0.36 GB.
