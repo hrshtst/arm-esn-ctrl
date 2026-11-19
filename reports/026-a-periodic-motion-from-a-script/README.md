@@ -7,7 +7,8 @@ ellipse without end. Here the motion is taught by one take made by a script, ten
 reference of the simulated robot from the arm's measured joint angles, with report 017's
 tracker. Two ESNs are chosen by a search that scores undisturbed runs only, ESN #1 and
 ESN #2, and five claims fixed before the runs are tested on them, against the replay of
-the take. The same search and claims on a take recorded by hand are report 027's.
+the take. The same search and claims on a take recorded by hand are
+[report 027's](../027-a-periodic-motion-by-hand/README.md).
 
 The findings:
 
