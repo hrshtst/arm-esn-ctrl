@@ -221,3 +221,58 @@ def test_the_untaught_search_parses_as_a_sweep_of_100_esns_of_two_tasks_with_89_
         for table, evaluation in zip(config["demonstrations"], evaluations, strict=True)
     ]
     assert [len(each) for each in starts] == [45, 44]  # 89 runs an ESN, 445 a setting
+
+
+# The two-task ESNs, the typical seeds of the two best settings of the scoring with the untaught starts (run
+# 20261119-205228-untaught_search). For ESN #1 and ESN #2: the stem of its configuration, the place of its setting in
+# the scoring's list, which is in the fine search's order, its setting, and its seed. The fine search's best setting
+# is fourth in the scoring, so ESN #1's setting is the second in the list and ESN #2's the third.
+CHOSEN_ESNS = {
+    1: ("esn1_lr0.17_sr1.65_is0.22_ridge10_seed4", 1, (0.17, 1.65, 0.22, 10.0), 4),
+    2: ("esn2_lr0.055_sr1.5_is0.5_ridge10_seed4", 2, (0.055, 1.5, 0.5, 10.0), 4),
+}
+
+
+@pytest.mark.parametrize("n", CHOSEN_ESNS)
+def test_each_two_task_esn_is_trained_as_the_untaught_searchs_esns_with_the_setting_and_seed_the_scoring_chose(n):
+    stem, place, _, seed = CHOSEN_ESNS[n]
+    esn, search = load(EXPERIMENT / f"{stem}.toml"), load(EXPERIMENT / "untaught_search.toml")
+
+    assert list(esn) == ["demonstrations", "esn", "evaluation", "apps"]  # no sweep, and no tracker
+    assert esn["demonstrations"] == search["demonstrations"]  # the takes and their contexts, as the search's
+    assert esn["evaluation"] == search["evaluation"]  # each task's runs, as the scoring's
+    assert esn["esn"] == search["esn"] | search["settings"][place] | {"seed": seed}
+
+
+@pytest.mark.parametrize("n", CHOSEN_ESNS)
+def test_each_two_task_esns_setting_is_listed_by_the_untaught_search_and_its_seed_is_one_of_its(n):
+    stem, place, setting, seed = CHOSEN_ESNS[n]
+    esn, search = load(EXPERIMENT / f"{stem}.toml")["esn"], load(EXPERIMENT / "untaught_search.toml")
+
+    assert tuple(esn[name] for name in ESN_NAMES) == setting
+    assert search["settings"].index({name: esn[name] for name in ESN_NAMES}) == place
+    assert esn["seed"] == seed
+    assert seed in search["sweep"]["seed"]
+
+
+@pytest.mark.parametrize("n", CHOSEN_ESNS)
+def test_each_two_task_esns_file_name_gives_its_number_setting_and_seed(n):
+    stem, _, _, _ = CHOSEN_ESNS[n]
+    esn = load(EXPERIMENT / f"{stem}.toml")["esn"]
+
+    leak_rate, spectral_radius, input_scaling, ridge = (esn[name] for name in ESN_NAMES)
+    seed = esn["seed"]
+    assert stem == f"esn{n}_lr{leak_rate:g}_sr{spectral_radius:g}_is{input_scaling:g}_ridge{ridge:g}_seed{seed}"
+
+
+@pytest.mark.parametrize("n", CHOSEN_ESNS)
+def test_each_two_task_esns_header_trains_and_runs_it_with_autonomous_esn(n):
+    stem, _, _, _ = CHOSEN_ESNS[n]
+
+    assert header_command(EXPERIMENT / f"{stem}.toml") == [
+        "uv",
+        "run",
+        "python",
+        "experiments/autonomous_esn.py",
+        f"experiments/manual_demonstration_v2_reach_and_ellipse/{stem}.toml",
+    ]

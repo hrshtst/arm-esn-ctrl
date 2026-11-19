@@ -1,0 +1,114 @@
+# Two-task ESN #2: leak rate 0.055, spectral radius 1.5, input scaling 0.5, ridge 10,
+# seed 4. The fine search's 20 best settings were scored again with the untaught starts
+# (untaught_search.toml, run 20261119-205228-untaught_search). This is the second best
+# setting, which passes 312 of its 445 runs (197 of 225 reaches hold, 115 of 220
+# ellipse runs cycle), and its typical seed, which passes 81 of its 89: the reach from
+# 8 of the nine takes' starts and 30 of the 36 untaught, the ellipse from all eight
+# starts on the curve and 35 of the 36 untaught. Trained on stage 1's nine takes of the
+# reach, with the context reach, and on stage 3a's take of the ellipse by hand, with
+# the context ellipse. The run runs it on its own with each context from that task's
+# starts and from stage 1's 36 untaught starts, as the scoring runs it on the robot:
+# the reach for 24 s from the nine takes' starts, the ellipse for 40 s from the eight
+# starts on the curve. It saves esn.toml, which the runs on the robot load, and prints
+# the apps' commands. About 5 minutes. See README.md.
+#
+#   uv run python experiments/autonomous_esn.py \
+#       experiments/manual_demonstration_v2_reach_and_ellipse/esn2_lr0.055_sr1.5_is0.5_ridge10_seed4.toml
+
+[[demonstrations]]
+# Stage 1's nine takes of reach_manual_v2_no_limits.toml, filtered at 2 Hz.
+context = "reach"
+run = "results/demonstrations/20261117-164658-reach_manual_v2_no_limits"
+train = [
+  "demo_00_filtered.sklog.npz",  # from (13, 71) deg
+  "demo_01_filtered.sklog.npz",  # from (73, 71)
+  "demo_02_filtered.sklog.npz",  # from (133, 71)
+  "demo_03_filtered.sklog.npz",  # from (-167, 71)
+  "demo_04_filtered.sklog.npz",  # from (-107, 71)
+  "demo_05_filtered.sklog.npz",  # from (-47, 71)
+  "demo_06_filtered.sklog.npz",  # from (21, 132)
+  "demo_07_filtered.sklog.npz",  # from (141, 132)
+  "demo_08_filtered.sklog.npz",  # from (-99, 132)
+]
+
+[[demonstrations]]
+# Stage 3a's take of the ellipse by hand, ten loops, filtered at 2 Hz: the run directory
+# of experiments/import_demonstrations.py for ellipse_manual_v2_no_limits.toml.
+context = "ellipse"
+run = "results/demonstrations/20261119-093746-ellipse_manual_v2_no_limits"
+train = ["demo_00_filtered.sklog.npz"]
+
+[esn]
+# The second best setting of untaught_search.toml and its typical seed.
+dt = 0.01              # sampling period (s)
+warmup = 1.0           # the held start posture drives the ESN this long before it moves (s)
+n_neurons = 800
+spectral_radius = 1.5
+sparsity = 0.05        # fraction of nonzero reservoir connections
+leak_rate = 0.055
+input_scaling = 0.5
+bias = true
+ridge = 10.0
+seed = 4
+# The context, one value per task after the joint angles, is fed in divided by the
+# input scaling, so that its input weights have the scale 1 whatever the input scaling
+# is, as in stage 2. Not swept.
+context_scaling = 1.0
+context_times_input_scaling = false
+
+# Each task's runs, as in untaught_search.toml.
+
+[evaluation.tasks.reach]
+duration = 24.0        # autonomous run (s)
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start
+
+[evaluation.tasks.reach.extra_starts]
+# Stage 1's start postures no take starts from (deg): 36 hand positions spread evenly
+# over the workspace, on three rings around the base, 0.78, 0.53, and 0.28 m from it,
+# with 18, 12, and 6 hands, joint 2 positive (manual_demonstration_v2_many_starts/hand_esn.toml):
+#
+#   uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
+#       --counts 18 12 6 --first-angle 53.3
+untaught = [
+  [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
+  [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
+  [-93.0, 60.0], [-73.0, 60.0], [-53.0, 60.0], [-33.0, 60.0], [-13.0, 60.0], [7.0, 60.0],
+  [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
+  [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
+  [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
+]
+
+[evaluation.tasks.ellipse]
+duration = 40.0           # autonomous run (s): about eight taught periods
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
+cycle_periods = 5
+cycle_turns = [4.0, 6.0]  # the least and the most
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0
+
+[evaluation.tasks.ellipse.extra_starts]
+# The other seven starts on the curve (deg): the hand on the ellipse at the curve's
+# angles 45, 90, ..., 315 deg, an eighth of a loop apart; joint 2 positive, as at the
+# take's start, rounded to 0.1 deg.
+on_curve = [
+  [47.3, 90.8], [62.6, 83.0], [75.1, 82.6], [79.0, 92.5], [71.5, 109.8], [53.3, 122.5], [36.2, 118.7],
+]
+# Stage 1's 36 untaught starts, as the reach's above (deg).
+untaught = [
+  [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
+  [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
+  [-93.0, 60.0], [-73.0, 60.0], [-53.0, 60.0], [-33.0, 60.0], [-13.0, 60.0], [7.0, 60.0],
+  [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
+  [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
+  [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
+]
+
+[apps]
+# The robot app's arguments, for the command the run prints: the consistent search's
+# tracker, its gains set where the take of reports 005 to 020 ends (a copy in report
+# 005), whatever takes the ESN was trained on.
+robot_app = "--law pd --omega 20 --damping 0.4 --control-period 0.01 --gains-from reports/005-tuned-on-the-robot/data/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
