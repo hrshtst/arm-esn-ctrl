@@ -366,5 +366,29 @@ and tables.
 | 4. Changing the context at rest | 54 of 54 arrive and hold at the new target | 54 of 54 | holds |
 | 5. Changing the context on the way | 54 of 54 | 54 of 54 | holds |
 
-The demonstration, pushes by hand while the target changes, is recorded by the
-maintainer in the robot app.
+### The demonstration (added after it was recorded, 2026-11-19)
+
+The maintainer recorded two runs instead of the one planned, one with each ESN, with
+
+```bash
+uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2_targets.toml \
+    --law pd --omega 20 --damping 0.4 --control-period 0.01 \
+    --gains-from reports/005-tuned-on-the-robot/data/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz \
+    --model <storage root>/results/manual_demonstration_v2_targets/20261119-000048-esn1_lr0.17_sr1.05_is1_ridge10_seed1/esn.toml
+```
+
+and the same with ESN #2's `esn.toml`. The gains' take is the one the search's tracker
+names, in its copy under report 005. The logs are in the storage root under
+`data/recorded_forces/`, and copied into the report:
+
+- `20261119-094959-20261119-000048-esn1_lr0.17_sr1.05_is1_ridge10_seed1_pd_w20_z0.4.sklog.npz`:
+  ESN #1, 60 s, six changes of context and five pushes.
+- `20261119-095414-20261119-000238-esn2_lr0.17_sr1.2_is1_ridge10_seed5_pd_w20_z0.4.sklog.npz`:
+  ESN #2, 61 s, five changes of context and four pushes.
+
+Both start at take 001's start with the context A. The changes and the pushes differ
+between the two runs, so the two ESNs are not compared. Every push came while the hand
+was on its way. After eight of the nine the hand is nearer the named target when the
+next push or change comes than at the release, and it arrives in the two stretches that
+last about 7 s. After ESN #2's third push the hand is moving away from A when the
+context changes 2.5 s later. Report 025's Section 3.6 gives the figures and tables.

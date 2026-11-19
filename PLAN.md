@@ -121,8 +121,9 @@ take's start and target in the recorder.
   rest or on the way takes the hand to the new target in every run. From 36 unseen starts
   one ESN holds everywhere and the other misses four runs. The references begin at the
   arm from starts near a take's and jump from starts far from every take's. Pushes under
-  a fixed schedule were left out; a run pushed by hand while the target changes is to be
-  recorded.
+  a fixed schedule were left out. In one run of each ESN pushed by hand while the target
+  changes, the hand is nearer the named target after eight of nine pushes when the next
+  push or change comes.
 
 ### Stage 3: a periodic motion
 

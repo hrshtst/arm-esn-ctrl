@@ -40,8 +40,13 @@ The findings:
 - **The search finds fewer settings than for one target.** Of the fine search's 81
   settings, one holds in all 135 runs from the takes' starts, where stage 1 had 20. That
   setting is ESN #1's.
-- **The demonstration, pushes by hand while the target changes, is not recorded yet**
-  (Section 3.6).
+- **Pushed by hand on its way, the hand mostly goes on to the target the context names
+  (a demonstration, without a claim).** The maintainer ran each ESN once in the robot
+  app for 60 s, changing the target and pushing the hand, nine pushes in all, each while
+  the hand was on its way. After eight of them the hand is nearer the named target when
+  the next push or change comes than at the release, and it arrives in the two stretches
+  that last about 7 s. After one push ESN #2's hand comes within 176 mm of A and is
+  339 mm from it, moving away, when the target changes 2.5 s later (Section 3.6).
 
 ## 1. Question
 
@@ -195,8 +200,9 @@ to these five. Each is to hold for ESN #1 and for ESN #2.
   and an ESN with no context were not trained.
 - **Made a demonstration: pushes.** Comparing arms under one schedule of forces is not
   what this stage is to show. Instead the maintainer runs ESN #1 in the robot app, pushes
-  the arm by hand, and changes the target as he likes. The report shows that one run.
-  Nothing is counted and nothing is compared.
+  the arm by hand, and changes the target as he likes. The report was to show that one
+  run. Two were recorded, one with each ESN (Section 3.6). Nothing is counted against a
+  claim and nothing is compared.
 
 ### Reproducing the results
 
@@ -212,6 +218,7 @@ written below as `$D`.
 | `robot_esn1`, `robot_esn2` (claims 1 to 3) | `uv run python experiments/robot_esn.py $D/<name>.toml` | `e0e7f91` |
 | `switch_to_{a,b,c}_robot_esn{1,2}` (claim 4, six runs) | `robot_esn.py`, as above | `e0e7f91` |
 | `switch_early_to_{a,b,c}_robot_esn{1,2}` (claim 5, six runs) | `robot_esn.py`, as above | `e0e7f91` |
+| the two demonstrations, by hand (Section 3.6) | `tools/robot_app.py`, with the command of Section 3.6 | `16afa6f` |
 | [`summary`](results/summary) | `uv run python reports/025-three-targets-by-context/make_figures.py` | |
 
 - **Running time,** with 15 workers on 32 logical processors, beside another session's
@@ -230,9 +237,13 @@ written below as `$D`.
     one's from it.
   - A first import of the takes without the move by whole turns is in the storage root
     and is not used.
+  - Each demonstration's log names its ESN's run and the search's tracker, and up to its
+    first change of context it equals the undisturbed run from the same start: the same
+    arrival, and joint angles within 0.01°.
 - **What is kept here:** the takes and their three imported runs, and each run's
   configuration and run record with its `metrics.csv`, or its `scores.csv` and
-  `seeds.csv`; and the two ESNs' `esn.toml` and `esn.rclib`.
+  `seeds.csv`; the two ESNs' `esn.toml` and `esn.rclib`; and the two demonstrations'
+  logs as the robot app saved them, under [`data/recorded_forces`](data/recorded_forces).
 
 [`make_figures.py`](make_figures.py) prints the tables of Section 3 and draws its figures.
 It reads these copies, and the sweeps' `runs.csv` and the robot runs' logs under the
@@ -480,14 +491,143 @@ the hands are 220 to 600 mm from it by the median, and 468 to 922 mm from the ne
 - **The speeds and torques after the change are of the size of those at rest,** up to
   218 °/s and 10.7 N m in a single run with ESN #1, and 212 °/s and 11.5 N m with ESN #2.
 
-### 3.6 Pushes by hand while the target changes (a demonstration, not recorded yet)
+### 3.6 Pushes by hand while the target changes (a demonstration, without a claim)
 
-The maintainer runs ESN #1 in the robot app with the search's tracker, pushes the arm by
-dragging its tip, changes the target with the app's keys, and saves the run as a log.
-That run is not recorded yet. When it is, its figure and its table are added here: the
-hand's path, the joint angles and torques, the force, and the context over time.
-[`make_figures.py`](make_figures.py) draws and tabulates it once the log is in
-[`data/recorded_forces/`](data).
+This section was added on 2026-11-19, after the report's first version, when the runs
+were recorded.
+
+The maintainer ran each ESN once in the robot app with the search's tracker, pushed the
+arm by dragging its tip, changed the target with the app's keys 1 to 3, and saved the run
+as a log (`Ctrl+S`):
+
+```bash
+uv run python tools/robot_app.py experiments/demonstrations/reach_manual_v2_targets.toml \
+    --law pd --omega 20 --damping 0.4 --control-period 0.01 \
+    --gains-from reports/005-tuned-on-the-robot/data/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz \
+    --model <storage root>/results/manual_demonstration_v2_targets/20261119-000048-esn1_lr0.17_sr1.05_is1_ridge10_seed1/esn.toml
+```
+
+and the same with ESN #2's `esn.toml`.
+
+- **Both runs start at (13°, 71°),** where take 001 starts, with the context A. ESN #1's
+  lasts 60.2 s and ESN #2's 60.9 s.
+- **The changes and the pushes are the maintainer's choices in each run.** They differ
+  between the two runs, so the two ESNs are not compared here.
+- **ESN #1's run** has six changes of context and five pushes, **ESN #2's** five changes
+  and four pushes.
+- **A push** is a stretch where the force at the tip is not zero. The app records the
+  force and the context at every step of 2 ms.
+
+![ESN #1 pushed by hand while the target changes](results/summary/demonstration_esn1.png)
+
+![ESN #2 pushed by hand while the target changes](results/summary/demonstration_esn2.png)
+
+The pushes: how long each lasts, its largest force, how far it moves the hand from the
+onset to the release, and the hand's distance to the named target at the onset, at the
+release, and at its farthest from the onset until the next push or change.
+
+| ESN | Push | Onset (s) | Lasts (s) | Largest force (N) | Moves the hand (mm) | Context | To the target at the onset (mm) | At the release (mm) | Farthest (mm) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #1 | 1 | 30.96 | 0.38 | 5.2 | 276 | A | 820 | 990 | 1,119 |
+| #1 | 2 | 36.84 | 0.18 | 12.6 | 160 | A | 515 | 438 | 515 |
+| #1 | 3 | 43.00 | 0.26 | 5.7 | 188 | B | 498 | 394 | 498 |
+| #1 | 4 | 51.44 | 0.14 | 4.5 | 54 | C | 653 | 644 | 653 |
+| #1 | 5 | 53.14 | 0.14 | 4.5 | 127 | C | 529 | 500 | 529 |
+| #2 | 1 | 31.74 | 0.50 | 2.9 | 384 | A | 696 | 682 | 1,102 |
+| #2 | 2 | 38.02 | 0.24 | 5.2 | 284 | A | 457 | 426 | 577 |
+| #2 | 3 | 40.74 | 0.12 | 6.1 | 141 | A | 316 | 209 | 339 |
+| #2 | 4 | 53.48 | 0.26 | 4.6 | 242 | C | 587 | 569 | 587 |
+
+The stretches between events. An event is the start, a change of context, or a push's
+release; a stretch runs from it to the next push's onset, the next change, or the run's
+end. For each: the hand's distance to the named target at its start, the nearest in the
+stretch, when the hand first comes within the goal of 20 mm, the distance at its end,
+and the hand's speed over its last 0.1 s.
+
+ESN #1:
+
+| From (s) | To (s) | Begun by | Context | At the start (mm) | Nearest (mm) | Within the goal | At the end (mm) | Speed at the end (mm/s) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.00 | 11.12 | the start | A | 1,134 | 14 | after 10.61 s | 14 | 10 |
+| 11.12 | 18.16 | the change to B | B | 657 | 5 | after 5.57 s | 5 | 6 |
+| 18.16 | 29.58 | the change to C | C | 678 | 4 | after 9.81 s | 4 | 6 |
+| 29.58 | 30.96 | the change to A | A | 1,067 | 821 | no | 821 | 143 |
+| 31.34 | 36.84 | push 1's release | A | 990 | 515 | no | 515 | 173 |
+| 37.02 | 41.32 | push 2's release | A | 438 | 23 | no | 23 | 24 |
+| 41.32 | 43.00 | the change to B | B | 651 | 498 | no | 498 | 215 |
+| 43.26 | 44.26 | push 3's release | B | 394 | 215 | no | 215 | 46 |
+| 44.26 | 48.96 | the change to A | A | 537 | 286 | no | 286 | 97 |
+| 48.96 | 51.44 | the change to C | C | 969 | 654 | no | 654 | 141 |
+| 51.58 | 53.14 | push 4's release | C | 644 | 529 | no | 529 | 114 |
+| 53.28 | 60.22 | push 5's release | C | 500 | 7 | after 4.85 s | 7 | 2 |
+
+ESN #2:
+
+| From (s) | To (s) | Begun by | Context | At the start (mm) | Nearest (mm) | Within the goal | At the end (mm) | Speed at the end (mm/s) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.00 | 9.58 | the start | A | 1,134 | 8 | after 8.88 s | 8 | 11 |
+| 9.58 | 19.64 | the change to B | B | 662 | 5 | after 8.89 s | 5 | 8 |
+| 19.64 | 29.42 | the change to C | C | 677 | 6 | after 7.97 s | 6 | 5 |
+| 29.42 | 31.74 | the change to A | A | 1,070 | 696 | no | 696 | 113 |
+| 32.24 | 38.02 | push 1's release | A | 682 | 457 | no | 457 | 179 |
+| 38.26 | 40.74 | push 2's release | A | 426 | 316 | no | 316 | 128 |
+| 40.86 | 43.38 | push 3's release | A | 209 | 176 | no | 339 | 50 |
+| 43.38 | 51.78 | the change to B | B | 457 | 16 | after 8.19 s | 16 | 17 |
+| 51.78 | 53.48 | the change to C | C | 687 | 588 | no | 588 | 88 |
+| 53.74 | 60.86 | push 4's release | C | 569 | 1 | after 4.84 s | 1 | 2 |
+
+- **Until its first change, each run is the undisturbed run of Section 3.2 from take
+  001's start.** The hand arrives at A after 10.61 s with ESN #1 and 8.88 s with ESN #2
+  in both, and the joint angles agree within 0.01°.
+- **Unpushed, the hand goes to each target named in turn.** In the first 29 s of each
+  run the context goes from A to B to C, each change made with the hand 5 to 14 mm from
+  the target it leaves. The hand arrives at B and at C within 0.15 s of Section 3.4's
+  medians for those changes.
+- **Every push came while the hand was on its way,** 316 to 820 mm from the named target.
+  None came with the hand at rest at a target. The pushes last 0.12 to 0.50 s, reach 2.9
+  to 12.6 N, and move the hand 54 to 384 mm.
+- **After eight of the nine pushes, the hand is nearer the named target at the stretch's
+  end than at the release.** In all eight the stretch's end is also where the hand is
+  nearest in the stretch.
+- **The hand arrives in the two stretches that last about 7 s:** 4.85 s after ESN #1's
+  push 5 and 4.84 s after ESN #2's push 4, both at C. The other seven stretches after a
+  push last 1.0 to 5.8 s and end before the hand arrives. After ESN #1's push 2 the hand
+  is 23 mm from A, 3 mm outside the goal, when the context changes.
+- **After three pushes the hand first goes away from the target:** to 1,119 and 1,102 mm
+  from A after push 1 of each run, and to 577 mm after ESN #2's push 2. It then comes
+  nearer than it was at the release.
+- **After one push the hand is going away when the stretch ends.** ESN #2's push 3
+  releases the hand 209 mm from A. It comes to 176 mm, then moves away, and is 339 mm
+  from A and moving at 50 mm/s when the context changes 2.5 s after the release. The run
+  does not show whether it would have arrived at A.
+- **Changed on the way, the hand turns to the new target,** as in Section 3.5: ESN #1's
+  changes at 44.26 and 48.96 s come with the hand 215 and 286 mm from the target it
+  leaves, and ESN #2's at 43.38 s with it 339 mm away. ESN #2's hand then arrives at B
+  after 8.19 s.
+
+The reference's fastest joint speed and the largest joint torque, over each run and in
+the 2 s after each change of context:
+
+| | ESN #1: speed (°/s) | Torque (N m) | ESN #2: speed (°/s) | Torque (N m) |
+| --- | --- | --- | --- | --- |
+| over the run | 224 | 5.8 | 236 | 6.5 |
+| after the first change, A → B | 31 | 0.6 | 124 | 6.5 |
+| after the second, B → C | 75 | 3.8 | 71 | 2.7 |
+| after the third, C → A | 224 | 5.8 | 69 | 3.6 |
+| outside the 2 s after every change | 199 | 5.2 | 236 | 2.5 |
+
+- **The reference does not jump under the pushes.** Its fastest joint speed is 224 °/s
+  in ESN #1's run and 236 °/s in ESN #2's, and the largest torque 5.8 and 6.5 N m. These
+  are of the size of Sections 3.4 and 3.5, and far below the 500 °/s and 20 N m of the
+  jumps of Section 3.3.
+- **After the unpushed changes the speeds are Section 3.4's:** 31 and 75 °/s for ESN #1's
+  first two changes, against medians of 31 and 75 °/s there, and 124, 71, and 69 °/s for
+  ESN #2's first three, against 124, 72, and 69 °/s. ESN #1's third change is followed by
+  push 1 within the 2 s.
+- **The reference follows the pushed arm.** The ESN reads the measured joint angles, so a
+  push moves its reference with the arm: during the pushes a joint is at most 8.7°
+  (ESN #1) and 7.9° (ESN #2) from its reference. Outside the pushes and the 0.5 s after
+  each release it is at most 1.4° and 3.0° from it.
 
 ## 4. Observations
 
@@ -513,16 +653,20 @@ These are read from the runs above and were not tested by runs of their own.
 - **A change of context moves the reference faster than a first reach.** The takes from
   one target to another were taught at the takes' pace, but the change comes as a step in
   the input.
+- **A pushed hand mostly goes on from where the push leaves it.** In the two
+  demonstrations it does so after eight of nine pushes, as it turns from where it is when
+  the context changes on the way. The pushes were not made under a schedule and none came
+  at rest, so this is two runs, not a count. After the one push where the hand goes away,
+  the run is too short to say what follows.
 
 ## 5. Next steps
 
 These are proposals. None is started.
 
-1. **The demonstration of Section 3.6,** recorded by the maintainer, and its figure and
-   table added to this report.
-2. **Takes from the lower part of the workspace,** if the ESN is to start gently from
+1. **Takes from the lower part of the workspace,** if the ESN is to start gently from
    there: a few more takes to each target, and the search again.
-3. **Pushes under a fixed schedule,** which this stage left out, with these ESNs or with
-   a search that scores them, as report 024 did for one target.
-4. **The context's scale,** which was not swept: whether a larger one gives more
+2. **Pushes under a fixed schedule,** which this stage left out, with these ESNs or with
+   a search that scores them, as report 024 did for one target. They would also show what
+   follows a push like ESN #2's third in Section 3.6, over a longer time and at rest.
+3. **The context's scale,** which was not swept: whether a larger one gives more
    settings that hold, and fewer hands that end beside another target.
