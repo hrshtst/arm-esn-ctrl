@@ -204,6 +204,9 @@ ESNs hold every reach and seven cycle from every start; none does both.
 | two-task ESN #1 | 0.17 | 1.65 | 0.22 | 10 | 4 | 86 | 8 and 34 | 8 and 36 |
 | two-task ESN #2 | 0.055 | 1.5 | 0.5 | 10 | 4 | 81 | 8 and 30 | 8 and 35 |
 
+They are trained and kept as `20261119-222323-esn1_lr0.17_sr1.65_is0.22_ridge10_seed4`
+and `20261119-222327-esn2_lr0.055_sr1.5_is0.5_ridge10_seed4`.
+
 Each is its setting's seed with the most runs that pass, which no other seed of the
 setting equals. In every reach either fails but one, the hand arrives, leaves the
 20 mm around the target within the 2 s, and ends within 5 mm of the target; in the

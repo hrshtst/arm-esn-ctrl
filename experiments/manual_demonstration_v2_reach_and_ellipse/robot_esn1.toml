@@ -1,0 +1,77 @@
+# Two-task ESN #1 (leak rate 0.17, spectral radius 1.65, input scaling 0.22, ridge 10,
+# seed 4) on the robot, undisturbed, with one context for the whole run: claim 6. With
+# the context reach for 24 s, from the nine reach takes' starts and stage 1's 36 unseen
+# starts, against the replay of the take that starts nearest; with the context ellipse
+# for 60 s, from the eight starts on the curve and stage 1's 36 untaught starts, against
+# the replay of the take by hand, which goes on without end through its taught loop.
+# 89 runs of the ESN and 89 replays. About 30 minutes, one after another. See README.md.
+#
+#   uv run python experiments/robot_esn.py experiments/manual_demonstration_v2_reach_and_ellipse/robot_esn1.toml
+
+[esn]
+# esn.toml in the run directory of its training, relative to the storage root.
+model = "results/manual_demonstration_v2_reach_and_ellipse/20261119-222323-esn1_lr0.17_sr1.65_is0.22_ridge10_seed4/esn.toml"
+
+[tracker]
+# The consistent search's tracker (report 017): joint PD at omega = 20 rad/s and a
+# damping ratio of 0.4, given the reference's velocity, its torque computed every 10 ms
+# and held between. Its gains are set where the take of reports 005 to 020 ends,
+# whatever takes the ESN was trained on, so that every ESN is tracked alike.
+laws = ["pd"]
+omegas = [20.0]
+dampings = [0.4]
+acceleration_filter = 0.02  # time constant of the low-pass filter on the reference acceleration (s)
+reference_velocity = true
+control_period = 0.01  # the torque is computed this often and held between (s); the simulation step is 2 ms
+gains_from = "results/demonstrations/20261008-170034-reach_manual_v2/demo_00_filtered.sklog.npz"
+
+# Each task's runs, with its context from the warm-up to the end.
+
+[evaluation.tasks.reach]
+duration = 24.0        # task (s), after the warm-up
+hold = 2.0             # hold window after arrival (s): the hand must stay within the target tolerance
+start_offsets_deg = [[0.0, 0.0]]  # each take's own start
+
+[evaluation.tasks.reach.extra_starts]
+# Stage 1's unseen start postures (deg), those of its robot_esn1.toml: 36 hand positions
+# spread evenly over the workspace as the 36 untaught ones, on the same rings turned
+# 15 deg back, joint 2 positive. No search or scoring ran from them:
+#
+#   uv run python tools/tip_starts.py experiments/demonstrations/reach_manual_v2_no_limits.toml \
+#       --counts 18 12 6 --first-angle 38.3
+unseen = [
+  [12.0, 60.0], [32.0, 60.0], [52.0, 60.0], [72.0, 60.0], [92.0, 60.0], [112.0, 60.0],
+  [132.0, 60.0], [152.0, 60.0], [172.0, 60.0], [-168.0, 60.0], [-148.0, 60.0], [-128.0, 60.0],
+  [-108.0, 60.0], [-88.0, 60.0], [-68.0, 60.0], [-48.0, 60.0], [-28.0, 60.0], [-8.0, 60.0],
+  [2.0, 109.0], [32.0, 109.0], [62.0, 109.0], [92.0, 109.0], [122.0, 109.0], [152.0, 109.0],
+  [-178.0, 109.0], [-148.0, 109.0], [-118.0, 109.0], [-88.0, 109.0], [-58.0, 109.0], [-28.0, 109.0],
+  [10.0, 146.0], [70.0, 146.0], [130.0, 146.0], [-170.0, 146.0], [-110.0, 146.0], [-50.0, 146.0],
+]
+
+[evaluation.tasks.ellipse]
+duration = 60.0           # task (s), after the warm-up: about 12 taught periods
+# A run cycles if, over its last cycle_periods taught periods, the hand's angle about
+# the curve's center grows by cycle_turns turns, five at the taught pace, and the RMS
+# of its distance from the curve, the ellipse itself, is at most curve_tolerance,
+# stage 1's goal radius.
+curve_tolerance = 0.02    # m
+cycle_periods = 5
+cycle_turns = [4.0, 6.0]  # the least and the most
+start_offsets_deg = [[0.0, 0.0]]  # the take's own start: the hand on the curve at its angle 0
+
+[evaluation.tasks.ellipse.extra_starts]
+# The other seven starts on the curve (deg), untaught_search.toml's: the hand on the
+# ellipse at the curve's angles 45, 90, ..., 315 deg, an eighth of a loop apart.
+on_curve = [
+  [47.3, 90.8], [62.6, 83.0], [75.1, 82.6], [79.0, 92.5], [71.5, 109.8], [53.3, 122.5], [36.2, 118.7],
+]
+# Stage 1's 36 untaught starts, untaught_search.toml's (deg): hand positions spread
+# evenly over the workspace, joint 2 positive.
+untaught = [
+  [27.0, 60.0], [47.0, 60.0], [67.0, 60.0], [87.0, 60.0], [107.0, 60.0], [127.0, 60.0],
+  [147.0, 60.0], [167.0, 60.0], [-173.0, 60.0], [-153.0, 60.0], [-133.0, 60.0], [-113.0, 60.0],
+  [-93.0, 60.0], [-73.0, 60.0], [-53.0, 60.0], [-33.0, 60.0], [-13.0, 60.0], [7.0, 60.0],
+  [17.0, 109.0], [47.0, 109.0], [77.0, 109.0], [107.0, 109.0], [137.0, 109.0], [167.0, 109.0],
+  [-163.0, 109.0], [-133.0, 109.0], [-103.0, 109.0], [-73.0, 109.0], [-43.0, 109.0], [-13.0, 109.0],
+  [25.0, 146.0], [85.0, 146.0], [145.0, 146.0], [-155.0, 146.0], [-95.0, 146.0], [-35.0, 146.0],
+]
