@@ -13,11 +13,12 @@ disturbances. We study whether this state-driven ESN reference generator
 makes the arm more robust than the standard approach of tracking a
 time-indexed reference trajectory.
 
-> **Status:** Reports 001 to 028 are written. Reports 001 to 022 study a reaching motion, on a
-> two-link arm and, in 021 and 022, on a four-link arm. Reports 023 to 028 are the multi-task study on the
-> two-link arm: one target from many starts, several targets named by a context, a
-> periodic motion, and a reach and a periodic motion in one ESN. Its last part, all tasks
-> in one ESN, is not started. [PLAN.md](PLAN.md) says where that study stands.
+> **Status:** Reports 001 to 028 are written. Reports 001 to 022 study a reaching
+> motion, on a two-link arm and, in 021 and 022, on a four-link arm. Reports 023 to 028
+> are the multi-task study on the two-link arm: one target from many starts, several
+> targets named by a context, a periodic motion, and a reach and a periodic motion in
+> one ESN. Its last part, all tasks in one ESN, is not started. [PLAN.md](PLAN.md) says
+> where that study stands.
 
 ## Motivation
 
