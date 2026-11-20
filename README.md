@@ -289,7 +289,7 @@ trained ESN or the robot live are described in [`tools/README.md`](tools/README.
 
 Prerequisites:
 
-- Python 3.12 or newer and [uv](https://docs.astral.sh/uv/)
+- Python 3.14 or newer and [uv](https://docs.astral.sh/uv/)
 - A C++17 compiler, CMake 3.15 or newer, and OpenMP, all needed to
   build rclib (on Ubuntu: `sudo apt install libomp-dev`)
 

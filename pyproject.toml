@@ -6,7 +6,7 @@ readme = "README.md"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "Hiroshi Atsuta", email = "atsuta@ieee.org" }]
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
   "matplotlib>=3.10",
   "numpy>=2.0",
@@ -37,7 +37,7 @@ skelarm = { path = "third_party/skelarm" }
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 extend-exclude = ["third_party"]
 
 [tool.ruff.lint]
@@ -56,11 +56,11 @@ include = ["src", "tests", "experiments", "tools"]
 extraPaths = ["experiments"]  # the runners import each other as modules of their own directory, and tests import them
 venvPath = "."
 venv = ".venv"
-pythonVersion = "3.12"
+pythonVersion = "3.14"
 typeCheckingMode = "standard"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 files = ["src", "tests", "experiments", "tools"]
 # Resolve imports with the project's environment, also when the editor runs a
 # mypy installed elsewhere (for example, with pipx).

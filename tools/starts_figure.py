@@ -82,7 +82,7 @@ def target_postures(skeleton: Skeleton, target: np.ndarray) -> np.ndarray:
         arm.q = np.radians(rng.uniform(lower, upper))
         try:
             q = np.degrees(compute_inverse_kinematics(arm, tuple(target)).q)
-        except (ValueError, RuntimeError):
+        except ValueError, RuntimeError:
             continue
         q = np.where(upper - lower >= WHOLE_TURN_DEG - 1e-9, (q + 180.0) % WHOLE_TURN_DEG - 180.0, q)
         reached = np.linalg.norm(endpoint_positions(skeleton, np.radians(q)[np.newaxis])[0] - target) < 1e-4
