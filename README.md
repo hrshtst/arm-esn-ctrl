@@ -13,8 +13,11 @@ disturbances. We study whether this state-driven ESN reference generator
 makes the arm more robust than the standard approach of tracking a
 time-indexed reference trajectory.
 
-> **Status:** Stages 1 and 2 have first results, in reports 001 and 002 (eight
-> demonstrations) and 003 (one demonstration).
+> **Status:** Reports 001 to 028 are written. Reports 001 to 022 study a reaching motion, on a
+> two-link arm and, in 021 and 022, on a four-link arm. Reports 023 to 028 are the multi-task study on the
+> two-link arm: one target from many starts, several targets named by a context, a
+> periodic motion, and a reach and a periodic motion in one ESN. Its last part, all tasks
+> in one ESN, is not started. [PLAN.md](PLAN.md) says where that study stands.
 
 ## Motivation
 
@@ -265,7 +268,7 @@ that run them are shared:
 | [manual_demonstration_v2_consistent_trackers](experiments/manual_demonstration_v2_consistent_trackers/README.md) | the consistent search's two ESNs, the replay, and the progress replay with nine trackers, joint PD with and without the reference velocity and computed torque, in every scenario of the search and under the pushes given by hand (Stage 2) | [018](reports/018-trackers-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_dynamics](experiments/manual_demonstration_v2_consistent_dynamics/README.md) | the consistent search's two ESNs read as report 015 read report 011's, and all its 10,080 ESNs screened as report 016 screened report 011's, set against their outcomes with the offset starts counted; the passing ESNs released at their unstable fixed points and blocked along the reach on the robot (Stages 1 and 2) | [019](reports/019-dynamics-under-one-protocol/README.md) |
 | [manual_demonstration_v2_consistent_robot_loop](experiments/manual_demonstration_v2_consistent_robot_loop/README.md) | the ESN and the robot read as one dynamical system: the consistent search's two ESNs on the robot from rest anywhere, their fixed points, rates, and pulses with the arm, and every fixed point of report 019's screens with the arm, against its releases and outcomes (Stages 1 and 2) | [020](reports/020-the-esn-and-the-robot-as-one-system/README.md) |
-| [manual_demonstration_four_dof_consistent_search](experiments/manual_demonstration_four_dof_consistent_search/README.md) | the consistent search on skelarm's four-link arm: the grid and its extension below the lowest input scaling, the rule, a second rule that asks the reference to follow the arm, and the chosen ESNs against both replays in every scenario |
+| [manual_demonstration_four_dof_consistent_search](experiments/manual_demonstration_four_dof_consistent_search/README.md) | the consistent search on skelarm's four-link arm: the grid and its extension below the lowest input scaling, the rule, a second rule that asks the reference to follow the arm, and the chosen ESNs against both replays in every scenario | [021](reports/021-search-on-a-four-link-arm/README.md), [022](reports/022-smaller-disturbances-on-a-four-link-arm/README.md) |
 | [manual_demonstration_v2_many_starts](experiments/manual_demonstration_v2_many_starts/README.md) | one target reached from many start postures on v2's arm with no joint limits, taught by one take from each of nine: ESNs of 800 neurons searched by how many starts the hand arrives and holds from and how directly, then checked from unseen starts, under pushes, and against fewer takes (Stages 1 and 2) | [023](reports/023-one-target-from-many-starts/README.md) |
 | [manual_demonstration_v2_many_starts_push_search](experiments/manual_demonstration_v2_many_starts_push_search/README.md) | the many-starts search again with the pushed runs in the score: each setting scored by how many of its runs pass, undisturbed and under report 007's pushes, then by how directly the hand goes, and report 023's seven claims tested again with the ESNs it chooses (Stages 1 and 2) | [024](reports/024-many-starts-with-pushes-in-the-score/README.md) |
 | [manual_demonstration_v2_targets](experiments/manual_demonstration_v2_targets/README.md) | three targets reached by one ESN of 800 neurons on v2's arm with no joint limits, the target named by a context in its input and taught by nine takes to each: searched as the many-starts stage with each context, then tested from unseen starts and with the context changed during a run (Stages 1 and 2) | [025](reports/025-three-targets-by-context/README.md) |
@@ -511,6 +514,13 @@ The reports so far:
   the block falls to about a third of the replay's, with longer swings after pushes and
   long presses against the joint stops from offset starts. Their settings do not hold on
   held-out seeds.
+- [022 Smaller disturbances on the four-link arm: the pushes' effects scale with the force, and the large offset excursions go](reports/022-smaller-disturbances-on-a-four-link-arm/README.md)
+  (Stage 2): report 021's two ESNs again, without training, under its pushes at half and
+  at a quarter of their force and from starts offset by 5° and 2.5° instead of 15°. Under
+  the pushes the hand's displacement scales with the force for every arm, the ESNs' 1.8
+  to 2.9 times the replay's at every size, and the following barely depends on the size.
+  From the offset starts the large excursions are all but gone at ±5° and gone at ±2.5°,
+  but for one start of ESN #1 whose reference goes 32.3° past a joint limit.
 - [023 One target from many starts: nine takes start where the arm is and go directly, but a push sends the hand far away](reports/023-one-target-from-many-starts/README.md)
 - [024 Many starts with the pushes in the score: slower reservoirs come back from report 007's pushes in time, and start less gently](reports/024-many-starts-with-pushes-in-the-score/README.md)
   (Stages 1 and 2): one target reached from many start postures on the two-link arm with
@@ -533,8 +543,32 @@ The reports so far:
   hand in the robot app while the target changes, the hand is nearer the named target
   after eight of nine pushes when the next push or change comes.
 - [026 A periodic motion from a script: the ESN keeps drawing the ellipse and rejoins it after pushes, but after a block its hand leaves the curve farther than the replay's](reports/026-a-periodic-motion-from-a-script/README.md)
+  (Stages 1 and 2): the hand of the two-link arm goes around an ellipse without end,
+  taught by one take made by a script, ten loops of 4 s. The two chosen ESNs keep drawing
+  the ellipse for 120 s, 0.79 mm RMS from it against 0.83 mm for the replay, join it from
+  all 36 untaught starts, and rejoin it after pushes of up to four times report 007's
+  forces. Their start is smaller than the replay's but not gentle, and after a block the
+  hand leaves the curve farther than the replay's, so one of the five claims fails in
+  part.
 - [027 A periodic motion taught by hand: the ESN draws a smoother ellipse than its take and waits while it is held, but a push sends its hand far off the curve](reports/027-a-periodic-motion-by-hand/README.md)
+  (Stages 1 and 2): the same search and claims on one take recorded by hand, ten loops
+  of about 5 s, 10 mm RMS from the ellipse. All five claims hold. The two chosen ESNs
+  draw the ellipse closer than their take, 5.1 and 5.7 mm RMS from it against 11.0 mm for
+  the replay, join it from all 36 untaught starts, and start gently on the curve. Held
+  in place, the reference waits: after the release the largest torque is 1.6 and 1.3 N m
+  by the median, against 48.8 N m. A push at report 007's forces sends the hand 149 to
+  220 mm off the curve by the median, against 28 to 61 mm for the replay, and it is back
+  within 6 s.
 - [028 A reach and a periodic motion in one ESN: a change of context changes the task in every run, but ten of the 90 reaches do not hold at the target, and few reservoirs do both tasks](reports/028-a-reach-and-a-periodic-motion-in-one-esn/README.md)
+  (Stages 1 and 2): report 023's reach and report 027's ellipse in one ESN, the task
+  named by a context in its input. A change of context during a run changes the task in
+  every run of both chosen ESNs: from the ellipse to the reach, from the reach to the
+  ellipse, and back and forth, three changes in 100 s. With one context for a whole run
+  both cycle on the ellipse from all 44 starts, 4.1 and 6.5 mm RMS from it, but the
+  reach holds from 43 and 37 of the 45 starts: in ten reaches the hand leaves the 20 mm
+  around the target within its 2 s and comes back to stay. After a change to the reach
+  the hand's path is 7.7 and 3.2 times the straight distance by the median. The search
+  found no setting or reservoir that passes every run of both tasks.
 
 Each report has five parts:
 
@@ -551,17 +585,21 @@ Each report has five parts:
 - [x] **Scaffold.** Add the submodules, the uv environment,
       configuration loading, and the storage root. Build a minimal
       pipeline: demonstration → ESN training → autonomous run → plot.
-- [ ] **Autonomous ESN.** Replicate one reaching motion of a two-link
+- [x] **Autonomous ESN.** Replicate one reaching motion of a two-link
       arm. Sweep the hyperparameters by hand and settle on a set that
-      works (RQ1).
-- [ ] **Partial observation.** Vary the number and variety of
+      works (RQ1). Reports 001, 003, and 004.
+- [x] **Partial observation.** Vary the number and variety of
       demonstrations, and start the ESN from postures that were never
-      demonstrated (RQ2).
+      demonstrated (RQ2). Report 023, with one to nine takes and 36
+      unseen starts.
 - [ ] **Context.** Condition the ESN on a motion label, an obstacle
-      size, or the timing to start the motion (RQ3).
-- [ ] **ESN with the robot.** Connect the ESN to the simulated arm
+      size, or the timing to start the motion (RQ3). So far a context
+      names the target (report 025) and the task (report 028); an
+      obstacle's size and the timing are not tried.
+- [x] **ESN with the robot.** Connect the ESN to the simulated arm
       through a tracker, and compare it with the time-indexed baseline
       in the nominal, push, block, and initial-offset scenarios (RQ4).
+      From report 002 on.
 - [ ] **Systematic evaluation.** Use more demonstrations, disturbances,
       and seeds. Automated hyperparameter optimization is considered
       only at this stage.

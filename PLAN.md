@@ -12,7 +12,7 @@ dropped, or added, and work outside the stages is normal. When that happens, the
 brought up to date afterwards; nothing waits for it. An agent that finds the request and
 this note apart follows the request and says so.
 
-Last updated: 2026-11-18.
+Last updated: 2026-11-20.
 
 ## What the stages have in common, so far
 
@@ -49,13 +49,14 @@ is written down before the run. The rest is a habit that the maintainer changes 
 
 ## The stages
 
-Stages 0 and 1 are a record of what was done. Stages 2 to 4 are the present thinking: a
-sentence or two each, to be worked out, and changed, when a stage starts.
+Stages 0 to 3 are a record of what was done. Stage 4 is the present thinking: a sentence
+or two, to be worked out, and changed, when it starts.
 
-**Stages 2 and 3 are worked on side by side,** each by its own session in its own git
-worktree and branch, made from the latest commit of `main`. Each searches its own ESN
-setting, as every stage does, so neither waits for stage 1's open questions. The
-maintainer brings the two branches together.
+**Stages 2 and 3 were worked on side by side,** each by its own session in its own git
+worktree and branch, made from `main`. Each searched its own ESN setting, as every stage
+does, so neither waited for stage 1's open questions. The two branches were brought
+together on 2026-11-19, before stage 3b, which ran on the merged code. All of it is on
+`main` since 2026-11-20, and the worktrees and branches are removed.
 
 | Stage | What it adds | Status |
 | --- | --- | --- |
@@ -79,6 +80,13 @@ Left for the stage that needs it:
 - there are no demonstration configurations for stages 2 and 3;
 - skelarm's recorder draws no curve to follow (stage 3, upstream);
 - `robot_starts.py` and `global_starts.py` refuse ESNs of several takes.
+
+Of these, as of 2026-11-20: the periodic measures are in the runners and the sweeps, and
+the replay of a periodic take goes on without end (stage 3); the sweeps take several
+tasks, a periodic one among them (stages 2 and 3); the demonstration configurations of
+stages 2 and 3 exist; and skelarm's recorder draws the curve. The progress replay on a
+closed path is still not in a runner, since stage 3 used no progress replay, and the two
+dynamics runners still refuse ESNs of several takes.
 
 ### Stage 1: one target from many start postures
 
@@ -135,6 +143,33 @@ take's start and target in the recorder.
   3 s a loop. It is shown to the maintainer when the stage starts, who decides it.
 - **A block** was planned for this stage only, beside the pushes.
 
+The maintainer kept the ellipse, with semi-axes of 0.2 m and 0.12 m, drawn
+counterclockwise at 4 s a loop. One take was made by a script and one was taught by
+hand, both starting on the curve, ten loops each; the hand's loops take about 5 s. A run
+is measured by the hand's distance from the ellipse, not from the take, and no progress
+replay was used. In 3b the reach is stage 1's one target with its nine takes, the
+ellipse is the take by hand alone, the context is fed as in stage 2, and no disturbance
+is applied.
+
+- **[Report 026](reports/026-a-periodic-motion-from-a-script/README.md)** (3a, the
+  scripted take): the two chosen ESNs keep drawing the ellipse, join it from 36 untaught
+  starts, and rejoin it after pushes. Their start is smaller than the replay's but not
+  gentle, and after a block the hand leaves the curve farther than the replay's.
+- **[Report 027](reports/027-a-periodic-motion-by-hand/README.md)** (3a, the take by
+  hand): all five claims hold. The ESNs draw the ellipse closer than the take they
+  learned, start gently on the curve, and wait while the hand is held. A push sends the
+  hand far off the curve, and it comes back within 6 s.
+- **[Report 028](reports/028-a-reach-and-a-periodic-motion-in-one-esn/README.md)** (3b):
+  a change of context changes the task in every run of both chosen ESNs, from the
+  ellipse to the reach, from the reach to the ellipse, and back and forth. With one
+  context for a whole run both cycle on the ellipse from all 44 starts, but the reach
+  holds from 43 and 37 of 45 starts, so that claim fails. The search found no setting or
+  reservoir that passes every run of both tasks.
+
+Open question, deferred on 2026-11-20: whether to search 3b again, past the fine grid's
+largest ridge and spectral radius, where its best settings sit, or choosing by ESN
+instead of by setting. Either changes the rule.
+
 ### Stage 4: all tasks in one ESN
 
 One ESN holds every task of stages 1 to 3, chosen by context. The report ends with a
@@ -145,4 +180,7 @@ table of all claims of the study and their outcomes.
 Work outside the stages, one line each, added after it is done: the date, what, and where
 it is.
 
-- (none yet)
+- 2026-11-18 and 2026-11-19: videos and figures for the maintainer's slides of reports
+  023, 025, 026, and 027, made by `presentations/many-starts/`, `three-targets/`,
+  `periodic-motion-from-a-script/`, and `periodic-motion-by-hand/make_media.py` into the
+  storage root. How they are made is in [CLAUDE.md](CLAUDE.md).
